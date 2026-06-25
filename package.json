@@ -1,13 +1,18 @@
 {
-	"name": "my-agent",
-	"type": "module",
-	"scripts": {
-		"dev": "tsx src/cli.ts",
-		"test": "vitest --run"
-	},
-	"devDependencies": {
-		"tsx": "4.22.1",
-		"typescript": "5.9.3",
-		"vitest": "4.1.0"
-	}
+  "name": "my-agent",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "openai": "^6.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "4.22.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
 }
