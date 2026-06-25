@@ -1,0 +1,13 @@
+{
+	"name": "my-agent",
+	"type": "module",
+	"scripts": {
+		"dev": "tsx src/cli.ts",
+		"test": "vitest --run"
+	},
+	"devDependencies": {
+		"tsx": "4.22.1",
+		"typescript": "5.9.3",
+		"vitest": "4.1.0"
+	}
+}
