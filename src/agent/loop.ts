@@ -24,14 +24,17 @@ export class AgentLoop {
 		this.options = options;
 	}
 
+	/**
+	 * ReAct Loop
+	 */
 	async run(userInput: string, signal?: AbortSignal): Promise<AgentResponse> {
-		// 1. 追加用户 prompt 到对话历史中
+		// 1. 追加用户 prompt 到对话历史消息中
 		this.messages.push({
 			role: "user",
 			content: userInput,
 		});
 
-		// 2. ReAct Loop
+		// 2. Loop
 		const allToolCalls: ToolCall[] = []; // 记录循环中调用的所有 tool
 		let usage: Usage | undefined; // 记录 token 用量信息
 
@@ -63,14 +66,14 @@ export class AgentLoop {
 
 			// 2b. Acting
 			if (toolCalls.length > 0) {
-				// 追加 LLM Reasoning 响应到对话历史中
+				// 追加 LLM Reasoning 响应到对话历史消息中
 				this.messages.push({
 					role: "assistant",
 					content: finalContent,
 					tool_calls: toolCalls,
 				});
 
-				// 逐个执行 Acting 阶段要执行的 tool，并将工具结果追加到对话历史中
+				// 逐个执行 Acting 阶段要执行的 tool，并将工具结果追加到对话历史消息中
 				for (const tc of toolCalls) {
 					const result = await this.options.registry.execute(
 						tc.name,
@@ -91,5 +94,12 @@ export class AgentLoop {
 			// 2c. 没有工具调用，说明该轮 llm Reasoning 之后认为无须 Acting，循环结束
 			return { content: finalContent, usage, toolCalls: allToolCalls };
 		}
+	}
+
+	/**
+	 * 获取当前对话的历史消息（只读）
+	 */
+	getMessage(): readonly Message[] {
+		return this.messages;
 	}
 }

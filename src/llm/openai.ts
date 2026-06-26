@@ -9,12 +9,15 @@ import type { LLMProvider } from "./provider.ts";
 export class OpenAIProvider implements LLMProvider {
 	private client: OpenAI;
 
-	constructor() {
+	constructor(baseURL?: string) {
 		const apiKey = process.env.OPENAI_API_KEY;
 		if (!apiKey) {
 			throw new Error("请设置 OPENAI_API_KEY 环境变量");
 		}
-		this.client = new OpenAI({ apiKey });
+		this.client = new OpenAI({
+			apiKey,
+			baseURL: baseURL ?? "https://api.openai.com/v1",
+		});
 	}
 
 	/**
