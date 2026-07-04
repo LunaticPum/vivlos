@@ -1,3 +1,22 @@
+# Dependencies
 node_modules/
+
+# Environment
 .env
+
+# Build output
 dist/
+
+# pi SDK source (external, symlinked into node_modules)
+packages/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
