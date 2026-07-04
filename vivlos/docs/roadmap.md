@@ -5,16 +5,16 @@
 
 ## 阶段总览
 
-| 阶段 | 目标 | 预计提交 | 状态 |
-|---|---|---|---|
-| **P0** | 项目工程基础 | 1 | ⬜ |
-| **P1** | shared 层 + Result 类型 | 1-2 | ⬜ |
-| **P2** | infra 事件总线 + LLM 对接 | 2-3 | ⬜ |
-| **P3** | agent 核心：prompt + session + loop | 2-3 | ⬜ |
-| **P4** | TUI 入口跑通完整对话（M1 里程碑） | 1-2 | ⬜ |
-| **P5** | 工具注册 + 调度 | 2 | ⬜ |
-| **P6** | 跨会话 memory 持久化 | 2 | ⬜ |
-| **P7** | Cron 调度 + 子 agent 委派 | 3+ | ⬜ |
+| 阶段   | 目标                                | 预计提交 | 状态 |
+| ------ | ----------------------------------- | -------- | ---- |
+| **P0** | 项目工程基础                        | 1        | ⬜   |
+| **P1** | shared 层 + Result 类型             | 1-2      | ⬜   |
+| **P2** | infra 事件总线 + LLM 对接           | 2-3      | ⬜   |
+| **P3** | agent 核心：prompt + session + loop | 2-3      | ⬜   |
+| **P4** | TUI 入口跑通完整对话（M1 里程碑）   | 1-2      | ⬜   |
+| **P5** | 工具注册 + 调度                     | 2        | ⬜   |
+| **P6** | 跨会话 memory 持久化                | 2        | ⬜   |
+| **P7** | Cron 调度 + 子 agent 委派           | 3+       | ⬜   |
 
 ---
 
@@ -22,25 +22,26 @@
 
 **文件清单**：
 
-- [ ] 改 `package.json`（dev → vivlos/main.ts、engines、typecheck、private）
-- [ ] 改 `tsconfig.json`（paths @vivlos/*、include vivlos、exclude packages）
-- [ ] 新建 `vitest.config.ts`（只扫 vivlos/**/*.test.ts）
-- [ ] 新建 `vivlos/tsconfig.json`（extends 根配置）
-- [ ] 新建 `vivlos/main.ts`（dotenv + main 骨架）
-- [ ] 新建 11 个 barrel `index.ts`（shared → entries 各层）
+- [x] 改 `package.json`（dev → vivlos/main.ts、engines、typecheck、private）
+- [x] 改 `tsconfig.json`（paths @vivlos/\*、include vivlos、exclude packages）
+- [x] 新建 `vitest.config.ts`（只扫 vivlos/\*_/_.test.ts）
+- [x] 新建 `vivlos/tsconfig.json`（extends 根配置）
+- [x] 新建 `vivlos/main.ts`（dotenv + main 骨架）
+- [x] 新建 11 个 barrel `index.ts`（shared → entries 各层）
 
 **barrel 文件列表**：
-- [ ] `vivlos/shared/index.ts`
-- [ ] `vivlos/shared/utils/index.ts`
-- [ ] `vivlos/infra/index.ts`
-- [ ] `vivlos/infra/llm/index.ts`
-- [ ] `vivlos/infra/eventbus/index.ts`
-- [ ] `vivlos/infra/storage/index.ts`
-- [ ] `vivlos/agent/index.ts`
-- [ ] `vivlos/agent/loop/index.ts`
-- [ ] `vivlos/agent/tools/index.ts`
-- [ ] `vivlos/agent/prompt/index.ts`
-- [ ] `vivlos/entries/index.ts`
+
+- [x] `vivlos/shared/index.ts`
+- [x] `vivlos/shared/utils/index.ts`
+- [x] `vivlos/infra/index.ts`
+- [x] `vivlos/infra/llm/index.ts`
+- [x] `vivlos/infra/eventbus/index.ts`
+- [x] `vivlos/infra/storage/index.ts`
+- [x] `vivlos/agent/index.ts`
+- [x] `vivlos/agent/loop/index.ts`
+- [x] `vivlos/agent/tools/index.ts`
+- [x] `vivlos/agent/prompt/index.ts`
+- [x] `vivlos/entries/index.ts`
 
 **验证**：`npm run dev` 打印成功 / `npm run typecheck` 无报错 / `npm test` 不跑 pi 测试
 
@@ -50,12 +51,12 @@
 
 **文件清单**：
 
-- [ ] `vivlos/shared/result.ts` — `Result<T,E>`、`ok()`、`err()`
-- [ ] `vivlos/shared/errors.ts` — 错误类型层级（VivlosError 基类 + 子类）
-- [ ] `vivlos/shared/types.ts` — 公共类型（AgentConfig、TokenUsage 等）
-- [ ] `vivlos/shared/utils/id.ts` — ID 生成器
-- [ ] `vivlos/shared/utils/time.ts` — 时间工具
-- [ ] 各文件对应 `*.test.ts`
+- [x] `vivlos/shared/result.ts` — `Result<T,E>`、`ok()`、`err()`
+- [x] `vivlos/shared/errors.ts` — 错误类型层级（VivlosError 基类 + 子类）
+- [x] `vivlos/shared/types.ts` — 公共类型（AgentConfig、TokenUsage 等）
+- [x] `vivlos/shared/utils/id.ts` — ID 生成器
+- [x] `vivlos/shared/utils/time.ts` — 时间工具
+- [x] 各文件对应 `*.test.ts`
 
 **验证**：`npm test` 通过 / `@vivlos/shared` import 可用
 
@@ -65,16 +66,16 @@
 
 ### P2a 事件总线
 
-- [ ] `vivlos/infra/eventbus/types.ts` — 类型化事件定义（VivlosEvent）
-- [ ] `vivlos/infra/eventbus/index.ts` — `createEventBus()` 实现
-- [ ] 测试（emit/on/clear/错误隔离/取消订阅）
+- [x] `vivlos/infra/eventbus/types.ts` — 类型化事件定义（VivlosEvent）
+- [x] `vivlos/infra/eventbus/index.ts` — `createEventBus()` 实现
+- [x] 测试（emit/on/clear/错误隔离/取消订阅）
 
 ### P2b LLM 对接
 
-- [ ] `vivlos/infra/llm/types.ts` — LLM 契约类型
-- [ ] `vivlos/infra/llm/provider.ts` — 封装 pi-ai 模型发现
-- [ ] `vivlos/infra/llm/index.ts` — barrel
-- [ ] 测试（mock streamSimple）
+- [x] `vivlos/infra/llm/types.ts` — LLM 契约类型
+- [x] `vivlos/infra/llm/provider.ts` — 封装 pi-ai 模型发现
+- [x] `vivlos/infra/llm/index.ts` — barrel
+- [x] 测试（mock streamSimple）
 
 **验证**：`npm test` 通过 / eventbus 可独立使用 / LLM 封装调用成功
 
