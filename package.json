@@ -1,18 +1,24 @@
 {
-  "name": "my-agent",
-  "type": "module",
-  "scripts": {
-    "dev": "tsx src/index.ts",
-    "test": "vitest --run"
-  },
-  "dependencies": {
-    "dotenv": "^16.5.0",
-    "openai": "^6.10.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.10.0",
-    "tsx": "4.22.1",
-    "typescript": "5.9.3",
-    "vitest": "4.1.0"
-  }
+	"name": "my-agent",
+	"type": "module",
+	"private": true,
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"scripts": {
+		"dev": "tsx -r tsconfig-paths/register vivlos/main.ts",
+		"test": "vitest --run",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"dotenv": "^16.5.0",
+		"openai": "^6.10.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.10.0",
+		"tsconfig-paths": "^4.2.0",
+		"tsx": "4.22.1",
+		"typescript": "5.9.3",
+		"vitest": "4.1.0"
+	}
 }

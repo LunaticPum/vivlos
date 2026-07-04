@@ -1,14 +1,28 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "strict": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "types": ["node"],
-    "outDir": "dist",
-    "rootDir": "src"
-  },
-  "include": ["src"]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "Node16",
+		"moduleResolution": "Node16",
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"types": ["node"],
+		"outDir": "dist",
+		"rootDir": ".",
+		"baseUrl": ".",
+		"paths": {
+			"@vivlos/shared": ["vivlos/shared/index.ts"],
+			"@vivlos/shared/*": ["vivlos/shared/*"],
+			"@vivlos/agent": ["vivlos/agent/index.ts"],
+			"@vivlos/agent/*": ["vivlos/agent/*"],
+			"@vivlos/infra": ["vivlos/infra/index.ts"],
+			"@vivlos/infra/*": ["vivlos/infra/*"],
+			"@vivlos/entries": ["vivlos/entries/index.ts"],
+			"@vivlos/entries/*": ["vivlos/entries/*"],
+			"@vivlos/*": ["vivlos/*"]
+		}
+	},
+	"include": ["vivlos/**/*.ts"],
+	"exclude": ["node_modules", "packages"]
 }
