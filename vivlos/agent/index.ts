@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
@@ -19,6 +20,8 @@ export interface CreateAgentParams {
 	readonly session?: VivlosSession;
 	readonly maxTurns?: number;
 	readonly hooks?: VivlosLoopHooks;
+	/** 工具列表（P5），透传到 agent-loop → AgentContext.tools */
+	readonly tools?: AgentTool<any, any>[];
 }
 
 export function createAgent(params: CreateAgentParams): VivlosAgent {
@@ -38,6 +41,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		session,
 		promptBuilder,
 		hooks,
+		tools: params.tools,
 	});
 	const model = params.model;
 

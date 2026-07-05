@@ -7,6 +7,7 @@ import {
 	type AgentMessage,
 	type StreamFn,
 } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import type { VivlosSession } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
@@ -23,6 +24,8 @@ export interface CreateAgentLoopParams {
 	readonly session: VivlosSession;
 	readonly promptBuilder: PromptBuilder;
 	readonly hooks?: VivlosLoopHooks;
+	/** 工具列表（P5），传入 AgentContext.tools。由 pi agentLoop 自动调度 tool calling 全流程 */
+	readonly tools?: AgentTool<any, any>[];
 }
 
 export function createAgentLoop(params: CreateAgentLoopParams) {
@@ -45,11 +48,11 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 
-			// 2. 构造 AgentContext
+			// 2. 构造 AgentContext（含工具列表）
 			const context: AgentContext = {
 				systemPrompt: promptBuilder.build(),
 				messages: [...session.getMessages()],
-				tools: [],
+				tools: params.tools ?? [],
 			};
 
 			// 3. 构造 streamFn —— 桥接 LLMClient → StreamFn

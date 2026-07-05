@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createAgent } from "@vivlos/agent/index.ts";
+import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
 import { createTuiApp } from "@vivlos/entries/tui/index.ts";
 
 async function main(): Promise<void> {
@@ -25,11 +26,14 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
+	const tools = createBuiltinTools(process.cwd());
+
 	const agent = createAgent({
 		llm,
 		eventBus,
 		model,
 		maxTurns: 10,
+		tools,
 	});
 
 	// ── 装配 TUI ──

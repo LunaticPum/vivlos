@@ -24,6 +24,7 @@ export interface CreateTuiAppParams {
  * - 主题/配色支持
  * - 聊天历史滚动（PageUp/PageDown）
  * - Ctrl+C / Ctrl+D 优雅退出
+ * - 工具结果文本注入（turn_complete 时扫描 toolResult，传入 ToolExecution.end 的 summary 参数）
  */
 export function createTuiApp(params: CreateTuiAppParams) {
 	const { agent, eventBus } = params;
@@ -72,8 +73,21 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
+	// ── 工具执行可视化 ──
+	eventBus.on("tool:call_start", (e) => {
+		chat.appendToolStart(e.callId, e.toolName);
+		tui.requestRender();
+	});
+
+	eventBus.on("tool:call_end", (e) => {
+		chat.appendToolEnd(e.callId, e.toolName, e.success, "");
+		tui.requestRender();
+	});
+
 	eventBus.on("agent:turn_complete", () => {
 		// TODO: 后续可在此更新 turn 计数器
+		// TODO: 扫描 agent.getMessages() 最后一条 toolResult，
+		// 取出实际输出文本传进 chat.appendToolEnd 的 summary 参数
 	});
 
 	eventBus.on("agent:complete", () => {
