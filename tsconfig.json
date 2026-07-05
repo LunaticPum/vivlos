@@ -20,7 +20,13 @@
 			"@vivlos/infra/*": ["vivlos/infra/*"],
 			"@vivlos/entries": ["vivlos/entries/index.ts"],
 			"@vivlos/entries/*": ["vivlos/entries/*"],
-			"@vivlos/*": ["vivlos/*"]
+			"@vivlos/*": ["vivlos/*"],
+			"@earendil-works/pi-ai": ["packages/ai/src/index.ts"],
+			"@earendil-works/pi-ai/*": ["packages/ai/src/*"],
+			"@earendil-works/pi-agent-core": ["packages/agent/src/index.ts"],
+			"@earendil-works/pi-agent-core/*": ["packages/agent/src/*"],
+			"@earendil-works/pi-tui": ["packages/tui/src/index.ts"],
+			"@earendil-works/pi-tui/*": ["packages/tui/src/*"]
 		}
 	},
 	"include": ["vivlos/**/*.ts"],

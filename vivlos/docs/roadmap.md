@@ -85,12 +85,12 @@
 
 **文件清单**：
 
-- [ ] `vivlos/agent/types.ts` — agent 层公共契约
-- [ ] `vivlos/agent/session/` — 封装 pi session repo（memory-repo 起步）
-- [ ] `vivlos/agent/prompt/` — prompt builder（身份/环境/memory/skills 拼装）
-- [ ] `vivlos/agent/loop/` — 封装 pi agentLoop（注入 eventbus + prompt + session）
-- [ ] `vivlos/agent/index.ts` — barrel
-- [ ] 各模块测试（mock LLM 验证 loop 跑通一轮）
+- [x] `vivlos/agent/types.ts` — agent 层公共契约
+- [x] `vivlos/agent/session/` — 封装 pi session repo（memory-repo 起步）
+- [x] `vivlos/agent/prompt/` — prompt builder（身份/环境/memory/skills 拼装）
+- [x] `vivlos/agent/loop/` — 封装 pi agentLoop（注入 eventbus + prompt + session）
+- [x] `vivlos/agent/index.ts` — barrel
+- [x] 各模块测试（mock LLM 验证 loop 跑通一轮）
 
 **验证**：mock LLM 下 agent loop 能跑一轮完整对话（user → assistant text → done）
 
