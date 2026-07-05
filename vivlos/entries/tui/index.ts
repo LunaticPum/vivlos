@@ -47,18 +47,20 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	// ── 流式回复状态 ──
 	let streamingContent = "";
+	let streamingStarted = false;
 
 	// ── EventBus → UI 更新 ──
 	eventBus.on("agent:start", () => {
 		streamingContent = "";
+		streamingStarted = false;
 		status.showLoading();
 		tui.requestRender();
 	});
 
 	eventBus.on("text:delta", (e) => {
 		streamingContent += e.delta;
-		if (streamingContent.length === e.delta.length) {
-			// 第一个 delta → 切换从 loading 到流式文本
+		if (!streamingStarted) {
+			streamingStarted = true;
 			status.clear();
 			chat.startStreaming();
 		}
@@ -67,8 +69,14 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("text:complete", (e) => {
-		chat.updateStreaming(e.content);
-		chat.endStreaming();
+		if (!streamingStarted) {
+			// non-streaming 路径——没有 delta 只有 complete，
+			// startStreaming 从未触发，改用 appendAssistantMessage 兜底
+			chat.appendAssistantMessage(e.content);
+		} else {
+			chat.updateStreaming(e.content);
+			chat.endStreaming();
+		}
 		status.clear();
 		tui.requestRender();
 	});

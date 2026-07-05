@@ -12,16 +12,16 @@ export function createSQLiteMemoryBackend(dbPath: string): MemoryBackend {
 
 	// ── prepared statements ──
 	const readAllMemory = db.prepare(
-		"SELECT id, content, created_at, updated_at FROM agent_memories ORDER BY updated_at DESC",
+		"SELECT id, content, created_at, updated_at FROM agent_memories ORDER BY updated_at ASC",
 	);
 	const addMemory = db.prepare(
 		"INSERT INTO agent_memories (id, content, created_at, updated_at) VALUES (?, ?, ?, ?)",
 	);
 	const replaceMemory = db.prepare(
-		"UPDATE agent_memories SET content = ?, updated_at = ? WHERE content LIKE ?",
+		"UPDATE agent_memories SET content = ?, updated_at = ? WHERE content = ?",
 	);
 	const removeMemory = db.prepare(
-		"DELETE FROM agent_memories WHERE content LIKE ?",
+		"DELETE FROM agent_memories WHERE content = ?",
 	);
 	const setProfile = db.prepare(
 		"UPDATE user_profile SET content = ?, updated_at = ? WHERE id = 'profile'",
@@ -65,11 +65,11 @@ export function createSQLiteMemoryBackend(dbPath: string): MemoryBackend {
 		},
 
 		async replace(_target, oldText, newText) {
-			replaceMemory.run(newText, Date.now(), `%${oldText}%`);
+			replaceMemory.run(newText, Date.now(), oldText);
 		},
 
 		async remove(_target, oldText) {
-			removeMemory.run(`%${oldText}%`);
+			removeMemory.run(oldText);
 		},
 
 		async setProfile(content) {

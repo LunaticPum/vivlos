@@ -1,4 +1,4 @@
-import type { Model, Api } from "@earendil-works/pi-ai";
+import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
@@ -38,8 +38,7 @@ export interface AgentLoopDeps {
 
 /** agent 对外接口 —— entries 层 */
 export interface VivlosAgent {
-	prompt(text: string): Promise<VivlosLoopResult>;
-	prompt(messages: AgentMessage[]): Promise<VivlosLoopResult>;
-	getMessages(): readonly AgentMessage[];
+	prompt(input: string | AgentMessage[]): Promise<VivlosLoopResult>;
+	getMessages(): readonly Message[];
 	reset(): void;
 }
