@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createAgent } from "@vivlos/agent/index.ts";
@@ -10,6 +11,7 @@ import {
 } from "@vivlos/agent/memory/index.ts";
 import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
 import { createTuiApp } from "@vivlos/entries/tui/index.ts";
+import { createMarkdownLogWriter } from "@vivlos/infra/logging/index.ts";
 
 async function main(): Promise<void> {
 	// ── 装配 infra ──
@@ -20,6 +22,10 @@ async function main(): Promise<void> {
 	// P6 数据库路径（默认项目根目录下的 vivlos.db）
 	const dbPath =
 		process.env.VIVLOS_DB_PATH ?? resolve(process.cwd(), "vivlos.db");
+
+	// 日志目录（默认 ~/.vivlos/logs）
+	const logDir =
+		process.env.VIVLOS_LOG_DIR ?? resolve(homedir(), ".vivlos", "logs");
 
 	// ── 装配 agent ──
 	const model = llm.getModel(
@@ -41,6 +47,13 @@ async function main(): Promise<void> {
 	// P6: session 持久化——替换内存 session
 	const session = createSqliteSession(dbPath);
 
+	// 日志写入器——订阅 eventbus "log" 通道，写入 ~/.vivlos/logs/session-xxx.md
+	const logger = createMarkdownLogWriter(eventBus, {
+		logDir,
+		sessionId: session.id,
+	});
+	logger.start();
+
 	// P6: 初始化 MemoryManager
 	const memoryBackend = createSQLiteMemoryBackend(dbPath);
 	const memoryManager = createMemoryManager(memoryBackend);
@@ -56,8 +69,9 @@ async function main(): Promise<void> {
 	});
 
 	// ── 退出清理 ──
-	process.on("SIGINT", () => { closeDb(); process.exit(0); });
-	process.on("SIGTERM", () => { closeDb(); process.exit(0); });
+	const cleanup = () => { logger.stop(); closeDb(); process.exit(0); };
+	process.on("SIGINT", cleanup);
+	process.on("SIGTERM", cleanup);
 
 	// ── 装配 TUI ──
 	const tuiApp = createTuiApp({ agent, eventBus });
