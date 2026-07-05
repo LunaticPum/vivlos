@@ -1,5 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
-import type { VivlosSession } from "@vivlos/agent/session/types.ts";
+import type { VivlosSession } from "@vivlos/shared/types.ts";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { getDb } from "./db.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
