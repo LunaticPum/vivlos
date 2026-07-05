@@ -1,9 +1,9 @@
 import Database, { type Database as DatabaseType } from "better-sqlite3";
 
-let db: DatabaseType | null = null;
+const instances = new Map<string, DatabaseType>();
 
 /**
- * 获取 SQLite 单例连接。
+ * 获取 SQLite 连接（按 dbPath 键控，同一 path 只打开一次）。
  *
  * 自动建表（schema migration）。
  * 表结构：
@@ -13,9 +13,10 @@ let db: DatabaseType | null = null;
  *   user_profile   — 用户画像（参考 Hermes USER.md）
  */
 export function getDb(dbPath: string): DatabaseType {
-	if (db) return db;
+	const existing = instances.get(dbPath);
+	if (existing) return existing;
 
-	db = new Database(dbPath);
+	const db = new Database(dbPath);
 	db.pragma("journal_mode = WAL");
 	db.pragma("foreign_keys = ON");
 
@@ -54,11 +55,22 @@ export function getDb(dbPath: string): DatabaseType {
 			VALUES ('profile', '', 0);
 	`);
 
+	instances.set(dbPath, db);
 	return db;
 }
 
-/** 关闭数据库连接 */
+/** 关闭所有数据库连接并 WAL checkpoint */
+export function closeAll(): void {
+	for (const [path, db] of instances) {
+		try {
+			db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+		} catch { /* ignore checkpoint errors */ }
+		db.close();
+	}
+	instances.clear();
+}
+
+/** @deprecated 使用 closeAll() 关闭所有连接 */
 export function closeDb(): void {
-	db?.close();
-	db = null;
+	closeAll();
 }

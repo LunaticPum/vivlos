@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createAgent } from "@vivlos/agent/index.ts";
-import { createSqliteSession } from "@vivlos/infra/storage/index.ts";
+import { createSqliteSession, closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import {
 	createSQLiteMemoryBackend,
 	createMemoryManager,
@@ -54,6 +54,10 @@ async function main(): Promise<void> {
 		memoryManager,
 		session,
 	});
+
+	// ── 退出清理 ──
+	process.on("SIGINT", () => { closeDb(); process.exit(0); });
+	process.on("SIGTERM", () => { closeDb(); process.exit(0); });
 
 	// ── 装配 TUI ──
 	const tuiApp = createTuiApp({ agent, eventBus });

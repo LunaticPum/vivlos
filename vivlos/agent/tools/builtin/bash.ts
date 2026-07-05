@@ -1,6 +1,6 @@
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 // ── Schema ──（参照 pi coding-agent bashSchema）
 const Params = Type.Object({
@@ -14,6 +14,64 @@ type Params = Static<typeof Params>;
 
 const MAX_CHARS = 256 * 1024; // 256K 字符截断
 
+/**
+ * 用 spawn 异步执行命令，收集 stdout/stderr，timeout 后 SIGTERM。
+ * 替代 execSync 避免阻塞事件循环，支持 pi 的并行工具调度。
+ */
+function spawnAsync(
+	command: string,
+	cwd: string,
+	timeoutMs: number,
+	signal?: AbortSignal,
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
+	return new Promise((resolve, reject) => {
+		// Windows 下用 cmd.exe /c，POSIX 用 sh -c
+		const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
+		const shellArgs = process.platform === "win32" ? ["/c", command] : ["-c", command];
+
+		const child = spawn(shell, shellArgs, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		let stdout = "";
+		let stderr = "";
+
+		child.stdout.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString("utf-8");
+		});
+
+		child.stderr.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString("utf-8");
+		});
+
+		const timer = setTimeout(() => {
+			child.kill("SIGTERM");
+			reject(new Error(`command timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+
+		// pi loop abort signal
+		if (signal) {
+			const onAbort = () => {
+				child.kill("SIGTERM");
+				clearTimeout(timer);
+				reject(new Error("aborted"));
+			};
+			signal.addEventListener("abort", onAbort, { once: true });
+		}
+
+		child.on("close", (code) => {
+			clearTimeout(timer);
+			resolve({ stdout, stderr, code });
+		});
+
+		child.on("error", (err) => {
+			clearTimeout(timer);
+			reject(err);
+		});
+	});
+}
+
 // ── 工厂 ──
 export function createBashTool(cwd: string): AgentTool<typeof Params, { message: string }> {
 	return {
@@ -24,26 +82,34 @@ export function createBashTool(cwd: string): AgentTool<typeof Params, { message:
 		async execute(
 			_toolCallId: string,
 			params: Params,
+			signal?: AbortSignal,
 		): Promise<AgentToolResult<{ message: string }>> {
 			const timeoutMs = (params.timeout ?? 30) * 1000;
 
-			const output = execSync(params.command, {
+			const { stdout, stderr, code } = await spawnAsync(
+				params.command,
 				cwd,
-				encoding: "utf-8",
-				timeout: timeoutMs,
-				maxBuffer: 1024 * 1024, // 1MB
-			});
+				timeoutMs,
+				signal,
+			);
 
-			// 截断大输出
+			if (code === null) {
+				// killed by timeout or abort
+				throw new Error(`command killed (exit code: null)`);
+			}
+
+			const combined = stderr ? `${stdout}\n[stderr]\n${stderr}` : stdout;
+
+			// 截断
 			const text =
-				output.length > MAX_CHARS
-					? output.slice(0, MAX_CHARS) +
-						`\n...[truncated ${output.length - MAX_CHARS} chars]`
-					: output || "(no output)";
+				combined.length > MAX_CHARS
+					? combined.slice(0, MAX_CHARS) +
+						`\n...[truncated ${combined.length - MAX_CHARS} chars]`
+					: combined || "(no output)";
 
 			return {
 				content: [{ type: "text", text }],
-				details: { message: `exit 0 (${output.length} chars)` },
+				details: { message: `exit ${code} (${combined.length} chars)` },
 			};
 		},
 	};

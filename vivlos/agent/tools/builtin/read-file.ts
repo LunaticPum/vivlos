@@ -48,12 +48,15 @@ export function createReadTool(cwd: string): AgentTool<typeof Params, { message:
 				const end = params.limit != null ? start + params.limit : lines.length;
 				const sliced = lines.slice(start, end).join("\n");
 
-				// 5. 大文件截断（字符数超 MAX_CHARS 时只保留前 MAX_CHARS）
-				const truncated =
-					sliced.length > MAX_CHARS
-						? sliced.slice(0, MAX_CHARS) +
-							`\n...[truncated ${sliced.length - MAX_CHARS} chars]`
-						: sliced;
+				// 5. 大文件截断（按 UTF-8 字节安全截断，避免切到多字节字符中间）
+				let truncated = sliced;
+				const byteLen = Buffer.byteLength(sliced, "utf-8");
+				if (byteLen > MAX_CHARS) {
+					truncated = Buffer.from(sliced, "utf-8")
+						.slice(0, MAX_CHARS)
+						.toString("utf-8");
+					truncated += `\n...[truncated ${byteLen - MAX_CHARS} bytes]`;
+				}
 
 				return {
 					content: [{ type: "text", text: truncated || "(empty)" }],

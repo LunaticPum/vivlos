@@ -50,7 +50,7 @@ export function createGrepTool(cwd: string): AgentTool<typeof Params, GrepDetail
 						.map((e) => resolve(e.parentPath ?? absolutePath, e.name))
 				: [absolutePath];
 
-			const regex = new RegExp(params.pattern, "g");
+			const regex = new RegExp(params.pattern);
 			const results: string[] = [];
 			let matchCount = 0;
 
@@ -60,11 +60,9 @@ export function createGrepTool(cwd: string): AgentTool<typeof Params, GrepDetail
 					const content = readFileSync(file, "utf-8");
 					for (const line of content.split("\n")) {
 						if (regex.test(line)) {
-							regex.lastIndex = 0; // reset after test
 							results.push(`${file}: ${line.trim().slice(0, 200)}`);
 							matchCount++;
 						}
-						regex.lastIndex = 0;
 					}
 				} catch {
 					/* skip unreadable files */

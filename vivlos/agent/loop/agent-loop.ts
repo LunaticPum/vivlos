@@ -12,8 +12,8 @@ import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import type { VivlosSession } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
 import type { VivlosLoopHooks } from "./hooks/index.ts";
-import { mapAgentEvent } from "./event-mapper.ts";
 import type { MemoryManager } from "../../agent/memory/types.ts";
+import { mapAgentEvent } from "./event-mapper.ts";
 import type {
 	VivlosLoopConfig,
 	VivlosLoopResult,
@@ -31,7 +31,7 @@ export interface CreateAgentLoopParams {
 	 * MemoryManager（P6），每次 prompt 前注入 memory 块到 system prompt。
 	 * 可选——不传则跳过 memory 注入（保持 P5 行为）。
 	 */
-	readonly memoryManager?: import("@vivlos/agent/memory/types.ts").MemoryManager;
+	readonly memoryManager?: MemoryManager;
 }
 
 export function createAgentLoop(params: CreateAgentLoopParams) {
@@ -55,6 +55,8 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					: userInput;
 
 			// 2. 注入 memory（P6）——每次 prompt 前加载持久化记忆和用户画像
+			//    先清空旧内容，防止上一轮 prompt 的 memory 残留
+			promptBuilder.setMemory("");
 			if (params.memoryManager) {
 				const memoryBlock = await params.memoryManager.buildPrompt();
 				// TODO: memory 块应放在 prompt builder 的身份定义之后、
