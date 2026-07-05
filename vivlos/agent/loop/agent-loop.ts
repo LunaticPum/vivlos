@@ -12,7 +12,7 @@ import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import type { VivlosSession } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
 import type { VivlosLoopHooks } from "./hooks/index.ts";
-import type { MemoryManager } from "../../agent/memory/types.ts";
+import type { MemoryManager } from "../memory/types.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
 import type {
 	VivlosLoopConfig,
@@ -71,13 +71,13 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				tools: params.tools ?? [],
 			};
 
-			// 3. 构造 streamFn —— 桥接 LLMClient → StreamFn
+			// 4. 构造 streamFn —— 桥接 LLMClient → StreamFn
 			const streamFn = ((model: Model<Api>, ctx: any, opts?: any) =>
 				deps.llm.stream(model, ctx, {
 					signal: opts?.signal,
 				})) as unknown as StreamFn;
 
-			// 4. 组装 loop config —— 透传外层 hooks
+			// 5. 组装 loop config —— 透传外层 hooks
 			const loopConfig: AgentLoopConfig = {
 				model: config.model,
 				convertToLlm: (messages: AgentMessage[]): Message[] => {
@@ -93,7 +93,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 			let turn = 0;
 			try {
-				// 5. 启动 agentLoop —— 返回 EventStream<AgentEvent, AgentMessage[]>
+				// 6. 启动 agentLoop —— 返回 EventStream<AgentEvent, AgentMessage[]>
 				const stream = agentLoop(
 					prompts,
 					context,
@@ -102,17 +102,17 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					streamFn,
 				);
 
-				// 6. 遍历事件流，映射到 VivlosEvent 发到 eventbus
+				// 7. 遍历事件流，映射到 VivlosEvent 发到 eventbus
 				for await (const event of stream) {
 					if (event.type === "turn_start") turn++;
 					const vivlosEvents = mapAgentEvent(event, session.id, turn);
 					for (const ve of vivlosEvents) deps.eventBus.emit(ve);
 				}
 
-				// 7. 拿最终结果
+				// 8. 拿最终结果
 				const newMessages = await stream.result();
 
-				// 8. 把所有新消息加到 session
+				// 9. 把所有新消息加到 session
 				//    P6: newMessages 是 AgentMessage[]（可能含 CustomAgentMessages），
 				//    session 只存储标准 Message（user/assistant/toolResult），
 				//    非标准消息（如 BashExecutionMessage）跳过

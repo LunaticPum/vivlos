@@ -1,5 +1,3 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-
 /** 所有消息渠道的统一入口消息格式 */
 export interface ChannelMessage {
 	/** 消息来源渠道标识 */
