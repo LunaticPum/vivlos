@@ -30,7 +30,6 @@ export interface ChatContainer {
 	/** 工具执行结束——找到对应 ToolExecution 并标记完成 */
 	appendToolEnd(
 		toolCallId: string,
-		toolName: string,
 		isSuccess: boolean,
 		summary: string,
 	): void;
@@ -85,7 +84,7 @@ export function createChatContainer(): ChatContainer {
 			component.start();
 		},
 
-		appendToolEnd(toolCallId, _toolName, isSuccess, summary) {
+		appendToolEnd(toolCallId, isSuccess, summary) {
 			const component = pendingTools.get(toolCallId);
 			if (!component) return;
 

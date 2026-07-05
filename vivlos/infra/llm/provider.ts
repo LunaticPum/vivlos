@@ -5,7 +5,7 @@ import type {
 	Context,
 	AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all.ts";
 import type { LLMClient, LLMConfig } from "./types.ts";
 
 export type { LLMClient, LLMConfig } from "./types.ts";

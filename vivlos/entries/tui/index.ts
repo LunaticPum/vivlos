@@ -80,7 +80,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("tool:call_end", (e) => {
-		chat.appendToolEnd(e.callId, e.toolName, e.success, "");
+		chat.appendToolEnd(e.callId, e.success, "");
 		tui.requestRender();
 	});
 

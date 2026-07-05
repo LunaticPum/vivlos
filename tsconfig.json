@@ -4,6 +4,7 @@
 		"module": "Node16",
 		"moduleResolution": "Node16",
 		"strict": true,
+		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"noEmit": true,
 		"allowImportingTsExtensions": true,
@@ -26,7 +27,8 @@
 			"@earendil-works/pi-agent-core": ["packages/agent/src/index.ts"],
 			"@earendil-works/pi-agent-core/*": ["packages/agent/src/*"],
 			"@earendil-works/pi-tui": ["packages/tui/src/index.ts"],
-			"@earendil-works/pi-tui/*": ["packages/tui/src/*"]
+			"@earendil-works/pi-tui/*": ["packages/tui/src/*"],
+			"@earendil-works/pi-ai/providers/all": ["packages/ai/src/providers/all"]
 		}
 	},
 	"include": ["vivlos/**/*.ts"],

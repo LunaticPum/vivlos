@@ -1,8 +1,8 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Message } from "@earendil-works/pi-ai";
 
 export interface VivlosSession {
 	readonly id: string;
-	getMessages(): readonly AgentMessage[];
-	appendMessage(message: AgentMessage): void;
+	getMessages(): readonly Message[];
+	appendMessage(message: Message): void;
 	reset(): void;
 }

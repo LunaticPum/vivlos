@@ -11,6 +11,7 @@ import {
 	type VivlosLoopHooks,
 } from "./loop/index.ts";
 import type { VivlosAgent, VivlosLoopResult } from "./types.ts";
+import type { MemoryManager } from "./memory/types.ts";
 
 export interface CreateAgentParams {
 	readonly llm: LLMClient;
@@ -22,6 +23,11 @@ export interface CreateAgentParams {
 	readonly hooks?: VivlosLoopHooks;
 	/** 工具列表（P5），透传到 agent-loop → AgentContext.tools */
 	readonly tools?: AgentTool<any, any>[];
+	/**
+	 * MemoryManager（P6），每次 prompt 前注入记忆到 system prompt。
+	 * 可选——不传则跳过 memory 注入（保持 P5 行为）。
+	 */
+	readonly memoryManager?: MemoryManager;
 }
 
 export function createAgent(params: CreateAgentParams): VivlosAgent {
@@ -42,6 +48,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		promptBuilder,
 		hooks,
 		tools: params.tools,
+		memoryManager: params.memoryManager,
 	});
 	const model = params.model;
 

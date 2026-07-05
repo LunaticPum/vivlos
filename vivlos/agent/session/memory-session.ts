@@ -1,9 +1,9 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Message } from "@earendil-works/pi-ai";
 import type { VivlosSession } from "./types.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
 
 export function createMemorySession(id?: string): VivlosSession {
-	let messages: AgentMessage[] = [];
+	let messages: Message[] = [];
 	const sessionId = id ?? shortId();
 
 	return {

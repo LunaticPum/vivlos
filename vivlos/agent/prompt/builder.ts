@@ -27,6 +27,10 @@ export function createPromptBuilder(
 				parts.environment,
 				parts.rules,
 			];
+			// P6: memoryText 不再是单行文本，而是 MemoryManager.buildPrompt()
+			// 生成的 Hermes 风格 ═══...═══ 大块
+			// TODO: 后续 memory 块应放在 system prompt 最顶部
+			// （Hermes 放在 identity 之后 rules 之前）
 			if (memoryText) sections.push(memoryText);
 			if (skillsText) sections.push(skillsText);
 			return sections.join("\n\n---\n\n");

@@ -11,6 +11,8 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"better-sqlite3": "^12.11.1",
 		"dotenv": "^16.5.0",
 		"openai": "^6.10.0"
 	},

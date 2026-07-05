@@ -13,6 +13,7 @@ import type { VivlosSession } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
 import type { VivlosLoopHooks } from "./hooks/index.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
+import type { MemoryManager } from "../../agent/memory/types.ts";
 import type {
 	VivlosLoopConfig,
 	VivlosLoopResult,
@@ -26,6 +27,11 @@ export interface CreateAgentLoopParams {
 	readonly hooks?: VivlosLoopHooks;
 	/** 工具列表（P5），传入 AgentContext.tools。由 pi agentLoop 自动调度 tool calling 全流程 */
 	readonly tools?: AgentTool<any, any>[];
+	/**
+	 * MemoryManager（P6），每次 prompt 前注入 memory 块到 system prompt。
+	 * 可选——不传则跳过 memory 注入（保持 P5 行为）。
+	 */
+	readonly memoryManager?: import("@vivlos/agent/memory/types.ts").MemoryManager;
 }
 
 export function createAgentLoop(params: CreateAgentLoopParams) {
@@ -48,7 +54,15 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 
-			// 2. 构造 AgentContext（含工具列表）
+			// 2. 注入 memory（P6）——每次 prompt 前加载持久化记忆和用户画像
+			if (params.memoryManager) {
+				const memoryBlock = await params.memoryManager.buildPrompt();
+				// TODO: memory 块应放在 prompt builder 的身份定义之后、
+				// rules 之前（参照 Hermes system prompt 布局），当前放在末尾
+				promptBuilder.setMemory(memoryBlock);
+			}
+
+			// 3. 构造 AgentContext（含工具列表）
 			const context: AgentContext = {
 				systemPrompt: promptBuilder.build(),
 				messages: [...session.getMessages()],
@@ -96,9 +110,18 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				// 7. 拿最终结果
 				const newMessages = await stream.result();
 
-				// 8. 把所有新消息（含 user prompts + assistant + toolResult）加到 session
+				// 8. 把所有新消息加到 session
+				//    P6: newMessages 是 AgentMessage[]（可能含 CustomAgentMessages），
+				//    session 只存储标准 Message（user/assistant/toolResult），
+				//    非标准消息（如 BashExecutionMessage）跳过
 				for (const m of newMessages) {
-					session.appendMessage(m);
+					if (
+						m.role === "user" ||
+						m.role === "assistant" ||
+						m.role === "toolResult"
+					) {
+						session.appendMessage(m as Message);
+					}
 				}
 
 				return { messages: newMessages, turns: turn };
