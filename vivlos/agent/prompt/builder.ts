@@ -9,6 +9,12 @@ import {
 	DEFAULT_RULES,
 } from "./templates.ts";
 
+/**
+ * 创建 system prompt 组装器。
+ *
+ * 按固定布局拼接 identity → environment → memory → rules → skills，
+ * 每个 prompt 周期由 agent-loop 调用 build() 生成最终 system prompt 文本。
+ */
 export function createPromptBuilder(
 	options: PromptBuilderOptions = {},
 ): PromptBuilder {
@@ -21,17 +27,17 @@ export function createPromptBuilder(
 	let skillsText: string | undefined;
 
 	return {
+		/**
+		 *   1. identity    — "你是 vivlos，..."
+		 *   2. environment — "当前时间 / OS / 工作目录"
+		 *   3. memory      — Hermes 风格 ═══ MEMORY ═══ 块（可选）
+		 *   4. rules       — 行为约束
+		 *   5. skills      — 可用的 skills 列表（可选）
+		 */
 		build() {
-			const sections: string[] = [
-				parts.identity,
-				parts.environment,
-				parts.rules,
-			];
-			// P6: memoryText 不再是单行文本，而是 MemoryManager.buildPrompt()
-			// 生成的 Hermes 风格 ═══...═══ 大块
-			// TODO: 后续 memory 块应放在 system prompt 最顶部
-			// （Hermes 放在 identity 之后 rules 之前）
+			const sections: string[] = [parts.identity, parts.environment];
 			if (memoryText) sections.push(memoryText);
+			sections.push(parts.rules);
 			if (skillsText) sections.push(skillsText);
 			return sections.join("\n\n---\n\n");
 		},

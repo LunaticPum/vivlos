@@ -1,32 +1,36 @@
-// vivlos/agent/loop/agent-loop.ts
+// —— pi sdk ——
 import {
 	agentLoop,
 	type AgentContext,
 	type AgentLoopConfig,
 	type AgentMessage,
+	type AgentTool,
 	type StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
-import type { SessionManager } from "../session/types.ts";
-import type { PromptBuilder } from "../prompt/types.ts";
-import type { LoopHooks } from "./hooks/index.ts";
-import type { MemoryManager } from "../memory/types.ts";
+
+import type { SessionManager } from "@vivlos/agent/session/index.ts";
+import type { MemoryManager } from "@vivlos/agent/memory/types.ts";
+import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
+import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
+
 import { mapAgentEvent } from "./event-mapper.ts";
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 
 export interface CreateAgentLoopParams {
+	/** infra 装配 */
 	readonly deps: AgentLoopDeps;
+
+	/** ... */
+	readonly memoryManager: MemoryManager;
+	/** .. */
 	readonly sessionManager: SessionManager;
+	/** .. */
 	readonly promptBuilder: PromptBuilder;
+	/** .. */
 	readonly hooks?: LoopHooks;
-	/** 工具列表（P5），传入 AgentContext.tools。由 pi agentLoop 自动调度 tool calling 全流程 */
+	/** .. */
 	readonly tools?: AgentTool<any, any>[];
-	/**
-	 * MemoryManager（P6），每次 prompt 前注入 memory 块到 system prompt。
-	 * 可选——不传则跳过 memory 注入（保持 P5 行为）。
-	 */
-	readonly memoryManager?: MemoryManager;
 }
 
 export function createAgentLoop(params: CreateAgentLoopParams) {
@@ -37,7 +41,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			userInput: string | AgentMessage[],
 			config: LoopConfig,
 		): Promise<LoopResult> {
-			// 1. 构造 user message(s)
+			// ———— 1. 构造 user message(s) ————
 			const prompts: AgentMessage[] =
 				typeof userInput === "string"
 					? [
@@ -49,30 +53,29 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 
-			// 2. 注入 memory（P6）——每次 prompt 前加载持久化记忆和用户画像
-			//    先清空旧内容，防止上一轮 prompt 的 memory 残留
-			promptBuilder.setMemory("");
+			// ———— 2. 注入 memory（P6）——每次 prompt 前加载持久化记忆和用户画像 ————
+			promptBuilder.setMemory(""); // 先清空旧内容，防止上一轮 prompt 的 memory 残留
 			if (params.memoryManager) {
 				const memoryBlock = await params.memoryManager.buildPrompt();
-				// TODO: memory 块应放在 prompt builder 的身份定义之后、
-				// rules 之前（参照 Hermes system prompt 布局），当前放在末尾
-				promptBuilder.setMemory(memoryBlock);
+				if (memoryBlock) {
+					promptBuilder.setMemory(memoryBlock);
+				}
 			}
 
-			// 3. 构造 AgentContext（含工具列表）
+			// ———— 3. 构造 AgentContext ————
 			const context: AgentContext = {
 				systemPrompt: promptBuilder.build(),
 				messages: [...sessionManager.getMessages()],
 				tools: params.tools ?? [],
 			};
 
-			// 4. 构造 streamFn —— 桥接 LLMClient → StreamFn
+			// ———— 4. 构造 streamFn —— 桥接 LLMClient → StreamFn ————
 			const streamFn = ((model: Model<Api>, ctx: any, opts?: any) =>
 				deps.llm.stream(model, ctx, {
 					signal: opts?.signal,
 				})) as unknown as StreamFn;
 
-			// 5. 组装 loop config —— 透传外层 hooks
+			// ———— 5. 组装 loop config ————
 			const loopConfig: AgentLoopConfig = {
 				model: config.model,
 				convertToLlm: (messages: AgentMessage[]): Message[] => {
