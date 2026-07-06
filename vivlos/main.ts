@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 
 // —— 基础设施 ——
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
-import { createMarkdownLogWriter } from "@vivlos/infra/logger/index.ts";
+import { createMarkdownLogWriter, initLogger } from "@vivlos/infra/logger/index.ts";
 import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 
@@ -20,6 +20,7 @@ async function main(): Promise<void> {
 	const llmConfig = loadLLMConfigFromEnv();
 	const llm = createLLM(llmConfig);
 	const eventBus = createEventBus();
+	initLogger(eventBus); // 注入全局 log() 单例
 
 	// 数据库路径（默认项目根目录下的 vivlos.db）
 	const dbPath =
