@@ -6,21 +6,23 @@ import {
 	createInputContainer,
 	createStatusContainer,
 } from "./containers/index.ts";
-import type { CommandRegistry } from "@vivlos/commands/index.ts";
 import type { CommandContext } from "@vivlos/commands/types.ts";
-import type { LLMClient } from "@vivlos/infra/llm/index.ts";
-import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemoryManager } from "@vivlos/agent/memory/index.ts";
+import type { CommandRegistry } from "@vivlos/commands/index.ts";
 
+/**
+ * TUI 应用创建参数——分组管理，职责清晰。
+ */
 export interface CreateTuiAppParams {
+	/** agent 入口——TUI 提交消息时透传 */
 	readonly agent: VivlosAgent;
+	/** 事件总线——TUI 绑定 agent 事件 */
 	readonly eventBus: EventBus;
-	readonly registry: CommandRegistry;
-	readonly llm: LLMClient;
-	readonly sessionManager: SessionManager;
-	readonly memoryManager: MemoryManager;
-	/** 优雅退出回调——/quit 命令调用 */
-	readonly shutdown: () => void;
+	/**
+	 * 命令上下文（不含 tui——TUI 实例在 createTuiApp 内部创建后补全）。
+	 * llm / sessionManager / memoryManager / registry / shutdown 全部在此聚合，
+	 * 传给 CommandRegistry 执行 slash 命令。
+	 */
+	readonly cmdCtx: Omit<CommandContext, "tui">;
 }
 
 /**
@@ -37,11 +39,14 @@ export interface CreateTuiAppParams {
  * - 聊天历史滚动（PageUp/PageDown）
  */
 export function createTuiApp(params: CreateTuiAppParams) {
-	const { agent, eventBus, registry, llm, sessionManager, memoryManager, shutdown } = params;
+	const { agent, eventBus, cmdCtx } = params;
 
 	// ── TUI 核心 ──
 	const terminal = new ProcessTerminal();
 	const tui = new TUI(terminal);
+
+	// 补全 cmdCtx.tui 字段（TUI 实例创建后才能注入）
+	const cmdCtxWithTui: CommandContext = { ...cmdCtx, tui };
 
 	// ── 组装三个区域 ──
 	const chat = createChatContainer();
@@ -54,17 +59,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	tui.addChild(new Spacer(1));
 	tui.addChild(inputContainer.input);
 	tui.setFocus(inputContainer.input);
-
-	// ── 命令上下文 ──
-	const cmdCtx: CommandContext = {
-		llm,
-		eventBus,
-		sessionManager,
-		memoryManager,
-		tui,
-		registry,
-		shutdown,
-	};
 
 	// ── 流式回复状态 ──
 	let streamingContent = "";
@@ -80,7 +74,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("agent:message_start", (_e) => {
-		// TODO: 后续根据 e.role 显示不同前缀标识
 		tui.requestRender();
 	});
 
@@ -113,7 +106,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("agent:toolCall_delta", (_e) => {
-		// TODO: 后续可在此更新 ToolExecution 组件的中间态
 		tui.requestRender();
 	});
 
@@ -123,9 +115,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	eventBus.on("agent:turn_complete", (_e) => {
-		// TODO: 后续可在此更新 turn 计数器
-	});
+	eventBus.on("agent:turn_complete", (_e) => {});
 
 	eventBus.on("agent:complete", () => {
 		status.clear();
@@ -147,9 +137,9 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		if (value.startsWith("/")) {
 			const [name, ...rest] = value.slice(1).split(" ");
 			const args = rest.join(" ");
-			const cmd = registry.getSlash(name);
+			const cmd = cmdCtxWithTui.registry.getSlash(name);
 			if (cmd) {
-				const result = await cmd.execute(cmdCtx, args);
+				const result = await cmd.execute(cmdCtxWithTui, args);
 				if (result.feedback) {
 					status.showHint(result.feedback);
 				}
@@ -158,7 +148,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 				tui.requestRender();
 				return;
 			}
-			// 未知命令——作为普通消息传 LLM
 		}
 
 		inputContainer.disable();
@@ -177,7 +166,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		}
 	};
 
-	// Esc 退出
 	inputContainer.onEscape = () => {
 		tui.stop();
 		process.exit(0);
