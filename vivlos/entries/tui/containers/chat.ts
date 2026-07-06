@@ -1,17 +1,14 @@
-import { Container, Text, Spacer } from "@earendil-works/pi-tui";
+import { Container, Spacer } from "@earendil-works/pi-tui";
 import { ToolExecution } from "./tool.ts";
 import { BorderedMessage } from "../components/bordered-message.ts";
+import { StreamingBorderedMessage } from "../components/streaming-bordered-message.ts";
 
 /**
  * 聊天区容器。
  *
- * 用户/agent 消息用 BorderedMessage 包裹（圆角彩色边框），
- * 流式输出用独立 Text 持续更新，工具调用用 ToolExecution 渲染。
- *
- * TODO: 后续完善方向——
- * - 消息超过一屏时的滚动/截断策略
- * - 支持 markdown 渲染（BorderedMessage 内嵌 Markdown 组件）
- * - 消息折叠/展开
+ * 用户消息用 BorderedMessage 包裹（黄色边框），
+ * agent 流式输出用 StreamingBorderedMessage（上框+左右立即显示，结束时加底框），
+ * 工具调用用 ToolExecution 渲染。
  */
 export interface ChatContainer {
 	appendUserMessage(text: string): void;
@@ -27,7 +24,7 @@ export interface ChatContainer {
 
 export function createChatContainer(): ChatContainer {
 	const container = new Container();
-	let streamingText: Text | null = null;
+	let streamingMsg: StreamingBorderedMessage | null = null;
 	const pendingTools = new Map<string, ToolExecution>();
 
 	return {
@@ -46,16 +43,17 @@ export function createChatContainer(): ChatContainer {
 		},
 
 		startStreaming() {
-			streamingText = new Text("", 1, 0);
-			container.addChild(streamingText);
+			streamingMsg = new StreamingBorderedMessage("vivlos", "blue");
+			container.addChild(streamingMsg);
 		},
 
 		updateStreaming(text) {
-			streamingText?.setText(text);
+			streamingMsg?.setText(text);
 		},
 
 		endStreaming() {
-			streamingText = null;
+			streamingMsg?.finalize(); // 加 ╰──╯ 底边框
+			streamingMsg = null;
 		},
 
 		appendToolStart(toolCallId, toolName) {
@@ -78,7 +76,7 @@ export function createChatContainer(): ChatContainer {
 			}
 			pendingTools.clear();
 			container.clear();
-			streamingText = null;
+			streamingMsg = null;
 		},
 	};
 }

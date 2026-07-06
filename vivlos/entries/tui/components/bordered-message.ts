@@ -28,7 +28,11 @@ function wrapLines(text: string, maxWidth: number): string[] {
 				let searchStart = 0;
 				while (searchStart <= maxWidth && searchStart !== -1) {
 					const idx = remaining.indexOf(" ", searchStart);
-					if (idx === -1 || visibleWidth(remaining.slice(0, idx + 1)) > maxWidth) break;
+					if (
+						idx === -1 ||
+						visibleWidth(remaining.slice(0, idx + 1)) > maxWidth
+					)
+						break;
 					cut = idx;
 					searchStart = idx + 1;
 				}
@@ -82,7 +86,11 @@ export class BorderedMessage implements Component {
 	}
 
 	render(width: number): string[] {
-		if (this.cache && this.cache.text === this.text && this.cache.width === width) {
+		if (
+			this.cache &&
+			this.cache.text === this.text &&
+			this.cache.width === width
+		) {
 			return this.cache.lines;
 		}
 

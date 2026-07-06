@@ -87,14 +87,14 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		chat.updateStreaming(streamingContent);
 		tui.requestRender();
 	});
-
 	eventBus.on("agent:message_complete", (e) => {
 		if (!streamingStarted) {
 			chat.appendAssistantMessage(e.content);
 		} else {
 			chat.updateStreaming(e.content);
-			chat.endStreaming();
+			chat.endStreaming(); // finalize 边框 → ╰──╯
 		}
+		streamingStarted = false;
 		status.clear();
 		tui.requestRender();
 	});
