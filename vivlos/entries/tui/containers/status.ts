@@ -1,31 +1,27 @@
 import { Container, Text, Loader, Spacer, TUI } from "@earendil-works/pi-tui";
 
+/** ANSI 前景色简写 */
+const fg = {
+	blue: (t: string) => `\x1b[34m${t}\x1b[0m`,
+	red: (t: string) => `\x1b[31m${t}\x1b[0m`,
+	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
+	green: (t: string) => `\x1b[32m${t}\x1b[0m`,
+	yellow: (t: string) => `\x1b[33m${t}\x1b[0m`,
+};
+
 /**
  * 状态区容器。
  *
- * 显示 loading 动画、错误信息、临时提示、工具执行状态。
- * 位于聊天区和输入区之间。
- *
- * TODO: 后续完善方向——
- * - 常驻状态行（模型名、token 用量、turn 计数）
- * - loading 动画样式定制（不同场景不同 spinner）
- * - 错误信息带颜色/可折叠详情
- * - 多行错误堆栈渲染
+ * 显示 loading 动画、错误信息、提示、工具执行状态。
+ * loading 用蓝色、error 用红色、hint 用灰色、tool 用绿色/红色。
  */
 export interface StatusContainer {
-	/** 显示加载动画 */
 	showLoading(message?: string): void;
-	/** 显示错误信息 */
 	showError(message: string): void;
-	/** 显示临时提示 */
 	showHint(message: string): void;
-	/** 显示工具执行中 */
 	showToolRunning(toolName: string): void;
-	/** 显示工具执行完毕 */
 	showToolDone(success: boolean): void;
-	/** 清空状态区 */
 	clear(): void;
-	/** 底层 Container（供 index.ts 组装到 TUI） */
 	readonly container: Container;
 }
 
@@ -39,13 +35,7 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showLoading(message = "Thinking...") {
 			container.clear();
-			// TODO: 后续支持自定义 spinner 颜色/style
-			loader = new Loader(
-				tui,
-				(s) => s,
-				(s) => s,
-				message,
-			);
+			loader = new Loader(tui, (s) => s, (s) => s, fg.blue(message));
 			container.addChild(loader);
 			loader.start();
 			tui.requestRender();
@@ -53,8 +43,7 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showError(message) {
 			container.clear();
-			// TODO: 后续加红色样式 / 错误图标
-			statusText = new Text(`[error] ${message}`, 1, 0);
+			statusText = new Text(fg.red(`✗ ${message}`), 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
 			tui.requestRender();
@@ -62,7 +51,7 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showHint(message) {
 			container.clear();
-			statusText = new Text(message, 1, 0);
+			statusText = new Text(fg.gray(message), 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
 			tui.requestRender();
@@ -70,7 +59,7 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showToolRunning(toolName) {
 			container.clear();
-			statusText = new Text(`> ${toolName} ...`, 1, 0);
+			statusText = new Text(fg.yellow(`> ${toolName} ...`), 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
 			tui.requestRender();
@@ -78,8 +67,8 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showToolDone(success) {
 			container.clear();
-			const mark = success ? "✓" : "✗";
-			statusText = new Text(`> tool ${mark}`, 1, 0);
+			const mark = success ? fg.green("✓") : fg.red("✗");
+			statusText = new Text(`> ${mark}`, 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
 			tui.requestRender();
