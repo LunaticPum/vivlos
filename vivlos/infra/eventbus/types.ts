@@ -9,6 +9,11 @@ export type VivlosEvent =
 	// ———— agent 生命周期 ————
 	| { readonly type: "agent:start"; readonly sessionId: string }
 	| {
+			readonly type: "agent:complete";
+			readonly sessionId: string;
+			readonly finalMessage: string;
+	  }
+	| {
 			readonly type: "agent:turn_start";
 			readonly sessionId: string;
 			readonly turn: number;
@@ -19,37 +24,44 @@ export type VivlosEvent =
 			readonly turn: number;
 	  }
 	| {
-			readonly type: "agent:complete";
-			readonly sessionId: string;
-			readonly finalMessage: string;
-	  }
-	| {
 			readonly type: "agent:error";
 			readonly sessionId: string;
 			readonly error: Error;
 	  }
-	// ———— 文本流 ————
+	// ———— 消息生命周期 ————
 	| {
-			readonly type: "text:delta";
+			readonly type: "agent:message_start";
+			readonly sessionId: string;
+			readonly role: string;
+	  }
+	| {
+			readonly type: "agent:message_delta";
 			readonly sessionId: string;
 			readonly delta: string;
 	  }
 	| {
-			readonly type: "text:complete";
+			readonly type: "agent:message_complete";
 			readonly sessionId: string;
 			readonly content: string;
 	  }
-	// ———— 工具调用 ————
+	// ———— 工具调用生命周期 ————
 	| {
-			readonly type: "tool:call_start";
+			readonly type: "agent:toolCall_start";
 			readonly sessionId: string;
 			readonly toolName: string;
 			readonly callId: string;
 	  }
 	| {
-			readonly type: "tool:call_end";
+			readonly type: "agent:toolCall_delta";
 			readonly sessionId: string;
 			readonly callId: string;
+			readonly partialResult: string;
+	  }
+	| {
+			readonly type: "agent:toolCall_end";
+			readonly sessionId: string;
+			readonly callId: string;
+			readonly result: string;
 			readonly success: boolean;
 	  }
 	// ———— 通用 ————

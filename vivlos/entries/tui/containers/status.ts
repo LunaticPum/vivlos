@@ -3,7 +3,7 @@ import { Container, Text, Loader, Spacer, TUI } from "@earendil-works/pi-tui";
 /**
  * 状态区容器。
  *
- * 显示 loading 动画、错误信息、临时提示。
+ * 显示 loading 动画、错误信息、临时提示、工具执行状态。
  * 位于聊天区和输入区之间。
  *
  * TODO: 后续完善方向——
@@ -19,6 +19,10 @@ export interface StatusContainer {
 	showError(message: string): void;
 	/** 显示临时提示 */
 	showHint(message: string): void;
+	/** 显示工具执行中 */
+	showToolRunning(toolName: string): void;
+	/** 显示工具执行完毕 */
+	showToolDone(success: boolean): void;
 	/** 清空状态区 */
 	clear(): void;
 	/** 底层 Container（供 index.ts 组装到 TUI） */
@@ -59,6 +63,23 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 		showHint(message) {
 			container.clear();
 			statusText = new Text(message, 1, 0);
+			container.addChild(statusText);
+			container.addChild(new Spacer(1));
+			tui.requestRender();
+		},
+
+		showToolRunning(toolName) {
+			container.clear();
+			statusText = new Text(`> ${toolName} ...`, 1, 0);
+			container.addChild(statusText);
+			container.addChild(new Spacer(1));
+			tui.requestRender();
+		},
+
+		showToolDone(success) {
+			container.clear();
+			const mark = success ? "✓" : "✗";
+			statusText = new Text(`> tool ${mark}`, 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
 			tui.requestRender();

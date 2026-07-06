@@ -32,13 +32,13 @@ export interface CreateAgentParams {
 	readonly promptBuilder?: PromptBuilder;
 	/** SessionManager——消息存储管理器（可选，默认内存实现） */
 	readonly sessionManager?: SessionManager;
+	/** 可选 loop 控制 hook（steering / follow-up 等，后续扩展用） */
+	readonly hooks?: LoopHooks;
 	/** 工具列表——传入 AgentContext.tools，由 pi agentLoop 调度 tool calling */
 	readonly tools?: AgentTool<any, any>[];
 
 	/** agent loop 最大轮次（默认 10） */
 	readonly maxTurns?: number;
-	/** 可选 loop 控制 hook（steering / follow-up 等，后续扩展用） */
-	readonly hooks?: LoopHooks;
 }
 
 /**
@@ -56,22 +56,21 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	const memoryManager = params.memoryManager;
 	const sessionManager = params.sessionManager ?? createSessionManager();
 	const promptBuilder = params.promptBuilder ?? createPromptBuilder();
-	const tools = params.tools;
-
 	const hooks: LoopHooks = {
 		// 内置 hook
 		...createMaxTurnsHook(maxTurns),
 		// 外部 hook（steering / follow-up 等）
 		...params.hooks,
 	};
+	const tools = params.tools;
 
 	const loop = createAgentLoop({
 		deps: { llm: params.llm, eventBus: params.eventBus },
 		memoryManager,
 		sessionManager,
 		promptBuilder,
-		tools,
 		hooks,
+		tools,
 	});
 
 	return {

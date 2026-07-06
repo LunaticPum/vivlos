@@ -23,8 +23,6 @@ export interface CreateTuiAppParams {
  * - footer 区域（快捷键提示、token 计数）
  * - 主题/配色支持
  * - 聊天历史滚动（PageUp/PageDown）
- * - Ctrl+C / Ctrl+D 优雅退出
- * - 工具结果文本注入（turn_complete 时扫描 toolResult，传入 ToolExecution.end 的 summary 参数）
  */
 export function createTuiApp(params: CreateTuiAppParams) {
 	const { agent, eventBus } = params;
@@ -50,6 +48,8 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	let streamingStarted = false;
 
 	// ── EventBus → UI 更新 ──
+
+	// agent:start —— 重置流式状态，显示 loading
 	eventBus.on("agent:start", () => {
 		streamingContent = "";
 		streamingStarted = false;
@@ -57,7 +57,14 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	eventBus.on("text:delta", (e) => {
+	// agent:message_start —— 消息开始（显示角色标识）
+	eventBus.on("agent:message_start", (e) => {
+		// TODO: 后续根据 e.role 显示不同前缀标识
+		tui.requestRender();
+	});
+
+	// agent:message_delta —— 流式增量文本
+	eventBus.on("agent:message_delta", (e) => {
 		streamingContent += e.delta;
 		if (!streamingStarted) {
 			streamingStarted = true;
@@ -68,10 +75,10 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	eventBus.on("text:complete", (e) => {
+	// agent:message_complete —— 消息文本收尾
+	eventBus.on("agent:message_complete", (e) => {
 		if (!streamingStarted) {
-			// non-streaming 路径——没有 delta 只有 complete，
-			// startStreaming 从未触发，改用 appendAssistantMessage 兜底
+			// non-streaming 路径——没有 delta 只有 complete
 			chat.appendAssistantMessage(e.content);
 		} else {
 			chat.updateStreaming(e.content);
@@ -81,29 +88,40 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	// ── 工具执行可视化 ──
-	eventBus.on("tool:call_start", (e) => {
+	// agent:toolCall_start —— 工具开始执行
+	eventBus.on("agent:toolCall_start", (e) => {
 		chat.appendToolStart(e.callId, e.toolName);
+		status.showToolRunning(e.toolName);
 		tui.requestRender();
 	});
 
-	eventBus.on("tool:call_end", (e) => {
-		chat.appendToolEnd(e.callId, e.success, "");
+	// agent:toolCall_delta —— 工具执行中间态（流式进度）
+	eventBus.on("agent:toolCall_delta", (e) => {
+		// TODO: 后续可在此更新 ToolExecution 组件的中间态
+		// 或在 status 区展示 partialResult 摘要
 		tui.requestRender();
 	});
 
-	eventBus.on("agent:turn_complete", () => {
+	// agent:toolCall_end —— 工具执行结束
+	eventBus.on("agent:toolCall_end", (e) => {
+		chat.appendToolEnd(e.callId, e.success, e.result);
+		status.showToolDone(e.success);
+		tui.requestRender();
+	});
+
+	// agent:turn_complete —— 一轮结束
+	eventBus.on("agent:turn_complete", (_e) => {
 		// TODO: 后续可在此更新 turn 计数器
-		// TODO: 扫描 agent.getMessages() 最后一条 toolResult，
-		// 取出实际输出文本传进 chat.appendToolEnd 的 summary 参数
 	});
 
+	// agent:complete —— agent 整体完成
 	eventBus.on("agent:complete", () => {
 		status.clear();
 		inputContainer.enable();
 		tui.requestRender();
 	});
 
+	// agent:error —— agent 异常
 	eventBus.on("agent:error", (e) => {
 		status.showError(e.error.message);
 		inputContainer.enable();

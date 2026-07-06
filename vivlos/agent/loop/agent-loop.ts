@@ -15,6 +15,7 @@ import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 
 import { mapAgentEvent } from "./event-mapper.ts";
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
+import { VivlosError } from "@vivlos/shared";
 
 /**
  * agentLoop 创建参数——组合根注入的依赖集合。
@@ -140,6 +141,13 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 				return { messages: newMessages, turns: turn };
 			} catch (err) {
+				// ———— 异常处理 ————
+				if (err instanceof VivlosError) {
+					// —— 已知异常 ——
+
+					return { messages: [], turns: turn, error: err };
+				} else {
+					// —— 未知异常 ——
 					const error = err instanceof Error ? err : new Error(String(err));
 					// agent:error → TUI 显示用
 					deps.eventBus.emit({
@@ -154,9 +162,9 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						message: error.message,
 						error,
 					});
-
 					return { messages: [], turns: turn, error };
 				}
+			}
 		},
 	};
 }

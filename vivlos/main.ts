@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 
 // —— 基础设施 ——
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
-import { createMarkdownLogWriter } from "@vivlos/infra/logging/index.ts";
+import { createMarkdownLogWriter } from "@vivlos/infra/logger/index.ts";
 import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 
