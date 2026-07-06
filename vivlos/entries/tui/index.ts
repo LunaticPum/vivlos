@@ -174,7 +174,8 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	inputContainer.onEscape = () => {
 		tui.stop();
-		process.exit(0);
+		process.stdout.write("\x1b[2J\x1b[H"); // 清屏
+		cmdCtxWithTui.shutdown();
 	};
 
 	return {

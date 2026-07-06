@@ -3,7 +3,6 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 
 const FG = {
 	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
-	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
 } as const;
 
 type Cache = { width: number; line: string };
@@ -41,7 +40,7 @@ export class InputDecorator implements Component {
 	render(width: number): string[] {
 		if (this.cache && this.cache.width === width) return [this.cache.line];
 
-		const c = this.variant === "top" ? FG.cyan : FG.gray;
+		const c = FG.cyan;
 		let line: string;
 
 		if (this.variant === "top") {
@@ -50,9 +49,9 @@ export class InputDecorator implements Component {
 				: "─────────────────────";
 			const labelLen = visibleWidth(labelPart);
 			const dashRight = Math.max(0, width - labelLen - 2);
-			line = c(`╭${labelPart}${"─".repeat(dashRight)}╮`);
+			line = c(`─${labelPart}${"─".repeat(dashRight)}─`);
 		} else {
-			line = c(`╰${"─".repeat(width - 2)}╯`);
+			line = c(`─${"─".repeat(width - 2)}─`);
 		}
 
 		this.cache = { width, line };
