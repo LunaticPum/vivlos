@@ -2,6 +2,7 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
+import { ToolError } from "@vivlos/shared/errors.ts";
 
 // ── Schema ──（参照 pi coding-agent readSchema）
 const Params = Type.Object({
@@ -65,9 +66,8 @@ export function createReadTool(cwd: string): AgentTool<typeof Params, { message:
 					},
 				};
 			} catch (err) {
-				// 不做错误编码——直接 throw，pi loop 会自动给 ToolResultMessage 加 isError
-				const message = err instanceof Error ? err.message : String(err);
-				throw new Error(`read 失败: ${message}`, { cause: err });
+				const cause = err instanceof Error ? err : new Error(String(err));
+				throw new ToolError(cause.message, "read", cause);
 			}
 		},
 	};

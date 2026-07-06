@@ -2,6 +2,7 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve, isAbsolute } from "node:path";
+import { ToolError } from "@vivlos/shared/errors.ts";
 
 // ── Schema ──（参照 pi coding-agent writeSchema）
 const Params = Type.Object({
@@ -22,28 +23,33 @@ export function createWriteTool(cwd: string): AgentTool<typeof Params, { message
 			_toolCallId: string,
 			params: Params,
 		): Promise<AgentToolResult<{ message: string }>> {
-			// 1. 解析为绝对路径
-			const absolutePath = isAbsolute(params.path)
-				? resolve(params.path)
-				: resolve(cwd, params.path);
+			try {
+				// 1. 解析为绝对路径
+				const absolutePath = isAbsolute(params.path)
+					? resolve(params.path)
+					: resolve(cwd, params.path);
 
-			// 2. 确保目录存在
-			mkdirSync(dirname(absolutePath), { recursive: true });
+				// 2. 确保目录存在
+				mkdirSync(dirname(absolutePath), { recursive: true });
 
-			// 3. 写文件
-			writeFileSync(absolutePath, params.content, "utf-8");
+				// 3. 写文件
+				writeFileSync(absolutePath, params.content, "utf-8");
 
-			return {
-				content: [
-					{
-						type: "text",
-						text: `文件已写入: ${absolutePath} (${params.content.length} chars)`,
+				return {
+					content: [
+						{
+							type: "text",
+							text: `文件已写入: ${absolutePath} (${params.content.length} chars)`,
+						},
+					],
+					details: {
+						message: `wrote ${absolutePath} (${params.content.length} chars)`,
 					},
-				],
-				details: {
-					message: `wrote ${absolutePath} (${params.content.length} chars)`,
-				},
-			};
+				};
+			} catch (err) {
+				const cause = err instanceof Error ? err : new Error(String(err));
+				throw new ToolError(cause.message, "write", cause);
+			}
 		},
 	};
 }

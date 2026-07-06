@@ -2,6 +2,7 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
+import { ToolError } from "@vivlos/shared/errors.ts";
 
 // ── Schema ──（参照 pi coding-agent grepSchema）
 const Params = Type.Object({
@@ -31,57 +32,62 @@ export function createGrepTool(cwd: string): AgentTool<typeof Params, GrepDetail
 			_toolCallId: string,
 			params: Params,
 		): Promise<AgentToolResult<GrepDetails>> {
-			const target = params.path ?? cwd;
-			const absolutePath = isAbsolute(target)
-				? resolve(target)
-				: resolve(cwd, target);
-
-			// 判断是文件还是目录
-			let isDir = false;
 			try {
-				isDir = statSync(absolutePath).isDirectory();
-			} catch {
-				/* path 不存在时当作文件处理，后续 readFileSync 会抛异常 */
-			}
+				const target = params.path ?? cwd;
+				const absolutePath = isAbsolute(target)
+					? resolve(target)
+					: resolve(cwd, target);
 
-			const files: string[] = isDir
-				? readdirSync(absolutePath, { recursive: true, withFileTypes: true })
-						.filter((e) => e.isFile())
-						.map((e) => resolve(e.parentPath ?? absolutePath, e.name))
-				: [absolutePath];
-
-			const regex = new RegExp(params.pattern);
-			const results: string[] = [];
-			let matchCount = 0;
-
-			for (const file of files.slice(0, 50)) {
-				// 限制最多搜 50 个文件
+				// 判断是文件还是目录
+				let isDir = false;
 				try {
-					const content = readFileSync(file, "utf-8");
-					for (const line of content.split("\n")) {
-						if (regex.test(line)) {
-							results.push(`${file}: ${line.trim().slice(0, 200)}`);
-							matchCount++;
-						}
-					}
+					isDir = statSync(absolutePath).isDirectory();
 				} catch {
-					/* skip unreadable files */
+					/* path 不存在时当作文件处理，后续 readFileSync 会抛异常 */
 				}
-			}
 
-			let text = results.join("\n") || "(no matches)";
-			if (text.length > MAX_CHARS) {
-				text = text.slice(0, MAX_CHARS) +
-					`\n...[truncated ${text.length - MAX_CHARS} chars]`;
-			}
+				const files: string[] = isDir
+					? readdirSync(absolutePath, { recursive: true, withFileTypes: true })
+							.filter((e) => e.isFile())
+							.map((e) => resolve(e.parentPath ?? absolutePath, e.name))
+					: [absolutePath];
 
-			return {
-				content: [{ type: "text", text }],
-				details: {
-					message: `matched ${matchCount} lines in ${files.length} files`,
-					matches: matchCount,
-				},
-			};
+				const regex = new RegExp(params.pattern);
+				const results: string[] = [];
+				let matchCount = 0;
+
+				for (const file of files.slice(0, 50)) {
+					// 限制最多搜 50 个文件
+					try {
+						const content = readFileSync(file, "utf-8");
+						for (const line of content.split("\n")) {
+							if (regex.test(line)) {
+								results.push(`${file}: ${line.trim().slice(0, 200)}`);
+								matchCount++;
+							}
+						}
+					} catch {
+						/* skip unreadable files */
+					}
+				}
+
+				let text = results.join("\n") || "(no matches)";
+				if (text.length > MAX_CHARS) {
+					text = text.slice(0, MAX_CHARS) +
+						`\n...[truncated ${text.length - MAX_CHARS} chars]`;
+				}
+
+				return {
+					content: [{ type: "text", text }],
+					details: {
+						message: `matched ${matchCount} lines in ${files.length} files`,
+						matches: matchCount,
+					},
+				};
+			} catch (err) {
+				const cause = err instanceof Error ? err : new Error(String(err));
+				throw new ToolError(cause.message, "grep", cause);
+			}
 		},
 	};
 }
