@@ -23,7 +23,7 @@ export interface CreateAgentLoopParams {
 	/** LLM + EventBus 基础依赖 */
 	readonly deps: AgentLoopDeps;
 
-	/** MemoryManager —— 每次 prompt 前注入记忆到 system prompt */
+	/** MemoryManager —— 记忆存储管理 + system prompt 注入块封装（记忆内容 + 用户画像） */
 	readonly memoryManager: MemoryManager;
 	/** SessionManager —— 消息存储管理 */
 	readonly sessionManager: SessionManager;
@@ -86,8 +86,6 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			};
 
 			// ——— 4. 构造 streamFn —— 桥接 LLMClient → StreamFn ———
-			//     两份 AssistantMessageEventStream 类型身份不同（pi 重复安装），
-			//     结构完全一致，用 as unknown as 跳过 nominal 检查
 			const streamFn = ((model: Model<Api>, ctx: any, opts?: any) =>
 				deps.llm.stream(model, ctx, {
 					signal: opts?.signal,
@@ -130,8 +128,6 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				const newMessages = await stream.result();
 
 				// ——— 9. 追加新消息到 session ———
-				//      newMessages 是 AgentMessage[]（可能含 CustomAgentMessages 如 BashExecutionMessage），
-				//      session 只存储标准 Message（user/assistant/toolResult），非标准消息跳过
 				for (const m of newMessages) {
 					if (
 						m.role === "user" ||
@@ -144,14 +140,23 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 				return { messages: newMessages, turns: turn };
 			} catch (err) {
-				const error = err instanceof Error ? err : new Error(String(err));
-				deps.eventBus.emit({
-					type: "agent:error",
-					sessionId: sessionManager.id,
-					error,
-				});
-				return { messages: [], turns: turn, error };
-			}
+					const error = err instanceof Error ? err : new Error(String(err));
+					// agent:error → TUI 显示用
+					deps.eventBus.emit({
+						type: "agent:error",
+						sessionId: sessionManager.id,
+						error,
+					});
+					// log → MarkdownLogWriter 持久化用
+					deps.eventBus.emit({
+						type: "log",
+						level: "error",
+						message: error.message,
+						error,
+					});
+
+					return { messages: [], turns: turn, error };
+				}
 		},
 	};
 }
