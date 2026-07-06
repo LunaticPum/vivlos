@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { VivlosEvent } from "./types.ts";
+import { log } from "@vivlos/infra/logger/index.ts";
 
 export type { VivlosEvent } from "./types.ts";
 
@@ -31,25 +32,16 @@ export function createEventBus(): EventBus {
 		},
 
 		on(channel, handler) {
-			// 包装 handler：catch handler 内部的错误，防止单个监听器挂掉整条总线
+			// 包装 handler：catch 错误 → 通过全局 log() 写入持久化日志
 			const safeHandler = async (event: VivlosEvent) => {
 				try {
 					await (handler as (e: VivlosEvent) => void | Promise<void>)(event);
 				} catch (err) {
-					// 先将错误信息打印到控制台上
-					console.error(
-						`Handler error on "${channel}": ${err instanceof Error ? err.message : String(err)}`,
-					);
-
-					// 再将错误信息广播到 log 通道上
-					if (channel !== "log") {
-						emitter.emit("log", {
-							type: "log",
-							level: "error",
-							message: `Handler error on "${channel}": ${err instanceof Error ? err.message : String(err)}`,
-							error: err instanceof Error ? err : new Error(String(err)),
-						});
-					}
+					const cause = err instanceof Error ? err : new Error(String(err));
+					console.error(`事件处理器异常 (${channel}): ${cause.message}`);
+						if (channel !== "log") {
+							log("error", `事件处理器异常 (${channel}): ${cause.message}`, cause);
+						}
 				}
 			};
 
