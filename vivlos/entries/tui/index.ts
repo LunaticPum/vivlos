@@ -7,6 +7,7 @@ import {
 	createStatusContainer,
 } from "./containers/index.ts";
 import type { CommandContext } from "@vivlos/commands/types.ts";
+import { InputDecorator } from "./components/input-decorator.ts";
 import type { CommandRegistry } from "@vivlos/commands/index.ts";
 
 /**
@@ -52,12 +53,17 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	const chat = createChatContainer();
 	const status = createStatusContainer(tui);
 	const inputContainer = createInputContainer();
+	const modelLabel = `${cmdCtx.llm.getDefaultProvider()}/${cmdCtx.llm.getDefaultModelId()}`;
+	const inputTopDecorator = new InputDecorator("top", modelLabel);
+		const inputBottomDecorator = new InputDecorator("bottom");
 
 	// 布局从上到下：聊天区 → 状态区 → 输入区
 	tui.addChild(chat.container);
 	tui.addChild(status.container);
 	tui.addChild(new Spacer(1));
+	tui.addChild(inputTopDecorator);
 	tui.addChild(inputContainer.input);
+	tui.addChild(inputBottomDecorator);
 	tui.setFocus(inputContainer.input);
 
 	// ── 流式回复状态 ──

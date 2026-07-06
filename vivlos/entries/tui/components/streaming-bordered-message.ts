@@ -41,9 +41,7 @@ export class StreamingBorderedMessage implements Component {
 
 		// │ content │
 		const contentWidth = Math.max(1, width - 4);
-		const contentLines = this.text
-			? wrapLines(this.text, contentWidth)
-			: [""];
+		const contentLines = this.text ? wrapLines(this.text, contentWidth) : [""];
 
 		for (const contentLine of contentLines) {
 			const lineWidth = visibleWidth(contentLine);
@@ -85,7 +83,11 @@ function wrapLines(text: string, maxWidth: number): string[] {
 				let searchStart = 0;
 				while (searchStart <= maxWidth && searchStart !== -1) {
 					const idx = remaining.indexOf(" ", searchStart);
-					if (idx === -1 || visibleWidth(remaining.slice(0, idx + 1)) > maxWidth) break;
+					if (
+						idx === -1 ||
+						visibleWidth(remaining.slice(0, idx + 1)) > maxWidth
+					)
+						break;
 					cut = idx;
 					searchStart = idx + 1;
 				}
