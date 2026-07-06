@@ -1,4 +1,3 @@
-// —— pi sdk ——
 import {
 	agentLoop,
 	type AgentContext,
@@ -17,22 +16,39 @@ import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 
+/**
+ * agentLoop 创建参数——组合根注入的依赖集合。
+ */
 export interface CreateAgentLoopParams {
-	/** infra 装配 */
+	/** LLM + EventBus 基础依赖 */
 	readonly deps: AgentLoopDeps;
 
-	/** ... */
+	/** MemoryManager —— 每次 prompt 前注入记忆到 system prompt */
 	readonly memoryManager: MemoryManager;
-	/** .. */
+	/** SessionManager —— 消息存储管理 */
 	readonly sessionManager: SessionManager;
-	/** .. */
+	/** PromptBuilder —— system prompt 组装 */
 	readonly promptBuilder: PromptBuilder;
-	/** .. */
+	/** 可选 loop 控制 hook（maxTurns / steering / followUp） */
 	readonly hooks?: LoopHooks;
-	/** .. */
+	/** 工具列表 —— 传入 AgentContext.tools，由 pi agentLoop 调度 tool calling */
 	readonly tools?: AgentTool<any, any>[];
 }
 
+/**
+ * 创建 agent 主循环。
+ *
+ * 封装 pi 的 agentLoop()，编排一次完整的 LLM 对话：
+ *   1. 构造 prompt 消息
+ *   2. 注入 memory 到 system prompt
+ *   3. 组装 AgentContext
+ *   4. 桥接 streamFn（LLMClient → pi StreamFn）
+ *   5. 组装 loop config
+ *   6. 启动 pi agentLoop
+ *   7. 遍历事件流 → 映射为 VivlosEvent → 发到 eventbus
+ *   8. 拿最终消息列表
+ *   9. 追加新消息到 session
+ */
 export function createAgentLoop(params: CreateAgentLoopParams) {
 	const { deps, sessionManager, promptBuilder } = params;
 
@@ -41,7 +57,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			userInput: string | AgentMessage[],
 			config: LoopConfig,
 		): Promise<LoopResult> {
-			// ———— 1. 构造 user message(s) ————
+			// ——— 1. 构造 user message(s) ———
 			const prompts: AgentMessage[] =
 				typeof userInput === "string"
 					? [
@@ -53,8 +69,8 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 
-			// ———— 2. 注入 memory（P6）——每次 prompt 前加载持久化记忆和用户画像 ————
-			promptBuilder.setMemory(""); // 先清空旧内容，防止上一轮 prompt 的 memory 残留
+			// ——— 2. 注入 memory —— 每次 prompt 前加载持久化记忆和用户画像 ———
+			promptBuilder.setMemory(""); // 先清空，防止上一轮残留
 			if (params.memoryManager) {
 				const memoryBlock = await params.memoryManager.buildPrompt();
 				if (memoryBlock) {
@@ -62,22 +78,25 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				}
 			}
 
-			// ———— 3. 构造 AgentContext ————
+			// ——— 3. 构造 AgentContext ———
 			const context: AgentContext = {
 				systemPrompt: promptBuilder.build(),
 				messages: [...sessionManager.getMessages()],
 				tools: params.tools ?? [],
 			};
 
-			// ———— 4. 构造 streamFn —— 桥接 LLMClient → StreamFn ————
+			// ——— 4. 构造 streamFn —— 桥接 LLMClient → StreamFn ———
+			//     两份 AssistantMessageEventStream 类型身份不同（pi 重复安装），
+			//     结构完全一致，用 as unknown as 跳过 nominal 检查
 			const streamFn = ((model: Model<Api>, ctx: any, opts?: any) =>
 				deps.llm.stream(model, ctx, {
 					signal: opts?.signal,
 				})) as unknown as StreamFn;
 
-			// ———— 5. 组装 loop config ————
+			// ——— 5. 组装 loop config ———
 			const loopConfig: AgentLoopConfig = {
 				model: config.model,
+				// 过滤 AgentMessage → 标准 Message（只保留 user/assistant/toolResult）
 				convertToLlm: (messages: AgentMessage[]): Message[] => {
 					return messages.filter(
 						(m): m is Message =>
@@ -91,7 +110,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 			let turn = 0;
 			try {
-				// 6. 启动 agentLoop —— 返回 EventStream<AgentEvent, AgentMessage[]>
+				// ——— 6. 启动 agentLoop ———
 				const stream = agentLoop(
 					prompts,
 					context,
@@ -100,20 +119,19 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					streamFn,
 				);
 
-				// 7. 遍历事件流，映射到 VivlosEvent 发到 eventbus
+				// ——— 7. 遍历事件流 → 映射为 VivlosEvent → 发到 eventbus ———
 				for await (const event of stream) {
 					if (event.type === "turn_start") turn++;
 					const vivlosEvents = mapAgentEvent(event, sessionManager.id, turn);
 					for (const ve of vivlosEvents) deps.eventBus.emit(ve);
 				}
 
-				// 8. 拿最终结果
+				// ——— 8. 拿最终消息列表 ———
 				const newMessages = await stream.result();
 
-				// 9. 把所有新消息加到 session
-				//    P6: newMessages 是 AgentMessage[]（可能含 CustomAgentMessages），
-				//    session 只存储标准 Message（user/assistant/toolResult），
-				//    非标准消息（如 BashExecutionMessage）跳过
+				// ——— 9. 追加新消息到 session ———
+				//      newMessages 是 AgentMessage[]（可能含 CustomAgentMessages 如 BashExecutionMessage），
+				//      session 只存储标准 Message（user/assistant/toolResult），非标准消息跳过
 				for (const m of newMessages) {
 					if (
 						m.role === "user" ||
