@@ -1,4 +1,5 @@
 import type { Component } from "@earendil-works/pi-tui";
+import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 /** ANSI 前景色 */
 const FG = {
@@ -13,24 +14,25 @@ const FG = {
 
 export type AnsiColor = keyof typeof FG;
 
-/** 去掉 ANSI 转义码后取纯文本宽度 */
-function visibleLen(text: string): number {
-	return text.replace(/\x1b\[[0-9;]*m/g, "").length;
-}
-
-/** 按空格断词简单换行 */
+/** 按空格断词换行（用 pi visibleWidth 正确计算宽字符） */
 function wrapLines(text: string, maxWidth: number): string[] {
 	const result: string[] = [];
 	for (const paragraph of text.split("\n")) {
-		if (visibleLen(paragraph) <= maxWidth) {
+		if (visibleWidth(paragraph) <= maxWidth) {
 			result.push(paragraph);
 		} else {
 			let remaining = paragraph;
-			while (visibleLen(remaining) > maxWidth) {
+			while (visibleWidth(remaining) > maxWidth) {
+				// 先尝试在 maxWidth 以内的空格处断词
 				let cut = maxWidth;
-				const spaceIdx = remaining.lastIndexOf(" ", maxWidth);
-				if (spaceIdx > maxWidth / 2) cut = spaceIdx;
-				result.push(remaining.slice(0, cut));
+				let searchStart = 0;
+				while (searchStart <= maxWidth && searchStart !== -1) {
+					const idx = remaining.indexOf(" ", searchStart);
+					if (idx === -1 || visibleWidth(remaining.slice(0, idx + 1)) > maxWidth) break;
+					cut = idx;
+					searchStart = idx + 1;
+				}
+				result.push(truncateToWidth(remaining, cut));
 				remaining = remaining.slice(cut).trimStart();
 			}
 			if (remaining.length > 0) result.push(remaining);
@@ -52,11 +54,6 @@ type Cache = {
  * ╭── role ───────────────╮
  * │ message text ...        │
  * ╰────────────────────────╯
- *
- * 参照 pi :
- *   - Component 接口（render/invalidate）
- *   - Box.render() 的 RenderCache 模式（纯值比对、不清零）
- *   - DynamicBorder 的 width 参数动态线条
  */
 export class BorderedMessage implements Component {
 	private label: string;
@@ -85,7 +82,6 @@ export class BorderedMessage implements Component {
 	}
 
 	render(width: number): string[] {
-		// 缓存命中：text + width 都没变
 		if (this.cache && this.cache.text === this.text && this.cache.width === width) {
 			return this.cache.lines;
 		}
@@ -100,16 +96,18 @@ export class BorderedMessage implements Component {
 
 		// ╭── Label ──...──╮
 		const labelPart = `── ${this.label} ──`;
-		const labelLen = visibleLen(labelPart);
-		const dashRight = Math.max(0, width - labelLen - 2);
+		const labelWidth = visibleWidth(labelPart);
+		const dashRight = Math.max(0, width - labelWidth - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
 
 		// │ content │
-		const contentWidth = width - 4; // 左右各 "│ " + " │"
+		const contentWidth = width - 4;
 		const contentLines = wrapLines(this.text, Math.max(1, contentWidth));
 		for (const contentLine of contentLines) {
-			const pad = " ".repeat(Math.max(0, contentWidth - visibleLen(contentLine)));
-			lines.push(`${c("│")} ${contentLine}${pad} ${c("│")}`);
+			const lineWidth = visibleWidth(contentLine);
+			const pad = " ".repeat(Math.max(0, contentWidth - lineWidth));
+			const body = `${contentLine}${pad}`;
+			lines.push(`${c("│")} ${truncateToWidth(body, contentWidth)} ${c("│")}`);
 		}
 
 		// ╰──...──╯
