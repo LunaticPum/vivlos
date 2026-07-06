@@ -92,7 +92,10 @@ async function main(): Promise<void> {
 	process.on("SIGTERM", cleanup);
 
 	// ── 装配 TUI（传入 registry 用于 slash 命令拦截） ──
-	const tuiApp = createTuiApp({ agent, eventBus, registry, llm, sessionManager, memoryManager });
+	const tuiApp = createTuiApp({
+		agent, eventBus, registry, llm, sessionManager, memoryManager,
+		shutdown: cleanup,
+	});
 	tuiApp.start();
 }
 

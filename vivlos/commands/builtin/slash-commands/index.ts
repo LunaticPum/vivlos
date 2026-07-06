@@ -1,4 +1,4 @@
-import type { SlashCommand } from "../types.ts";
+import type { SlashCommand } from "../../types.ts";
 import { helpCommand } from "./help.ts";
 import { quitCommand } from "./quit.ts";
 import { clearCommand } from "./clear.ts";

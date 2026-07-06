@@ -3,7 +3,7 @@ import type { SlashCommand, StartupCommand } from "./types.ts";
 /**
  * 命令注册表。
  *
- * 负责命令的注册、查找和执行。由 main.ts 创建后传给 TUI。
+ * 负责命令的注册、查找和列举。由 main.ts 创建后传给 TUI。
  */
 export interface CommandRegistry {
 	/** 注册 Slash 命令 */
@@ -13,12 +13,12 @@ export interface CommandRegistry {
 
 	/** 按名查找 Slash 命令 */
 	getSlash(name: string): SlashCommand | undefined;
-	/** 列出所有 Slash 命令 */
+	/** 列出所有 Slash 命令（去重） */
 	listSlash(): SlashCommand[];
 
 	/** 按 flag 查找启动命令 */
 	getStartup(flag: string): StartupCommand | undefined;
-	/** 列出所有启动命令 */
+	/** 列出所有启动命令（去重） */
 	listStartup(): StartupCommand[];
 }
 
@@ -41,7 +41,7 @@ export function createCommandRegistry(): CommandRegistry {
 		},
 
 		listSlash() {
-			return [...slash.values()];
+			return [...new Set(slash.values())];
 		},
 
 		getStartup(flag) {
@@ -49,7 +49,7 @@ export function createCommandRegistry(): CommandRegistry {
 		},
 
 		listStartup() {
-			return [...startup.values()];
+			return [...new Set(startup.values())];
 		},
 	};
 }

@@ -1,4 +1,8 @@
-import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
+import type {
+	CommandContext,
+	CommandResult,
+	SlashCommand,
+} from "../../types.ts";
 
 /**
  * /model —— 模型选择（当前为 stub）。
@@ -27,6 +31,6 @@ export const modelCommand: SlashCommand = {
 			"",
 			"> TODO: 模型选择器组件开发中，当前仅展示可用 provider",
 		];
-		return { consumed: true, feedback: lines.join("\n") };
+		return { feedback: lines.join("\n") };
 	},
 };

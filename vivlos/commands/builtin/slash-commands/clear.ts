@@ -1,4 +1,8 @@
-import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
+import type {
+	CommandContext,
+	CommandResult,
+	SlashCommand,
+} from "../../types.ts";
 
 export const clearCommand: SlashCommand = {
 	name: "clear",
@@ -6,6 +10,6 @@ export const clearCommand: SlashCommand = {
 	usage: "/clear",
 	async execute(ctx: CommandContext, _args: string): Promise<CommandResult> {
 		ctx.sessionManager.reset();
-		return { consumed: true, feedback: "会话已清空" };
+		return { feedback: "会话已清空" };
 	},
 };

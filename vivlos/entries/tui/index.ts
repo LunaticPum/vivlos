@@ -19,6 +19,8 @@ export interface CreateTuiAppParams {
 	readonly llm: LLMClient;
 	readonly sessionManager: SessionManager;
 	readonly memoryManager: MemoryManager;
+	/** 优雅退出回调——/quit 命令调用 */
+	readonly shutdown: () => void;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface CreateTuiAppParams {
  * - 聊天历史滚动（PageUp/PageDown）
  */
 export function createTuiApp(params: CreateTuiAppParams) {
-	const { agent, eventBus, registry, llm, sessionManager, memoryManager } = params;
+	const { agent, eventBus, registry, llm, sessionManager, memoryManager, shutdown } = params;
 
 	// ── TUI 核心 ──
 	const terminal = new ProcessTerminal();
@@ -61,6 +63,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		memoryManager,
 		tui,
 		registry,
+		shutdown,
 	};
 
 	// ── 流式回复状态 ──

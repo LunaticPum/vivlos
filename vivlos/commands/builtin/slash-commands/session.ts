@@ -1,4 +1,8 @@
-import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
+import type {
+	CommandContext,
+	CommandResult,
+	SlashCommand,
+} from "../../types.ts";
 
 export const sessionCommand: SlashCommand = {
 	name: "session",
@@ -15,6 +19,6 @@ export const sessionCommand: SlashCommand = {
 			`- 消息: ${msgs.length} (user: ${userMsgs}, assistant: ${assistantMsgs})`,
 			`- 默认模型: ${ctx.llm.getDefaultProvider()}/${ctx.llm.getDefaultModelId()}`,
 		];
-		return { consumed: true, feedback: lines.join("\n") };
+		return { feedback: lines.join("\n") };
 	},
 };

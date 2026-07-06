@@ -1,4 +1,8 @@
-import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
+import type {
+	CommandContext,
+	CommandResult,
+	SlashCommand,
+} from "../../types.ts";
 
 export const helpCommand: SlashCommand = {
 	name: "help",
@@ -8,9 +12,9 @@ export const helpCommand: SlashCommand = {
 		const list = ctx.registry.listSlash();
 		const lines = ["## 可用命令", ""];
 		for (const cmd of list) {
-			lines.push(`- \`/${cmd.name}\` — ${cmd.description}`);
+			lines.push(`- \`${cmd.name}\` — ${cmd.description}`);
 		}
 		lines.push("", `共 ${list.length} 个命令`);
-		return { consumed: true, feedback: lines.join("\n") };
+		return { feedback: lines.join("\n") };
 	},
 };
