@@ -47,6 +47,7 @@ export function createEventBus(): EventBus {
 							type: "log",
 							level: "error",
 							message: `Handler error on "${channel}": ${err instanceof Error ? err.message : String(err)}`,
+							error: err instanceof Error ? err : new Error(String(err)),
 						});
 					}
 				}

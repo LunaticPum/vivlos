@@ -57,4 +57,5 @@ export type VivlosEvent =
 			readonly type: "log";
 			readonly level: "info" | "warn" | "error";
 			readonly message: string;
+			readonly error?: Error;
 	  };
