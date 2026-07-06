@@ -49,10 +49,7 @@ export function createMemoryManager(repo: MemoryRepository): MemoryManager {
 				.map((e: MemoryEntry) => e.content)
 				.join("\n§\n");
 			if (memoryContent) {
-				const memoryBlock = formatBlock(
-					"MEMORY (agent notes)",
-					memoryContent,
-				);
+				const memoryBlock = formatBlock("MEMORY (agent notes)", memoryContent);
 				sections.push(memoryBlock);
 			}
 
@@ -96,4 +93,22 @@ function formatBlock(title: string, body: string): string {
 	}
 
 	return `${header}\n${output}`;
+}
+
+// ── SQLite 实现 —— 委托 SessionRepository 的 CRUD ──
+function createPersistentMemory(dbPath: string, id?: string): SessionManager {
+	const repo: SessionRepository = createSqliteSessionRepository(dbPath, id);
+
+	return {
+		id: repo.sessionId,
+		getMessages() {
+			return repo.getMessages();
+		},
+		appendMessage(message) {
+			repo.appendMessage(message);
+		},
+		reset() {
+			repo.clearMessages();
+		},
+	};
 }

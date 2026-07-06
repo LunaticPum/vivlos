@@ -4,7 +4,7 @@ import type { Model, Api } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
-import { createSession, type VivlosSession } from "./session/index.ts";
+import { createSession, type SessionManager } from "./session/index.ts";
 import {
 	createAgentLoop,
 	createMaxTurnsHook,
@@ -18,7 +18,7 @@ export interface CreateAgentParams {
 	readonly eventBus: EventBus;
 	readonly model: Model<Api>;
 	readonly promptBuilder?: PromptBuilder;
-	readonly session?: VivlosSession;
+	readonly session?: SessionManager;
 	readonly maxTurns?: number;
 	readonly hooks?: VivlosLoopHooks;
 	/** 工具列表，透传到 agent-loop → AgentContext.tools */

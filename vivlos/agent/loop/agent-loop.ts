@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-agent-core";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
-import type { VivlosSession } from "../session/types.ts";
+import type { SessionManager } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
 import type { VivlosLoopHooks } from "./hooks/index.ts";
 import type { MemoryManager } from "../memory/types.ts";
@@ -22,7 +22,7 @@ import type {
 
 export interface CreateAgentLoopParams {
 	readonly deps: AgentLoopDeps;
-	readonly session: VivlosSession;
+	readonly session: SessionManager;
 	readonly promptBuilder: PromptBuilder;
 	readonly hooks?: VivlosLoopHooks;
 	/** 工具列表（P5），传入 AgentContext.tools。由 pi agentLoop 自动调度 tool calling 全流程 */

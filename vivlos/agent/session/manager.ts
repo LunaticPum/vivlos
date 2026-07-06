@@ -1,5 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
-import type { VivlosSession } from "./types.ts";
+import type { SessionManager } from "./types.ts";
 import {
 	createSqliteSessionRepository,
 	type SessionRepository,
@@ -21,7 +21,7 @@ export interface CreateSessionOptions {
  * 内部根据 persistent 选择内存实现或 SQLite 实现。
  * SQLite 实现委托 infra 层的 SessionRepository 做 CRUD。
  */
-export function createSession(options: CreateSessionOptions = {}): VivlosSession {
+export function createSession(options: CreateSessionOptions = {}): SessionManager {
 	if (options.persistent) {
 		if (!options.dbPath) {
 			throw new Error("persistent session requires dbPath");
@@ -32,7 +32,7 @@ export function createSession(options: CreateSessionOptions = {}): VivlosSession
 }
 
 // ── 内存实现 ──
-function createInMemorySession(id?: string): VivlosSession {
+function createInMemorySession(id?: string): SessionManager {
 	let messages: Message[] = [];
 	const sessionId = id ?? shortId();
 
@@ -51,7 +51,7 @@ function createInMemorySession(id?: string): VivlosSession {
 }
 
 // ── SQLite 实现 —— 委托 SessionRepository 的 CRUD ──
-function createPersistentSession(dbPath: string, id?: string): VivlosSession {
+function createPersistentSession(dbPath: string, id?: string): SessionManager {
 	const repo: SessionRepository = createSqliteSessionRepository(dbPath, id);
 
 	return {

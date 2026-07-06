@@ -5,8 +5,8 @@ import { shortId } from "@vivlos/shared/utils/id.ts";
 /**
  * Session 仓储接口——infra 层的 CRUD 原语。
  *
- * infra 不知道 VivlosSession（agent 层业务接口），
- * 只提供消息的增删查清。agent 层的 session-manager 委托此接口实现 VivlosSession。
+ * infra 不知道 SessionManager（agent 层业务接口），
+ * 只提供消息的增删查清。agent 层的 manager 委托此接口实现 SessionManager。
  */
 export interface SessionRepository {
 	readonly sessionId: string;
