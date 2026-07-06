@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { describe, it, expect } from "vitest";
 import { createAgentLoop } from "../loop/agent-loop.ts";
-import { createSession } from "../session/manager.ts";
+import { createSessionManager } from "../session/manager.ts";
 import { createPromptBuilder } from "../prompt/builder.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
@@ -111,7 +111,7 @@ describe("createAgentLoop", () => {
 
 		const loop = createAgentLoop({
 			deps: { llm: mockLLMClient("你好！"), eventBus },
-			session: createSession(),
+			sessionManager: createSessionManager(),
 			promptBuilder: createPromptBuilder(),
 		});
 
@@ -127,20 +127,20 @@ describe("createAgentLoop", () => {
 
 	it("session 消息数量正确", async () => {
 		const eventBus = createEventBus();
-		const session = createSession();
+		const sessionManager = createSessionManager();
 
 		const loop = createAgentLoop({
 			deps: { llm: mockLLMClient("回复"), eventBus },
-			session,
+			sessionManager,
 			promptBuilder: createPromptBuilder(),
 		});
 
 		await loop.run("你好", { model: mockModel(), maxTurns: 5 });
 
 		// user (1) + assistant (1) = 2
-		expect(session.getMessages().length).toBe(2);
-		expect(session.getMessages()[0]!.role).toBe("user");
-		expect(session.getMessages()[1]!.role).toBe("assistant");
+		expect(sessionManager.getMessages().length).toBe(2);
+		expect(sessionManager.getMessages()[0]!.role).toBe("user");
+		expect(sessionManager.getMessages()[1]!.role).toBe("assistant");
 	});
 
 	it("LLM 返回 stopReason error 时发 agent:error 事件", async () => {
@@ -190,7 +190,7 @@ describe("createAgentLoop", () => {
 
 		const loop = createAgentLoop({
 			deps: { llm: errorLLM, eventBus },
-			session: createSession(),
+			sessionManager: createSessionManager(),
 			promptBuilder: createPromptBuilder(),
 		});
 

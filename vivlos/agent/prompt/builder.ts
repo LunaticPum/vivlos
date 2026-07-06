@@ -1,6 +1,6 @@
 import type {
-	PromptBuilder,
 	PromptParts,
+	PromptBuilder,
 	PromptBuilderOptions,
 } from "./types.ts";
 import {

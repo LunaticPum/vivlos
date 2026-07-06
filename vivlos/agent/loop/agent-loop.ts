@@ -1,7 +1,6 @@
 // vivlos/agent/loop/agent-loop.ts
 import {
 	agentLoop,
-	type AgentEvent,
 	type AgentContext,
 	type AgentLoopConfig,
 	type AgentMessage,
@@ -11,20 +10,16 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import type { SessionManager } from "../session/types.ts";
 import type { PromptBuilder } from "../prompt/types.ts";
-import type { VivlosLoopHooks } from "./hooks/index.ts";
+import type { LoopHooks } from "./hooks/index.ts";
 import type { MemoryManager } from "../memory/types.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
-import type {
-	VivlosLoopConfig,
-	VivlosLoopResult,
-	AgentLoopDeps,
-} from "./types.ts";
+import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 
 export interface CreateAgentLoopParams {
 	readonly deps: AgentLoopDeps;
-	readonly session: SessionManager;
+	readonly sessionManager: SessionManager;
 	readonly promptBuilder: PromptBuilder;
-	readonly hooks?: VivlosLoopHooks;
+	readonly hooks?: LoopHooks;
 	/** 工具列表（P5），传入 AgentContext.tools。由 pi agentLoop 自动调度 tool calling 全流程 */
 	readonly tools?: AgentTool<any, any>[];
 	/**
@@ -35,13 +30,13 @@ export interface CreateAgentLoopParams {
 }
 
 export function createAgentLoop(params: CreateAgentLoopParams) {
-	const { deps, session, promptBuilder } = params;
+	const { deps, sessionManager, promptBuilder } = params;
 
 	return {
 		async run(
 			userInput: string | AgentMessage[],
-			config: VivlosLoopConfig,
-		): Promise<VivlosLoopResult> {
+			config: LoopConfig,
+		): Promise<LoopResult> {
 			// 1. 构造 user message(s)
 			const prompts: AgentMessage[] =
 				typeof userInput === "string"
@@ -67,7 +62,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			// 3. 构造 AgentContext（含工具列表）
 			const context: AgentContext = {
 				systemPrompt: promptBuilder.build(),
-				messages: [...session.getMessages()],
+				messages: [...sessionManager.getMessages()],
 				tools: params.tools ?? [],
 			};
 
@@ -105,7 +100,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				// 7. 遍历事件流，映射到 VivlosEvent 发到 eventbus
 				for await (const event of stream) {
 					if (event.type === "turn_start") turn++;
-					const vivlosEvents = mapAgentEvent(event, session.id, turn);
+					const vivlosEvents = mapAgentEvent(event, sessionManager.id, turn);
 					for (const ve of vivlosEvents) deps.eventBus.emit(ve);
 				}
 
@@ -122,7 +117,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						m.role === "assistant" ||
 						m.role === "toolResult"
 					) {
-						session.appendMessage(m as Message);
+						sessionManager.appendMessage(m as Message);
 					}
 				}
 
@@ -131,7 +126,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				const error = err instanceof Error ? err : new Error(String(err));
 				deps.eventBus.emit({
 					type: "agent:error",
-					sessionId: session.id,
+					sessionId: sessionManager.id,
 					error,
 				});
 				return { messages: [], turns: turn, error };

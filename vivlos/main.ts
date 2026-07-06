@@ -1,17 +1,19 @@
 import "dotenv/config";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+
+// —— 基础设施 ——
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
+import { createMarkdownLogWriter } from "@vivlos/infra/logging/index.ts";
+import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
-import { createAgent, createSession } from "@vivlos/agent/index.ts";
-import {
-	closeAll as closeDb,
-	createSqliteMemoryRepository,
-} from "@vivlos/infra/storage/index.ts";
+
+// —— 上游业务 ——
+import { createAgent } from "@vivlos/agent/index.ts";
+import { createTuiApp } from "@vivlos/entries/tui/index.ts";
+import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
 import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
-import { createTuiApp } from "@vivlos/entries/tui/index.ts";
-import { createMarkdownLogWriter } from "@vivlos/infra/logging/index.ts";
 
 async function main(): Promise<void> {
 	// ── 装配 infra ──
@@ -44,19 +46,18 @@ async function main(): Promise<void> {
 
 	const tools = createBuiltinTools(process.cwd());
 
-	// session 持久化——通过 createSession 统一入口创建
-	const session = createSession({ persistent: true, dbPath });
+	// session 持久化——委托 SQLite SessionRepository
+	const sessionManager = createSessionManager({ persistent: true, dbPath });
+
+	// memory 持久化——委托 SQLite MemoryRepository，默认持久化存储
+	const memoryManager = createMemoryManager(dbPath);
 
 	// 日志写入器——订阅 eventbus "log" 通道，写入 ~/.vivlos/logs/session-xxx.md
 	const logger = createMarkdownLogWriter(eventBus, {
 		logDir,
-		sessionId: session.id,
+		sessionId: sessionManager.id,
 	});
 	logger.start();
-
-	// MemoryManager——委托 SQLite MemoryRepository
-	const memoryRepo = createSqliteMemoryRepository(dbPath);
-	const memoryManager = createMemoryManager(memoryRepo);
 
 	const agent = createAgent({
 		llm,
@@ -65,11 +66,15 @@ async function main(): Promise<void> {
 		maxTurns: 10,
 		tools,
 		memoryManager,
-		session,
+		sessionManager,
 	});
 
 	// ── 退出清理 ──
-	const cleanup = () => { logger.stop(); closeDb(); process.exit(0); };
+	const cleanup = () => {
+		logger.stop();
+		closeDb();
+		process.exit(0);
+	};
 	process.on("SIGINT", cleanup);
 	process.on("SIGTERM", cleanup);
 

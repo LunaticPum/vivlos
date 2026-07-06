@@ -10,7 +10,7 @@ import type { AgentLoopConfig } from "@earendil-works/pi-agent-core";
  * 后续扩展：steering queue、follow-up queue、tool hooks 等
  * 都以工厂函数形式产出这里的字段，再传入 createAgentLoop。
  */
-export type VivlosLoopHooks = Pick<
+export type LoopHooks = Pick<
 	AgentLoopConfig,
 	| "shouldStopAfterTurn"
 	| "getSteeringMessages"

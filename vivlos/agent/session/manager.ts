@@ -21,7 +21,9 @@ export interface CreateSessionOptions {
  * 内部根据 persistent 选择内存实现或 SQLite 实现。
  * SQLite 实现委托 infra 层的 SessionRepository 做 CRUD。
  */
-export function createSession(options: CreateSessionOptions = {}): SessionManager {
+export function createSessionManager(
+	options: CreateSessionOptions = {},
+): SessionManager {
 	if (options.persistent) {
 		if (!options.dbPath) {
 			throw new Error("persistent session requires dbPath");

@@ -6,14 +6,14 @@ export interface PromptParts {
 	readonly skills?: string;
 }
 
-export interface PromptBuilder {
-	build(): string;
-	setMemory(text: string): void;
-	setSkills(text: string): void;
-}
-
 export interface PromptBuilderOptions {
 	readonly identity?: string;
 	readonly environment?: string;
 	readonly rules?: string[];
+}
+
+export interface PromptBuilder {
+	build(): string;
+	setMemory(text: string): void;
+	setSkills(text: string): void;
 }

@@ -1,4 +1,5 @@
 import type { MemoryRepository, MemoryManager, MemoryEntry } from "./types.ts";
+import { createSqliteMemoryRepository } from "@vivlos/infra/storage/index.ts";
 
 const MAX_MEMORY_CHARS = 2200; // 和 Hermes 保持一致
 // TODO: 后续做成可配置项（config.yaml 或 .env），而非硬编码
@@ -8,7 +9,9 @@ const MAX_MEMORY_CHARS = 2200; // 和 Hermes 保持一致
  *
  * 封装 MemoryRepository，加上 prompt 注入逻辑。
  */
-export function createMemoryManager(repo: MemoryRepository): MemoryManager {
+export function createMemoryManager(dbPath: string): MemoryManager {
+	const repo = createSqliteMemoryRepository(dbPath);
+
 	return {
 		// ── agent memory CRUD ──
 		// TODO: 后续以 AgentTool 形式（memory 工具）暴露给 LLM，当前只做 API
@@ -93,22 +96,4 @@ function formatBlock(title: string, body: string): string {
 	}
 
 	return `${header}\n${output}`;
-}
-
-// ── SQLite 实现 —— 委托 SessionRepository 的 CRUD ──
-function createPersistentMemory(dbPath: string, id?: string): SessionManager {
-	const repo: SessionRepository = createSqliteSessionRepository(dbPath, id);
-
-	return {
-		id: repo.sessionId,
-		getMessages() {
-			return repo.getMessages();
-		},
-		appendMessage(message) {
-			repo.appendMessage(message);
-		},
-		reset() {
-			repo.clearMessages();
-		},
-	};
 }
