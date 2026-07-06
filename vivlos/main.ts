@@ -15,6 +15,12 @@ import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
 import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
 
+// —— 命令系统 ——
+import {
+	createCommandRegistry,
+	builtinSlashCommands,
+} from "@vivlos/commands/index.ts";
+
 async function main(): Promise<void> {
 	// ── 装配 infra ──
 	const llmConfig = loadLLMConfigFromEnv();
@@ -60,6 +66,12 @@ async function main(): Promise<void> {
 	});
 	logger.start();
 
+	// ── 命令系统 ──
+	const registry = createCommandRegistry();
+	for (const cmd of builtinSlashCommands) {
+		registry.registerSlash(cmd);
+	}
+
 	const agent = createAgent({
 		llm,
 		eventBus,
@@ -79,8 +91,8 @@ async function main(): Promise<void> {
 	process.on("SIGINT", cleanup);
 	process.on("SIGTERM", cleanup);
 
-	// ── 装配 TUI ──
-	const tuiApp = createTuiApp({ agent, eventBus });
+	// ── 装配 TUI（传入 registry 用于 slash 命令拦截） ──
+	const tuiApp = createTuiApp({ agent, eventBus, registry, llm, sessionManager, memoryManager });
 	tuiApp.start();
 }
 
