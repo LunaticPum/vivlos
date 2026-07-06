@@ -4,7 +4,7 @@ import type { Model, Api } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
-import { createMemorySession, type VivlosSession } from "./session/index.ts";
+import { createSession, type VivlosSession } from "./session/index.ts";
 import {
 	createAgentLoop,
 	createMaxTurnsHook,
@@ -21,17 +21,17 @@ export interface CreateAgentParams {
 	readonly session?: VivlosSession;
 	readonly maxTurns?: number;
 	readonly hooks?: VivlosLoopHooks;
-	/** 工具列表（P5），透传到 agent-loop → AgentContext.tools */
+	/** 工具列表，透传到 agent-loop → AgentContext.tools */
 	readonly tools?: AgentTool<any, any>[];
 	/**
-	 * MemoryManager（P6），每次 prompt 前注入记忆到 system prompt。
-	 * 可选——不传则跳过 memory 注入（保持 P5 行为）。
+	 * MemoryManager，每次 prompt 前注入记忆到 system prompt。
+	 * 可选——不传则跳过 memory 注入。
 	 */
 	readonly memoryManager?: MemoryManager;
 }
 
 export function createAgent(params: CreateAgentParams): VivlosAgent {
-	const session = params.session ?? createMemorySession();
+	const session = params.session ?? createSession();
 	const promptBuilder = params.promptBuilder ?? createPromptBuilder();
 	const maxTurns = params.maxTurns ?? 10;
 

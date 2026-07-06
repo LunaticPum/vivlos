@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { describe, it, expect } from "vitest";
 import { createAgentLoop } from "../loop/agent-loop.ts";
-import { createMemorySession } from "../session/memory-session.ts";
+import { createSession } from "../session/manager.ts";
 import { createPromptBuilder } from "../prompt/builder.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
@@ -111,7 +111,7 @@ describe("createAgentLoop", () => {
 
 		const loop = createAgentLoop({
 			deps: { llm: mockLLMClient("你好！"), eventBus },
-			session: createMemorySession(),
+			session: createSession(),
 			promptBuilder: createPromptBuilder(),
 		});
 
@@ -127,7 +127,7 @@ describe("createAgentLoop", () => {
 
 	it("session 消息数量正确", async () => {
 		const eventBus = createEventBus();
-		const session = createMemorySession();
+		const session = createSession();
 
 		const loop = createAgentLoop({
 			deps: { llm: mockLLMClient("回复"), eventBus },
@@ -146,10 +146,18 @@ describe("createAgentLoop", () => {
 	it("LLM 返回 stopReason error 时发 agent:error 事件", async () => {
 		const eventBus = createEventBus();
 		const receivedEvents: string[] = [];
-		eventBus.on("agent:start", () => { receivedEvents.push("start"); });
-		eventBus.on("agent:turn_complete", () => { receivedEvents.push("turn_complete"); });
-		eventBus.on("agent:complete", () => { receivedEvents.push("complete"); });
-		eventBus.on("agent:error", () => { receivedEvents.push("error"); });
+		eventBus.on("agent:start", () => {
+			receivedEvents.push("start");
+		});
+		eventBus.on("agent:turn_complete", () => {
+			receivedEvents.push("turn_complete");
+		});
+		eventBus.on("agent:complete", () => {
+			receivedEvents.push("complete");
+		});
+		eventBus.on("agent:error", () => {
+			receivedEvents.push("error");
+		});
 
 		const errorLLM: LLMClient = {
 			getModel: () => mockModel(),
@@ -182,7 +190,7 @@ describe("createAgentLoop", () => {
 
 		const loop = createAgentLoop({
 			deps: { llm: errorLLM, eventBus },
-			session: createMemorySession(),
+			session: createSession(),
 			promptBuilder: createPromptBuilder(),
 		});
 

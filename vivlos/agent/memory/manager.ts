@@ -1,4 +1,4 @@
-import type { MemoryBackend, MemoryEntry, MemoryManager } from "./types.ts";
+import type { MemoryRepository, MemoryManager, MemoryEntry } from "./types.ts";
 
 const MAX_MEMORY_CHARS = 2200; // 和 Hermes 保持一致
 // TODO: 后续做成可配置项（config.yaml 或 .env），而非硬编码
@@ -6,47 +6,47 @@ const MAX_MEMORY_CHARS = 2200; // 和 Hermes 保持一致
 /**
  * 创建 MemoryManager。
  *
- * 封装 MemoryBackend，加上 prompt 注入逻辑。
- */		
-export function createMemoryManager(backend: MemoryBackend): MemoryManager {
+ * 封装 MemoryRepository，加上 prompt 注入逻辑。
+ */
+export function createMemoryManager(repo: MemoryRepository): MemoryManager {
 	return {
 		// ── agent memory CRUD ──
 		// TODO: 后续以 AgentTool 形式（memory 工具）暴露给 LLM，当前只做 API
 		async add(content) {
-			await backend.add("memory", content);
+			repo.addMemory(content);
 		},
 
 		async replace(oldText, newText) {
-			await backend.replace("memory", oldText, newText);
+			repo.replaceMemory(oldText, newText);
 		},
 
 		async remove(oldText) {
-			await backend.remove("memory", oldText);
+			repo.removeMemory(oldText);
 		},
 
 		async list() {
-			return backend.readAll("memory");
+			return repo.readAllMemories();
 		},
 
 		async setProfile(content) {
-			await backend.setProfile(content);
+			repo.setProfile(content);
 		},
 
 		async getProfile() {
-			return backend.getProfile();
+			return repo.getProfile();
 		},
 
 		async buildPrompt() {
 			const [memoryEntries, profile] = await Promise.all([
-				backend.readAll("memory"),
-				backend.getProfile(),
+				Promise.resolve(repo.readAllMemories()),
+				Promise.resolve(repo.getProfile()),
 			]);
 
 			const sections: string[] = [];
 
 			// ── agent memory ──
 			const memoryContent = memoryEntries
-				.map((e) => e.content)
+				.map((e: MemoryEntry) => e.content)
 				.join("\n§\n");
 			if (memoryContent) {
 				const memoryBlock = formatBlock(

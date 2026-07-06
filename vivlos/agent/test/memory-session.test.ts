@@ -1,20 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { createMemorySession } from "../session/memory-session.ts";
+import { createSession } from "../session/manager.ts";
 
-describe("createMemorySession", () => {
+describe("createSession (内存模式)", () => {
 	it("默认生成 id", () => {
-		const session = createMemorySession();
+		const session = createSession();
 		expect(session.id).toBeTruthy();
 		expect(typeof session.id).toBe("string");
 	});
 
 	it("接受自定义 id", () => {
-		const session = createMemorySession("my-id");
+		const session = createSession({ id: "my-id" });
 		expect(session.id).toBe("my-id");
 	});
 
 	it("appendMessage 增加消息", () => {
-		const session = createMemorySession();
+		const session = createSession();
 		expect(session.getMessages().length).toBe(0);
 
 		session.appendMessage({
@@ -28,7 +28,7 @@ describe("createMemorySession", () => {
 	});
 
 	it("reset 清空消息", () => {
-		const session = createMemorySession();
+		const session = createSession();
 		session.appendMessage({
 			role: "user",
 			content: "hi",
@@ -41,7 +41,7 @@ describe("createMemorySession", () => {
 	});
 
 	it("不可变返回 - appendMessage 不修改原数组引用", () => {
-		const session = createMemorySession();
+		const session = createSession();
 		const msgs1 = session.getMessages();
 		session.appendMessage({
 			role: "user",
