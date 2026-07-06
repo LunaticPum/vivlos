@@ -10,7 +10,7 @@ import type { TUI } from "@earendil-works/pi-tui";
  * commands 层夹在 agent 和 entries 之间，调用 agent 层接口，
  * 不直接操作 infra 层数据结构。
  */
-import type { CommandRegistry } from "../registry.ts";
+import type { CommandRegistry } from "./registry.ts";
 
 export interface CommandContext {
 	readonly llm: LLMClient;
