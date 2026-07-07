@@ -1,14 +1,15 @@
 import { TUI, ProcessTerminal, Spacer } from "@earendil-works/pi-tui";
+
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
+import type { CommandContext } from "@vivlos/commands/types.ts";
+
 import {
 	createChatContainer,
 	createInputContainer,
 	createStatusContainer,
 } from "./containers/index.ts";
-import type { CommandContext } from "@vivlos/commands/types.ts";
 import { InputDecorator } from "./components/input-decorator.ts";
-import type { CommandRegistry } from "@vivlos/commands/index.ts";
 
 /**
  * TUI 应用创建参数——分组管理，职责清晰。
@@ -53,9 +54,10 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	const chat = createChatContainer();
 	const status = createStatusContainer(tui);
 	const inputContainer = createInputContainer();
+
 	const modelLabel = `${cmdCtx.llm.getDefaultProvider()}/${cmdCtx.llm.getDefaultModelId()}`;
 	const inputTopDecorator = new InputDecorator("top", modelLabel);
-		const inputBottomDecorator = new InputDecorator("bottom");
+	const inputBottomDecorator = new InputDecorator("bottom");
 
 	// 布局从上到下：聊天区 → 状态区 → 输入区
 	tui.addChild(chat.container);
@@ -93,6 +95,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		chat.updateStreaming(streamingContent);
 		tui.requestRender();
 	});
+
 	eventBus.on("agent:message_complete", (e) => {
 		if (!streamingStarted) {
 			chat.appendAssistantMessage(e.content);

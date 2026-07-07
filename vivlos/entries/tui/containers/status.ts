@@ -1,4 +1,5 @@
-import { Container, Text, Loader, Spacer, TUI } from "@earendil-works/pi-tui";
+import { Container, Text, Spacer, TUI } from "@earendil-works/pi-tui";
+import { PinkSpinner } from "../components/pink-spinner.ts";
 
 /** ANSI 前景色简写 */
 const fg = {
@@ -12,8 +13,7 @@ const fg = {
 /**
  * 状态区容器。
  *
- * 显示 loading 动画、错误信息、提示、工具执行状态。
- * loading 用蓝色、error 用红色、hint 用灰色、tool 用绿色/红色。
+ * 显示粉色 spinner 动画、错误信息、提示、工具执行状态。
  */
 export interface StatusContainer {
 	showLoading(message?: string): void;
@@ -27,7 +27,7 @@ export interface StatusContainer {
 
 export function createStatusContainer(tui: TUI): StatusContainer {
 	const container = new Container();
-	let loader: Loader | null = null;
+	let spinner: PinkSpinner | null = null;
 	let statusText: Text | null = null;
 
 	return {
@@ -35,14 +35,16 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showLoading(message = "Thinking...") {
 			container.clear();
-			loader = new Loader(tui, (s) => s, (s) => s, fg.blue(message));
-			container.addChild(loader);
-			loader.start();
+			spinner?.stop();
+			spinner = new PinkSpinner(tui, message);
+			container.addChild(spinner);
+			spinner.start();
 			tui.requestRender();
 		},
 
 		showError(message) {
 			container.clear();
+			spinner?.stop(); spinner = null;
 			statusText = new Text(fg.red(`✗ ${message}`), 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
@@ -51,6 +53,7 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showHint(message) {
 			container.clear();
+			spinner?.stop(); spinner = null;
 			statusText = new Text(fg.gray(message), 1, 0);
 			container.addChild(statusText);
 			container.addChild(new Spacer(1));
@@ -59,14 +62,16 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 
 		showToolRunning(toolName) {
 			container.clear();
-			statusText = new Text(fg.yellow(`> ${toolName} ...`), 1, 0);
-			container.addChild(statusText);
-			container.addChild(new Spacer(1));
+			spinner?.stop();
+			spinner = new PinkSpinner(tui, `${toolName} ...`);
+			container.addChild(spinner);
+			spinner.start();
 			tui.requestRender();
 		},
 
 		showToolDone(success) {
 			container.clear();
+			spinner?.stop(); spinner = null;
 			const mark = success ? fg.green("✓") : fg.red("✗");
 			statusText = new Text(`> ${mark}`, 1, 0);
 			container.addChild(statusText);
@@ -75,8 +80,8 @@ export function createStatusContainer(tui: TUI): StatusContainer {
 		},
 
 		clear() {
-			loader?.stop();
-			loader = null;
+			spinner?.stop();
+			spinner = null;
 			container.clear();
 			statusText = null;
 			tui.requestRender();
