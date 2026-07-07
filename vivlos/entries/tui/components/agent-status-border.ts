@@ -197,7 +197,7 @@ export class AgentStatusBorder implements Component {
 				const e = this.logs[i]!;
 
 				if (e.kind === "turn_sep") {
-					body.push(c(` ${"─".repeat(innerContentW)}`));
+					body.push(c(` ${"─".repeat(innerW - 4)}`));
 					continue;
 				}
 
