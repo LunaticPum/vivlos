@@ -1,4 +1,4 @@
-import type { Model, Api } from "@earendil-works/pi-ai";
+import type { Model, Api, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
@@ -8,6 +8,8 @@ export interface LoopConfig {
 	readonly model: Model<Api>;
 	readonly maxTurns: number;
 	readonly signal?: AbortSignal;
+	/** 推理等级（reasoning），传给 pi agentLoop → LLM reasoning 参数 */
+	readonly reasoning?: ThinkingLevel;
 }
 
 /** agent loop 运行结果 */

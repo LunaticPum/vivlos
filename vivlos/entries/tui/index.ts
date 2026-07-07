@@ -15,18 +15,27 @@ export interface CreateTuiAppParams {
 	readonly cmdCtx: Omit<CommandContext, "tui">;
 }
 
-/** 提取 tool result 内的可读文本 */
+/** 提取 tool result 内的可读文本（参照 pi getTextOutput） */
 function extractToolText(raw: unknown): string {
-	if (typeof raw === "string") {
-		try {
-			const p = JSON.parse(raw);
-			return p?.content?.[0]?.text ?? p?.details?.message ?? raw;
-		} catch { return raw; }
+	if (!raw || typeof raw !== "object") return String(raw ?? "");
+	const r = raw as Record<string, unknown>;
+	const content = r.content as Array<{ type: string; text?: string }> | undefined;
+	if (content) {
+		return content.filter(c => c.type === "text").map(c => c.text ?? "").join("\n");
 	}
-	const obj = raw as Record<string, unknown>;
-	const content = obj?.content as Array<{ text?: string }> | undefined;
-	if (content?.[0]?.text) return content[0].text;
-	return (obj?.details as { message?: string })?.message ?? String(raw);
+	return String(raw);
+}
+
+/** 从 messageSnapshot.content 提取累积 thinking（参照 pi message_update → event.message.content） */
+function extractThinkingFromSnapshot(snapshot: unknown): string {
+	if (!snapshot || typeof snapshot !== "object") return "";
+	const msg = snapshot as Record<string, unknown>;
+	const content = msg.content as Array<{ type: string; thinking?: string }> | undefined;
+	if (!content) return "";
+	return content
+		.filter(c => c.type === "thinking" && c.thinking)
+		.map(c => c.thinking!)
+		.join("\n");
 }
 
 export function createTuiApp(params: CreateTuiAppParams) {
@@ -59,40 +68,27 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	tui.addChild(inputBottomDecorator);
 	tui.setFocus(inputContainer.input);
 
-	let currentTurn = 0;
-	let thinkingBuffer = "";
-
-/** 提取 tool result 的可读文本（参照 pi getTextOutput） */
-function extractToolText(raw: unknown): string {
-	if (!raw || typeof raw !== "object") return String(raw ?? "");
-	const r = raw as Record<string, unknown>;
-	const content = r.content as Array<{ type: string; text?: string }> | undefined;
-	if (content) {
-		return content.filter(c => c.type === "text").map(c => c.text ?? "").join("\n");
-	}
-	return String(raw);
-}
-
 	eventBus.on("agent:start", () => {
-		currentTurn = 0;
-		thinkingBuffer = "";
 		chat.clearTurn();
 		status.showLoading();
 		tui.requestRender();
 	});
 
 	eventBus.on("agent:turn_start", (e) => {
-		currentTurn = e.turn;
-		// thinkingBuffer 不清——cross-turn 累积
 		chat.startTurn(e.turn);
 		status.clear();
 		tui.requestRender();
 	});
 
-	// thinking_end → 完整内容（DeepSeek），不累积
+	// thinking_delta → 从 messageSnapshot.content 提取累积 thinking
 	eventBus.on("agent:thinking_delta", (e) => {
-		thinkingBuffer += e.delta;
-		chat.setThinking(thinkingBuffer);
+		const fromSnapshot = extractThinkingFromSnapshot(e.messageSnapshot);
+		if (fromSnapshot) {
+			chat.setThinking(fromSnapshot);
+		} else {
+			// fallback: delta 累积（某些模型可能只发 delta 不带 snapshot）
+			chat.setThinking(e.delta);
+		}
 		tui.requestRender();
 	});
 
@@ -100,7 +96,11 @@ function extractToolText(raw: unknown): string {
 		tui.requestRender();
 	});
 
-	eventBus.on("agent:message_complete", () => {
+	// message_complete → thinkingContent 作为最终后备
+	eventBus.on("agent:message_complete", (e) => {
+		if (e.thinkingContent) {
+			chat.setThinking(e.thinkingContent);
+		}
 		tui.requestRender();
 	});
 

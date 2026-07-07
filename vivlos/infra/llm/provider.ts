@@ -52,7 +52,10 @@ export function createLLM(
 		// ── 流式调用 ──
 
 		stream(model, context, options) {
-			return models.streamSimple(model, context, { signal: options?.signal });
+			return models.streamSimple(model, context, {
+				signal: options?.signal,
+				reasoning: options?.reasoning,
+			});
 		},
 
 		// ── 凭证管理 ──

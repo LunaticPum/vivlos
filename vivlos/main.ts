@@ -83,6 +83,7 @@ async function main(): Promise<void> {
 		tools,
 		memoryManager,
 		sessionManager,
+		thinkingLevel: "medium",
 	});
 
 	// ── 退出清理 ──

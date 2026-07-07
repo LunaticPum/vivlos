@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { Model, Api } from "@earendil-works/pi-ai";
+import type { Model, Api, ThinkingLevel } from "@earendil-works/pi-ai";
 
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
@@ -39,6 +39,8 @@ export interface CreateAgentParams {
 
 	/** agent loop 最大轮次（默认 10） */
 	readonly maxTurns?: number;
+	/** 推理等级（默认 undefined = pi 默认 "off"，需显式传入才启用 thinking） */
+	readonly thinkingLevel?: ThinkingLevel;
 }
 
 /**
@@ -75,7 +77,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 
 	return {
 		async prompt(input: string | AgentMessage[]): Promise<LoopResult> {
-			return loop.run(input, { model, maxTurns });
+			return loop.run(input, { model, maxTurns, reasoning: params.thinkingLevel });
 		},
 		getMessages() {
 			return sessionManager.getMessages();

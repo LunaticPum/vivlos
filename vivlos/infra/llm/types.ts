@@ -3,6 +3,7 @@ import type {
 	Context,
 	AssistantMessageEventStream,
 	Api,
+	ThinkingLevel,
 } from "@earendil-works/pi-ai";
 
 /**
@@ -28,7 +29,7 @@ export interface LLMClient {
 	stream(
 		model: Model<Api>,
 		context: Context,
-		options?: { signal?: AbortSignal },
+		options?: { signal?: AbortSignal; reasoning?: ThinkingLevel },
 	): AssistantMessageEventStream;
 
 	// ── 凭证管理（/model 命令使用） ──

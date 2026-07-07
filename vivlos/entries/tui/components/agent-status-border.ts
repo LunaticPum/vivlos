@@ -11,7 +11,8 @@ type LogEntry =
 const FG = {
 	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
 	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
-	green: (t: string) => `\x1b[92m${t}\x1b[0m`,
+	green: (t: string) => `\x1b[38;5;120m${t}\x1b[0m`,
+	tool: (t: string) => `\x1b[38;5;183m${t}\x1b[0m`,
 	done: (t: string) => `\x1b[32m${t}\x1b[0m`,
 } as const;
 
@@ -80,6 +81,7 @@ export class AgentStatusBorder implements Component {
 		const c = FG.cyan;
 		const g = FG.gray;
 		const h = FG.green;
+		const t = FG.tool;
 		const d = FG.done;
 		const spin = BRAILLE[this.spinnerFrame % BRAILLE.length] ?? "?";
 		const lines: string[] = [];
@@ -93,17 +95,16 @@ export class AgentStatusBorder implements Component {
 		const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
-		const boxColor = this.collapsed ? g : h;
 
 		if (this.finalText && this.collapsed && hasLogs) {
 			const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
 			const summary = `${turnCount} Turns  ${toolCount} Tools  耗时 ${elapsed}s`;
-			drawInnerBox(lines, c, boxColor, label, innerW, width, [h(` ${summary}`)]);
+			drawInnerBox(lines, label, innerW, width, [h(` ${summary}`)], false);
 
-			lines.push(pad(c("│"), "", width, c("│")));
+			lines.push(makeLine(c("│"), "", width, c("│")));
 			const cl = wrapLines(this.finalText, width - 4);
 			for (const cline of cl) {
-				lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
+				lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
 			}
 		} else if (hasLogs) {
 			const body: string[] = [];
@@ -134,7 +135,7 @@ export class AgentStatusBorder implements Component {
 			for (const { idx, entry } of toolList) {
 				const isActive = !this.finalText && this.isActiveEntry(idx);
 				const icon = isActive ? `${spin}` : "✓";
-				body.push(` ${d(icon)} ${h(`Calling ${entry.name}`)}`);
+				body.push(` ${d(icon)} ${t(`Calling ${entry.name}`)}`);
 				if (entry.result) {
 					const resLines = wrapLines(entry.result, innerW - 6).slice(0, 2);
 					for (let j = 0; j < resLines.length; j++) {
@@ -144,19 +145,19 @@ export class AgentStatusBorder implements Component {
 				}
 			}
 
-			drawInnerBox(lines, c, boxColor, label, innerW, width, body);
+			drawInnerBox(lines, label, innerW, width, body, !this.collapsed);
 
 			if (this.finalText) {
-				lines.push(pad(c("│"), "", width, c("│")));
+				lines.push(makeLine(c("│"), "", width, c("│")));
 				const cl = wrapLines(this.finalText, width - 4);
 				for (const cline of cl) {
-					lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
+					lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
 				}
 			}
 		} else if (this.finalText) {
 			const cl = wrapLines(this.finalText, width - 4);
 			for (const cline of cl) {
-				lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
+				lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
 			}
 		}
 
@@ -192,20 +193,39 @@ export class AgentStatusBorder implements Component {
 	}
 }
 
+/**
+ * drawInnerBox: 画 ┌── label ──┐ ... └──────┘
+ * 
+ * 关键：body 行的左右 border │ 不套 ANSI 转义——
+ * 避免 ANSI 嵌套导致 visibleWidth 计算错位、边框断裂。
+ * border 字符用纯文本，body 内容的 ANSI 不影响宽度计算。
+ */
 function drawInnerBox(
-	lines: string[], c: (s: string) => string, box: (s: string) => string,
-	label: string, innerW: number, fullW: number, body: string[],
+	lines: string[], label: string, innerW: number, fullW: number,
+	body: string[], expanded: boolean,
 ): void {
 	const padInner = Math.max(0, innerW - 2);
 	const capLab = Math.max(0, padInner - visibleWidth(label));
-	lines.push(pad(c("│"), ` ${box(`┌${label}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
+	// top line: │ ┌── label ──┐ │
+	// 左 │ 用 cyan ANSI，内框 ┌──label──┐ 不套 ANSI
+	const innerTop = `┌${label}${"─".repeat(capLab)}┐`;
+	lines.push(makeLine(FG.cyan("│"), ` ${innerTop}`, fullW, FG.cyan("│")));
+
 	for (const bline of body) {
-		lines.push(pad(c("│"), ` ${box("│")}${bline}${" ".repeat(Math.max(0, innerW - 2 - visibleWidth(bline)))}${box("│")}`, fullW, c("│")));
+		// body 行: │ │ content padding │ │
+		// 内框左右 │ 不套 ANSI，纯文本
+		const contentW = visibleWidth(bline);
+		const padding = Math.max(0, innerW - 2 - contentW);
+		const row = `│${bline}${" ".repeat(padding)}│`;
+		lines.push(makeLine(FG.cyan("│"), ` ${row}`, fullW, FG.cyan("│")));
 	}
-	lines.push(pad(c("│"), ` ${box(`└${"─".repeat(padInner)}┘`)}`, fullW, c("│")));
+
+	// bottom line: │ └──────┘ │
+	const innerBot = `└${"─".repeat(padInner)}┘`;
+	lines.push(makeLine(FG.cyan("│"), ` ${innerBot}`, fullW, FG.cyan("│")));
 }
 
-function pad(border: string, content: string, width: number, right: string): string {
+function makeLine(border: string, content: string, width: number, right: string): string {
 	const cw = visibleWidth(content);
 	const p = Math.max(0, width - cw - visibleWidth(right) - 1);
 	return `${border}${content}${" ".repeat(p)}${right}`;

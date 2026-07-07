@@ -90,11 +90,13 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			const streamFn = ((model: Model<Api>, ctx: any, opts?: any) =>
 				deps.llm.stream(model, ctx, {
 					signal: opts?.signal,
+					reasoning: opts?.reasoning,
 				})) as unknown as StreamFn;
 
 			// ——— 5. 组装 loop config ———
 			const loopConfig: AgentLoopConfig = {
 				model: config.model,
+				reasoning: config.reasoning,
 				// 过滤 AgentMessage → 标准 Message（只保留 user/assistant/toolResult）
 				convertToLlm: (messages: AgentMessage[]): Message[] => {
 					return messages.filter(
