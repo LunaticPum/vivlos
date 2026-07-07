@@ -62,6 +62,17 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	let currentTurn = 0;
 	let thinkingBuffer = "";
 
+/** 提取 tool result 的可读文本（参照 pi getTextOutput） */
+function extractToolText(raw: unknown): string {
+	if (!raw || typeof raw !== "object") return String(raw ?? "");
+	const r = raw as Record<string, unknown>;
+	const content = r.content as Array<{ type: string; text?: string }> | undefined;
+	if (content) {
+		return content.filter(c => c.type === "text").map(c => c.text ?? "").join("\n");
+	}
+	return String(raw);
+}
+
 	eventBus.on("agent:start", () => {
 		currentTurn = 0;
 		thinkingBuffer = "";

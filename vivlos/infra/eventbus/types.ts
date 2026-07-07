@@ -44,6 +44,7 @@ export type VivlosEvent =
 			readonly type: "agent:message_complete";
 			readonly sessionId: string;
 			readonly content: string;
+			readonly thinkingContent: string;
 	  }
 	// ———— 工具调用生命周期 ————
 	| {
@@ -56,13 +57,13 @@ export type VivlosEvent =
 			readonly type: "agent:toolCall_delta";
 			readonly sessionId: string;
 			readonly callId: string;
-			readonly partialResult: string;
+			readonly partialResult: any;
 	  }
 	| {
 			readonly type: "agent:toolCall_end";
 			readonly sessionId: string;
 			readonly callId: string;
-			readonly result: string;
+			readonly result: any;
 			readonly success: boolean;
 	  }
 	// ———— 通用 ————

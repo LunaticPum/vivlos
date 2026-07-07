@@ -26,6 +26,15 @@ function extractText(message: AgentMessage): string {
 	return "";
 }
 
+/** 从 AgentMessage 提取 thinking 内容（参照 pi AssistantMessageComponent） */
+function extractThinking(message: AgentMessage): string {
+	if (message.role !== "assistant") return "";
+	return message.content
+		.filter((c) => c.type === "thinking")
+		.map((c) => (c as { thinking: string }).thinking)
+		.join("\n");
+}
+
 // ── 映射 ──
 
 /**
@@ -75,11 +84,13 @@ export function mapAgentEvent(
 
 			// turn 内聚合文本 → agent:message_complete
 			const text = extractText(msg);
-			if (text.length > 0) {
+			const thinking = extractThinking(msg);
+			if (text.length > 0 || thinking.length > 0) {
 				events.push({
 					type: "agent:message_complete",
 					sessionId,
 					content: text,
+					thinkingContent: thinking,
 				});
 			}
 
@@ -93,19 +104,18 @@ export function mapAgentEvent(
 			];
 
 		case "message_update": {
-				const ae = event.assistantMessageEvent;
-				if (ae.type === "thinking_delta") {
-					return [{ type: "agent:thinking_delta", sessionId, delta: ae.delta }];
-				}
-				if (ae.type === "thinking_end") {
-					// openai-completions 不流式 thinking, 完整内容在 thinking_end.content
-					return [{ type: "agent:thinking_delta", sessionId, delta: ae.content }];
-				}
-				if (ae.type === "text_delta") {
-					return [{ type: "agent:message_delta", sessionId, delta: ae.delta }];
-				}
-				return [];
+			const ae = event.assistantMessageEvent;
+			if (ae.type === "thinking_delta") {
+				return [{ type: "agent:thinking_delta", sessionId, delta: ae.delta }];
 			}
+			if (ae.type === "thinking_end") {
+				return [{ type: "agent:thinking_delta", sessionId, delta: ae.content }];
+			}
+			if (ae.type === "text_delta") {
+				return [{ type: "agent:message_delta", sessionId, delta: ae.delta }];
+			}
+			return [];
+		}
 
 		// ——— 工具调用生命周期 ———
 		case "tool_execution_start":
@@ -124,7 +134,7 @@ export function mapAgentEvent(
 					type: "agent:toolCall_delta",
 					sessionId,
 					callId: event.toolCallId,
-					partialResult: JSON.stringify(event.partialResult),
+					partialResult: event.partialResult,
 				},
 			];
 
@@ -134,7 +144,7 @@ export function mapAgentEvent(
 					type: "agent:toolCall_end",
 					sessionId,
 					callId: event.toolCallId,
-					result: JSON.stringify(event.result),
+					result: event.result,
 					success: !event.isError,
 				},
 			];
