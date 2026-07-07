@@ -19,6 +19,7 @@ export interface CommandContext {
 	readonly tui: TUI;
 	/** 命令注册表——/help 用它列出所有命令 */
 	readonly registry: CommandRegistry;
+
 	/** 优雅退出——/quit 调用此方法而非 process.exit */
 	readonly shutdown: () => void;
 }

@@ -40,6 +40,21 @@ export class LLMError extends VivlosError {
 	}
 }
 
+export class SessionError extends VivlosError {
+	constructor(
+		message: string,
+		public readonly sessionId: string,
+		cause?: Error,
+	) {
+		super(message, cause);
+		this.name = "SessionError";
+	}
+
+	toLogLine(): string {
+		return `${super.toLogLine()}\n  session: ${this.sessionId}`;
+	}
+}
+
 export class ToolError extends VivlosError {
 	constructor(
 		message: string,
@@ -48,16 +63,5 @@ export class ToolError extends VivlosError {
 	) {
 		super(message, cause);
 		this.name = "ToolError";
-	}
-
-	toLogLine(): string {
-		return `${super.toLogLine()}\n  tool: ${this.toolName}`;
-	}
-}
-
-export class SessionError extends VivlosError {
-	constructor(message: string, cause?: Error) {
-		super(message, cause);
-		this.name = "SessionError";
 	}
 }

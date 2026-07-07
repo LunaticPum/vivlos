@@ -1,9 +1,5 @@
 /**
  * vivlos 事件类型。
- *
- * 定义策略：只包含 agent 层和 entries 层需要跨模块通信的事件。
- * 不是 pi AssistantMessageEvent 的完整重映射——那些在 agent loop 内部处理。
- * 这里只定义"跨层通信用"的公共事件。
  */
 export type VivlosEvent =
 	// ———— agent 生命周期 ————
@@ -36,6 +32,11 @@ export type VivlosEvent =
 	  }
 	| {
 			readonly type: "agent:message_delta";
+			readonly sessionId: string;
+			readonly delta: string;
+	  }
+	| {
+			readonly type: "agent:thinking_delta";
 			readonly sessionId: string;
 			readonly delta: string;
 	  }

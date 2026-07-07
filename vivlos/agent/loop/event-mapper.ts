@@ -94,6 +94,9 @@ export function mapAgentEvent(
 
 		case "message_update": {
 			const ae = event.assistantMessageEvent;
+			if (ae.type === "thinking_delta") {
+				return [{ type: "agent:thinking_delta", sessionId, delta: ae.delta }];
+			}
 			if (ae.type === "text_delta") {
 				return [{ type: "agent:message_delta", sessionId, delta: ae.delta }];
 			}
