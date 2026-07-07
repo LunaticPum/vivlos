@@ -83,16 +83,14 @@ export function mapAgentEvent(
 			}
 
 			// turn 内聚合文本 → agent:message_complete
-			const text = extractText(msg);
-			const thinking = extractThinking(msg);
-			if (text.length > 0 || thinking.length > 0) {
+				const text = extractText(msg);
+				const thinking = extractThinking(msg);
 				events.push({
 					type: "agent:message_complete",
 					sessionId,
 					content: text,
 					thinkingContent: thinking,
 				});
-			}
 
 			return events;
 		}
