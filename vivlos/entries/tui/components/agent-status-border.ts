@@ -1,5 +1,5 @@
 import type { Component, TUI } from "@earendil-works/pi-tui";
-import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
+import { visibleWidth, truncateToWidth, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 const MIN_SPIN_MS = 400;
@@ -15,7 +15,28 @@ const FG = {
 	green: (t: string) => `\x1b[38;5;120m${t}\x1b[0m`,
 	tool: (t: string) => `\x1b[38;5;183m${t}\x1b[0m`,
 	done: (t: string) => `\x1b[32m${t}\x1b[0m`,
+	bold: (t: string) => `\x1b[1m${t}\x1b[22m`,
+	italic: (t: string) => `\x1b[3m${t}\x1b[23m`,
+	underline: (t: string) => `\x1b[4m${t}\x1b[24m`,
+	strikethrough: (t: string) => `\x1b[9m${t}\x1b[29m`,
 } as const;
+
+const MARKDOWN_THEME: MarkdownTheme = {
+	heading: (t) => FG.bold(FG.cyan(t)),
+	link: (t) => FG.underline(FG.cyan(t)),
+	linkUrl: (t) => FG.gray(t),
+	code: (t) => FG.gray(t),
+	codeBlock: (t) => FG.gray(t),
+	codeBlockBorder: (t) => FG.gray(t),
+	quote: (t) => FG.gray(t),
+	quoteBorder: (t) => FG.gray(t),
+	hr: (_t) => FG.gray("─".repeat(40)),
+	listBullet: (t) => FG.cyan(t),
+	bold: (t) => FG.bold(t),
+	italic: (t) => FG.italic(t),
+	strikethrough: (t) => FG.strikethrough(t),
+	underline: (t) => FG.underline(t),
+};
 
 type Cache = { width: number; collapsed: boolean; lines: string[] };
 
@@ -32,6 +53,9 @@ export class AgentStatusBorder implements Component {
 	private timer?: ReturnType<typeof setInterval>;
 	private spinnerFrame = 0;
 	private cache?: Cache;
+
+	/** 缓存 Markdown 组件，finalize() 时更新文本 */
+	private mdComponent: Markdown | null = null;
 
 	constructor(tui: TUI) {
 		this.tui = tui;
@@ -93,6 +117,12 @@ export class AgentStatusBorder implements Component {
 		this.finalText = text;
 		this.activeThinkingIdx = -1;
 		this.stopSpinner();
+		// 更新或创建 Markdown 组件
+		if (this.mdComponent) {
+			this.mdComponent.setText(text);
+		} else {
+			this.mdComponent = new Markdown(text, 0, 0, MARKDOWN_THEME);
+		}
 		this.cache = undefined;
 	}
 
@@ -125,18 +155,30 @@ export class AgentStatusBorder implements Component {
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
 
+		// ── 渲染 finalMessage（Markdown） ──
+		const renderFinalText = (contentW: number) => {
+			if (!this.mdComponent) {
+				// fallback: 纯文本换行
+				const cl = wrapLines(this.finalText, contentW);
+				for (const cline of cl) {
+					lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, contentW)}`, width, c("│")));
+				}
+				return;
+			}
+			const mdLines = this.mdComponent.render(contentW);
+			for (const ml of mdLines) {
+				lines.push(makeLine(c("│"), ` ${ml}`, width, c("│")));
+			}
+		};
+
 		if (this.finalText && this.collapsed && hasLogs) {
 			const turnCount = this.logs.filter((e) => e.kind === "turn_sep").length + 1;
 			const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 			const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
 			const summary = `${turnCount} Turns  ${toolCount} Tools  耗时 ${elapsed}s`;
 			drawInnerBox(lines, label, innerW, width, [h(` ${summary}`)], false);
-
 			lines.push(makeLine(c("│"), "", width, c("│")));
-			const cl = wrapLines(this.finalText, width - 4);
-			for (const cline of cl) {
-				lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
-			}
+			renderFinalText(width - 4);
 		} else if (hasLogs) {
 			const body: string[] = [];
 			const innerContentW = innerW - 4;
@@ -179,16 +221,10 @@ export class AgentStatusBorder implements Component {
 
 			if (this.finalText) {
 				lines.push(makeLine(c("│"), "", width, c("│")));
-				const cl = wrapLines(this.finalText, width - 4);
-				for (const cline of cl) {
-					lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
-				}
+				renderFinalText(width - 4);
 			}
 		} else if (this.finalText) {
-			const cl = wrapLines(this.finalText, width - 4);
-			for (const cline of cl) {
-				lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
-			}
+			renderFinalText(width - 4);
 		}
 
 		lines.push(c(`╰${"─".repeat(width - 2)}╯`));
@@ -253,7 +289,6 @@ function wrapLines(text: string, maxWidth: number): string[] {
 		} else {
 			let remaining = paragraph;
 			while (visibleWidth(remaining) > maxWidth) {
-				// 按视觉宽度截断，再按实际字符长度切片（CJK 兼容）
 				const clipped = truncateToWidth(remaining, maxWidth);
 				result.push(clipped);
 				remaining = remaining.slice(clipped.length).trimStart();

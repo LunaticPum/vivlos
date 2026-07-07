@@ -37,16 +37,14 @@ function extractToolText(raw: unknown): string {
 	return String(raw);
 }
 
-/** 从 messageSnapshot.content 提取累积 thinking（参照 pi message_update → event.message.content） */
+/** 从 messageSnapshot.content 提取最后一个 thinking block（避免跨 turn 累积） */
 function extractThinkingFromSnapshot(snapshot: unknown): string {
 	if (!snapshot || typeof snapshot !== "object") return "";
 	const msg = snapshot as Record<string, unknown>;
 	const content = msg.content as Array<{ type: string; thinking?: string }> | undefined;
 	if (!content) return "";
-	return content
-		.filter(c => c.type === "thinking" && c.thinking)
-		.map(c => c.thinking!)
-		.join("\n");
+	const blocks = content.filter(c => c.type === "thinking" && c.thinking);
+	return blocks.length > 0 ? blocks[blocks.length - 1]!.thinking! : "";
 }
 
 export function createTuiApp(params: CreateTuiAppParams) {
