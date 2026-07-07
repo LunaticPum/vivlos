@@ -93,15 +93,19 @@ export function mapAgentEvent(
 			];
 
 		case "message_update": {
-			const ae = event.assistantMessageEvent;
-			if (ae.type === "thinking_delta") {
-				return [{ type: "agent:thinking_delta", sessionId, delta: ae.delta }];
+				const ae = event.assistantMessageEvent;
+				if (ae.type === "thinking_delta") {
+					return [{ type: "agent:thinking_delta", sessionId, delta: ae.delta }];
+				}
+				if (ae.type === "thinking_end") {
+					// openai-completions 不流式 thinking, 完整内容在 thinking_end.content
+					return [{ type: "agent:thinking_delta", sessionId, delta: ae.content }];
+				}
+				if (ae.type === "text_delta") {
+					return [{ type: "agent:message_delta", sessionId, delta: ae.delta }];
+				}
+				return [];
 			}
-			if (ae.type === "text_delta") {
-				return [{ type: "agent:message_delta", sessionId, delta: ae.delta }];
-			}
-			return [];
-		}
 
 		// ——— 工具调用生命周期 ———
 		case "tool_execution_start":
