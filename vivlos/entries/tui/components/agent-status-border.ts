@@ -3,7 +3,6 @@ import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 const TURN_NUMBERS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
-const TOOL_MIN_DISPLAY_MS = 600; // tool 最少展示时长
 
 type Phase = "thinking" | "tool" | "final";
 
@@ -11,7 +10,6 @@ interface ToolEntry {
 	name: string;
 	result: string;
 	done: boolean;
-	doneAt: number; // Date.now() when completed
 }
 
 const FG = {
@@ -27,7 +25,8 @@ type Cache = { width: number; lines: string[] };
 /**
  * Agent Turn 状态边框。
  *
- * thinking 和 tool 互斥展示，tool 最少展示 600ms 防闪烁。
+ * thinking 永远在最上方，tool 追加在下面用 ──── 分隔。
+ * 所有 context/result 行与首行箭头对齐。
  */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
@@ -46,6 +45,8 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
+	// ── API ──
+
 	startTurn(turn: number): void {
 		this.turn = turn;
 		this.tools = [];
@@ -56,14 +57,16 @@ export class AgentStatusBorder implements Component {
 	}
 
 	setThinking(text: string): void {
+		if (this.phase === "final") return;
 		this.phase = "thinking";
 		this.thinkingContext = text;
 		this.cache = undefined;
 	}
 
 	addTool(name: string): void {
+		if (this.phase === "final") return;
 		this.phase = "tool";
-		this.tools.push({ name, result: "", done: false, doneAt: 0 });
+		this.tools.push({ name, result: "", done: false });
 		this.cache = undefined;
 	}
 
@@ -75,9 +78,7 @@ export class AgentStatusBorder implements Component {
 
 	endTool(): void {
 		if (this.tools.length === 0) return;
-		const tool = this.tools[this.tools.length - 1]!;
-		tool.done = true;
-		tool.doneAt = Date.now();
+		this.tools[this.tools.length - 1]!.done = true;
 		this.cache = undefined;
 	}
 
@@ -99,15 +100,6 @@ export class AgentStatusBorder implements Component {
 	// ── render ──
 
 	render(width: number): string[] {
-		// tool 过期检查——如果 tool 已完成超过 TOOL_MIN_DISPLAY_MS，回到 thinking
-		if (this.phase === "tool" && this.tools.length > 0) {
-			const last = this.tools[this.tools.length - 1]!;
-			if (last.done && Date.now() - last.doneAt > TOOL_MIN_DISPLAY_MS) {
-				this.phase = "thinking";
-				this.cache = undefined;
-			}
-		}
-
 		if (this.cache && this.cache.width === width) return this.cache.lines;
 
 		const c = FG.cyan;
@@ -115,6 +107,7 @@ export class AgentStatusBorder implements Component {
 		const turnNum = TURN_NUMBERS[(this.turn - 1) % TURN_NUMBERS.length] ?? String(this.turn);
 		const spin = BRAILLE[this.spinnerFrame % BRAILLE.length] ?? "?";
 
+		// ╭── vivlos ──╮
 		const labelPart = "── vivlos ──";
 		const dashRight = Math.max(0, width - visibleWidth(labelPart) - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
@@ -126,32 +119,46 @@ export class AgentStatusBorder implements Component {
 					lines.push(`  ${truncateToWidth(cline, width - 4)}`);
 				}
 			}
-		} else if (this.phase === "tool") {
-			const tool = this.tools[this.tools.length - 1];
-			if (tool) {
-				const header = tool.done
-					? FG.green(`${turnNum}  ✓  ${tool.name}`)
-					: FG.yellow(`${turnNum} ${spin}  Calling ${tool.name}`);
-				lines.push(`${c("│")} ${header}${" ".repeat(Math.max(0, width - visibleWidth(header) - 4))} ${c("│")}`);
+		} else {
+			// ── thinking 区（始终显示）──
+			const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
+			lines.push(padLine(c("│"), ` ${header}`, width, c("│")));
 
-				if (tool.result) {
-					const resLines = wrapLines(tool.result, width - 8).slice(0, 2);
-					for (let i = 0; i < resLines.length; i++) {
-						const prefix = i === 0
-							? (tool.done ? FG.gray("╰─> ") : FG.yellow("╰─> "))
-							: "    ";
-						lines.push(`${c("│")}   ${prefix}${truncateToWidth(resLines[i]!, width - 11)} ${c("│")}`);
+			if (this.thinkingContext) {
+				const arrowIndent = "      "; // 与 "  ⠋  " + 4空格对齐
+				const ctxLines = wrapLines(this.thinkingContext, width - 11).slice(0, 3);
+				for (let i = 0; i < ctxLines.length; i++) {
+					if (i === 0) {
+						lines.push(padLine(c("│"), `   ${FG.gray("╰─>")} ${truncateToWidth(ctxLines[i]!, width - 12)}`, width, c("│")));
+					} else {
+						lines.push(padLine(c("│"), `   ${arrowIndent}${truncateToWidth(ctxLines[i]!, width - 12)}`, width, c("│")));
 					}
 				}
 			}
-		} else {
-			const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
-			lines.push(`${c("│")} ${header}${" ".repeat(Math.max(0, width - visibleWidth(header) - 4))} ${c("│")}`);
 
-			const ctxLines = wrapLines(this.thinkingContext, width - 8).slice(0, 3);
-			for (let i = 0; i < ctxLines.length; i++) {
-				const prefix = i === 0 ? FG.gray("╰─> ") : "    ";
-				lines.push(`${c("│")}   ${prefix}${truncateToWidth(ctxLines[i]!, width - 11)} ${c("│")}`);
+			// ── tool 区（追加在 thinking 下面，用分隔线隔开）──
+			if (this.tools.length > 0) {
+				lines.push(padLine(c("│"), `   ${c("────")}`, width, c("│")));
+
+				for (const tool of this.tools) {
+					const toolHeader = tool.done
+						? FG.green(`${turnNum}  ✓  ${tool.name}`)
+						: FG.yellow(`${turnNum} ${spin}  Calling ${tool.name}`);
+					lines.push(padLine(c("│"), ` ${toolHeader}`, width, c("│")));
+
+					if (tool.result) {
+						const arrowIndent = "      ";
+						const resLines = wrapLines(tool.result, width - 11).slice(0, 2);
+						for (let i = 0; i < resLines.length; i++) {
+							if (i === 0) {
+								const prefix = tool.done ? FG.gray("╰─>") : FG.yellow("╰─>");
+								lines.push(padLine(c("│"), `   ${prefix} ${truncateToWidth(resLines[i]!, width - 12)}`, width, c("│")));
+							} else {
+								lines.push(padLine(c("│"), `   ${arrowIndent}${truncateToWidth(resLines[i]!, width - 12)}`, width, c("│")));
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -173,6 +180,13 @@ export class AgentStatusBorder implements Component {
 	private stopSpinner(): void {
 		if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
 	}
+}
+
+/** 生成一行带左右边框的等宽填充行 */
+function padLine(border: string, content: string, width: number, rightBorder: string): string {
+	const contentWidth = visibleWidth(content);
+	const pad = Math.max(0, width - contentWidth - visibleWidth(rightBorder) - 1);
+	return `${border}${content}${" ".repeat(pad)}${rightBorder}`;
 }
 
 function wrapLines(text: string, maxWidth: number): string[] {
