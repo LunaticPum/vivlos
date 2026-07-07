@@ -40,15 +40,17 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	tui.addChild(inputBottomDecorator);
 	tui.setFocus(inputContainer.input);
 
-	// ── 当前轮次追踪 ──
+	// ── 状态追踪 ──
 	let currentTurn = 0;
-	let streamingContent = "";
+	let thinkingBuffer = "";
+	let textBuffer = "";
 
 	// ── EventBus → UI ──
 
 	eventBus.on("agent:start", () => {
 		currentTurn = 0;
-		streamingContent = "";
+		thinkingBuffer = "";
+		textBuffer = "";
 		chat.clearTurn();
 		status.showLoading();
 		tui.requestRender();
@@ -56,24 +58,28 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	eventBus.on("agent:turn_start", (e) => {
 		currentTurn = e.turn;
-		streamingContent = "";
+		thinkingBuffer = "";
+		textBuffer = "";
 		chat.startTurn(e.turn);
 		status.clear();
 		tui.requestRender();
 	});
 
+	// thinking_delta → 填充 thinking context
+	eventBus.on("agent:thinking_delta", (e) => {
+		thinkingBuffer += e.delta;
+		chat.setThinking(thinkingBuffer);
+		tui.requestRender();
+	});
+
+	// message_delta (text_delta) → LLM 正文，不覆盖 thinking
 	eventBus.on("agent:message_delta", (e) => {
-		streamingContent += e.delta;
-		chat.setThinking(streamingContent);
+		textBuffer += e.delta;
 		tui.requestRender();
 	});
 
 	eventBus.on("agent:message_complete", (e) => {
-		if (streamingContent) {
-			chat.finalizeTurn(e.content);
-		} else {
-			chat.appendAssistantMessage(e.content);
-		}
+		chat.finalizeTurn(e.content);
 		status.clear();
 		tui.requestRender();
 	});
