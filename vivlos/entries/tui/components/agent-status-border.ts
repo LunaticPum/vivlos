@@ -161,13 +161,20 @@ export class AgentStatusBorder implements Component {
 			if (!this.mdComponent) {
 				const cl = wrapLines(this.finalText, contentW);
 				for (const cline of cl) {
-					lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, contentW)}`, width, c("│")));
+					const content = ` ${cline}`;
+					const cw = visibleWidth(content);
+					const padding = Math.max(0, width - cw - 2);
+					lines.push(`${c("│")}${content}${" ".repeat(padding)}${c("│")}`);
 				}
 				return;
 			}
-			const mdLines = this.mdComponent.render(Math.max(1, contentW - 2));
+			// Markdown 组件已按宽度渲染，不再 truncateToWidth（避免破坏 emoji 和 ANSI）
+			const mdLines = this.mdComponent.render(Math.max(1, contentW));
 			for (const ml of mdLines) {
-				lines.push(makeLine(c("│"), ` ${truncateToWidth(ml, contentW)}`, width, c("│")));
+				const content = ` ${ml}`;
+				const cw = visibleWidth(content);
+				const padding = Math.max(0, width - cw - 2);
+				lines.push(`${c("│")}${content}${" ".repeat(padding)}${c("│")}`);
 			}
 		};
 
@@ -231,13 +238,6 @@ export class AgentStatusBorder implements Component {
 		}
 
 		lines.push(c(`╰${"─".repeat(width - 2)}╯`));
-
-		// 安全网：确保无行超终端宽度（ANSI 测量偏差的最后防线）
-		for (let li = 0; li < lines.length; li++) {
-			if (visibleWidth(lines[li]!) > width) {
-				lines[li] = truncateToWidth(lines[li]!, width);
-			}
-		}
 
 		this.cache = { width, collapsed: this.collapsed, lines };
 		return lines;
