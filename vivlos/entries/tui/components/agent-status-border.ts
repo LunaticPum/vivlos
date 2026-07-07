@@ -181,7 +181,8 @@ export class AgentStatusBorder implements Component {
 			renderFinalText(width - 4);
 		} else if (hasLogs) {
 			const body: string[] = [];
-			const innerContentW = innerW - 4;
+			// inner box 内真正可用宽度（减去 │ 边框）
+			const innerContentW = innerW - 2;
 
 			for (let i = 0; i < this.logs.length; i++) {
 				const e = this.logs[i]!;
@@ -199,7 +200,8 @@ export class AgentStatusBorder implements Component {
 						const ctxLines = wrapLines(e.text, innerContentW).slice(0, 3);
 						for (let j = 0; j < ctxLines.length; j++) {
 							const prefix = j === 0 ? g("╰─> ") : "    ";
-							body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, innerContentW))}`);
+							const maxTextW = innerW - 2 - 5; // 5 = " ╰─> " prefix width
+							body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, Math.max(1, maxTextW)))}`);
 						}
 					}
 				} else {
@@ -210,7 +212,8 @@ export class AgentStatusBorder implements Component {
 						const resLines = wrapLines(e.result, innerContentW).slice(0, 3);
 						for (let j = 0; j < resLines.length; j++) {
 							const prefix = j === 0 ? g("╰─> ") : "    ";
-							body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, innerContentW))}`);
+							const maxTextW = innerW - 2 - 5; // 5 = " ╰─> " prefix width
+							body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, Math.max(1, maxTextW)))}`);
 						}
 					}
 				}
