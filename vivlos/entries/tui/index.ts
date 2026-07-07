@@ -80,7 +80,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	// thinking_end → 完整内容（DeepSeek），不累积
 	eventBus.on("agent:thinking_delta", (e) => {
-		thinkingBuffer = e.delta;
+		thinkingBuffer += e.delta;
 		chat.setThinking(thinkingBuffer);
 		tui.requestRender();
 	});
