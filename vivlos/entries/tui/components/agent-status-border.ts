@@ -228,6 +228,13 @@ export class AgentStatusBorder implements Component {
 
 		lines.push(c(`╰${"─".repeat(width - 2)}╯`));
 
+		// 安全网：确保无行超终端宽度（ANSI 测量偏差的最后防线）
+		for (let li = 0; li < lines.length; li++) {
+			if (visibleWidth(lines[li]!) > width) {
+				lines[li] = truncateToWidth(lines[li]!, width);
+			}
+		}
+
 		this.cache = { width, collapsed: this.collapsed, lines };
 		return lines;
 	}
