@@ -29,8 +29,8 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	heading: (t) => FG.bold(FG.cyan(t)),
 	link: (t) => FG.underline(FG.cyan(t)),
 	linkUrl: (t) => FG.gray(t),
-	code: (t) => FG.gray(t),
-	codeBlock: (t) => FG.gray(t),
+	code: (t) => FG.cyan(t),
+	codeBlock: (t) => FG.green(t),
 	codeBlockBorder: (t) => FG.gray(t),
 	quote: (t) => FG.gray(t),
 	quoteBorder: (t) => FG.gray(t),
@@ -40,11 +40,22 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	italic: (t) => FG.italic(t),
 	strikethrough: (t) => FG.strikethrough(t),
 	underline: (t) => FG.underline(t),
-	highlightCode: (code) => code.split("\n").map((line) => FG.gray(line)),
+	highlightCode: (code) => code.split("\n").map((line) => FG.green(line)),
 	codeBlockIndent: "",
 };
 
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
 type Cache = { width: number; collapsed: boolean; lines: string[] };
+
+/** 删除 markdown 渲染行首的 `### ` 前缀（h3+ 标题在 pi-tui 中会保留 # 前缀） */
+function stripHeadingPrefix(line: string): string {
+	const plain = line.replace(ANSI_RE, "");
+	if (!/^#{1,6}\s/.test(plain)) return line;
+	const m = line.match(/^((?:\x1b\[[0-9;]*[a-zA-Z])*)\s*#{1,6}\s((?:\x1b\[[0-9;]*[a-zA-Z])*)/);
+	if (!m) return line;
+	return m[1] + m[2] + line.slice(m[0].length);
+}
 
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
@@ -172,7 +183,8 @@ export class AgentStatusBorder implements Component {
 			}
 			// Markdown 组件已按宽度渲染，不再 truncateToWidth（避免破坏 emoji 和 ANSI）
 			const mdLines = this.mdComponent.render(Math.max(1, contentW));
-			for (const ml of mdLines) {
+			for (const raw of mdLines) {
+				const ml = stripHeadingPrefix(raw);
 				const content = ` ${ml}`;
 				const cw = visibleWidth(content);
 				const padding = Math.max(0, width - cw - 2);
