@@ -15,13 +15,24 @@ export interface CreateTuiAppParams {
 	readonly cmdCtx: Omit<CommandContext, "tui">;
 }
 
-/** 提取 tool result 内的可读文本（参照 pi getTextOutput） */
+/** 提取 tool result 内的可读文本。优先取 details.message（摘要），其次 content.text（全文）。 */
 function extractToolText(raw: unknown): string {
 	if (!raw || typeof raw !== "object") return String(raw ?? "");
 	const r = raw as Record<string, unknown>;
+	// 1. details.message（vivlos 自定义摘要）
+	const details = r.details as Record<string, unknown> | undefined;
+	if (details?.message && typeof details.message === "string" && details.message.trim()) {
+		return details.message;
+	}
+	// 2. content[].text（pi 标准 ToolResult）
 	const content = r.content as Array<{ type: string; text?: string }> | undefined;
 	if (content) {
-		return content.filter(c => c.type === "text").map(c => c.text ?? "").join("\n");
+		const text = content.filter(c => c.type === "text").map(c => c.text ?? "").join("\n");
+		if (text.trim()) return text;
+	}
+	// 3. message 顶层字段
+	if (r.message && typeof r.message === "string" && r.message.trim()) {
+		return r.message;
 	}
 	return String(raw);
 }

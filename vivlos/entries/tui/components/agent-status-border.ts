@@ -246,22 +246,17 @@ function makeLine(border: string, content: string, width: number, right: string)
 
 function wrapLines(text: string, maxWidth: number): string[] {
 	const result: string[] = [];
+	if (!text) return result;
 	for (const paragraph of text.split("\n")) {
 		if (visibleWidth(paragraph) <= maxWidth) {
 			result.push(paragraph);
 		} else {
 			let remaining = paragraph;
 			while (visibleWidth(remaining) > maxWidth) {
-				let cut = maxWidth;
-				let searchStart = 0;
-				while (searchStart <= maxWidth && searchStart !== -1) {
-					const idx = remaining.indexOf(" ", searchStart);
-					if (idx === -1 || visibleWidth(remaining.slice(0, idx + 1)) > maxWidth) break;
-					cut = idx;
-					searchStart = idx + 1;
-				}
-				result.push(truncateToWidth(remaining, cut));
-				remaining = remaining.slice(cut).trimStart();
+				// 按视觉宽度截断，再按实际字符长度切片（CJK 兼容）
+				const clipped = truncateToWidth(remaining, maxWidth);
+				result.push(clipped);
+				remaining = remaining.slice(clipped.length).trimStart();
 			}
 			if (remaining.length > 0) result.push(remaining);
 		}
