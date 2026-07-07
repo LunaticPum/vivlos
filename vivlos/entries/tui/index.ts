@@ -104,11 +104,8 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	// message_complete → thinkingContent 作为最终后备
-	eventBus.on("agent:message_complete", (e) => {
-		if (e.thinkingContent) {
-			chat.setThinking(e.thinkingContent);
-		}
+	// message_complete — 不再更新 thinking：thinking_delta 已全覆盖，避免跨 turn 重复
+	eventBus.on("agent:message_complete", (_e) => {
 		tui.requestRender();
 	});
 

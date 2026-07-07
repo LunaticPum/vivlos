@@ -158,7 +158,6 @@ export class AgentStatusBorder implements Component {
 		// ── 渲染 finalMessage（Markdown） ──
 		const renderFinalText = (contentW: number) => {
 			if (!this.mdComponent) {
-				// fallback: 纯文本换行
 				const cl = wrapLines(this.finalText, contentW);
 				for (const cline of cl) {
 					lines.push(makeLine(c("│"), ` ${truncateToWidth(cline, contentW)}`, width, c("│")));
@@ -167,7 +166,8 @@ export class AgentStatusBorder implements Component {
 			}
 			const mdLines = this.mdComponent.render(contentW);
 			for (const ml of mdLines) {
-				lines.push(makeLine(c("│"), ` ${ml}`, width, c("│")));
+				// Markdown 渲染行长可能略超 contentW（如不可断长词），截断防崩溃
+				lines.push(makeLine(c("│"), ` ${truncateToWidth(ml, contentW)}`, width, c("│")));
 			}
 		};
 
