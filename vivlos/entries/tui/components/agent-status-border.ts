@@ -233,8 +233,8 @@ function drawInnerBox(
 		const row = `│${bline}${" ".repeat(padding)}│`;
 		lines.push(makeLine(FG.cyan("│"), ` ${row}`, fullW, FG.cyan("│")));
 	}
-
-	const innerBot = `└${"─".repeat(Math.max(0, padInner - 2))}┘`;
+	// └──────┘ — 宽度 = padInner + 2 = innerW
+	const innerBot = `└${"─".repeat(Math.max(0, padInner))}┘`;
 	lines.push(makeLine(FG.cyan("│"), ` ${innerBot}`, fullW, FG.cyan("│")));
 }
 
