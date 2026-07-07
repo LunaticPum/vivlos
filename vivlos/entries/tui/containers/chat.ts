@@ -1,31 +1,37 @@
-import { Container, Spacer } from "@earendil-works/pi-tui";
+import { Container, Spacer, TUI } from "@earendil-works/pi-tui";
 import { ToolExecution } from "./tool.ts";
 import { BorderedMessage } from "../components/bordered-message.ts";
-import { StreamingBorderedMessage } from "../components/streaming-bordered-message.ts";
+import { AgentStatusBorder } from "../components/agent-status-border.ts";
 
 /**
  * 聊天区容器。
  *
- * 用户消息用 BorderedMessage 包裹（黄色边框），
- * agent 流式输出用 StreamingBorderedMessage（上框+左右立即显示，结束时加底框），
- * 工具调用用 ToolExecution 渲染。
+ * 用户消息用 BorderedMessage（黄色），
+ * agent 状态用 AgentStatusBorder（turn 序号 + thinking/tool 日志 + 最终消息）。
  */
 export interface ChatContainer {
 	appendUserMessage(text: string): void;
 	appendAssistantMessage(text: string): void;
-	startStreaming(): void;
-	updateStreaming(text: string): void;
-	endStreaming(): void;
+
+	// AgentStatusBorder 生命周期
+	startTurn(turn: number): void;
+	setThinking(text: string): void;
+	addTool(name: string): void;
+	updateToolResult(text: string): void;
+	endTool(): void;
+	finalizeTurn(text: string): void;
+	clearTurn(): void;
+
 	appendToolStart(toolCallId: string, toolName: string): void;
 	appendToolEnd(toolCallId: string, isSuccess: boolean, summary: string): void;
 	clear(): void;
 	readonly container: Container;
 }
 
-export function createChatContainer(): ChatContainer {
+export function createChatContainer(tui: TUI): ChatContainer {
 	const container = new Container();
-	let streamingMsg: StreamingBorderedMessage | null = null;
 	const pendingTools = new Map<string, ToolExecution>();
+	let agentBorder: AgentStatusBorder | null = null;
 
 	return {
 		container,
@@ -42,19 +48,42 @@ export function createChatContainer(): ChatContainer {
 			container.addChild(new Spacer(1));
 		},
 
-		startStreaming() {
-			streamingMsg = new StreamingBorderedMessage("vivlos", "blue");
-			container.addChild(streamingMsg);
+		// ── AgentStatusBorder 生命周期 ──
+
+		startTurn(turn) {
+			if (!agentBorder) {
+				agentBorder = new AgentStatusBorder(tui);
+				container.addChild(agentBorder);
+			}
+			agentBorder.startTurn(turn);
 		},
 
-		updateStreaming(text) {
-			streamingMsg?.setText(text);
+		setThinking(text) {
+			agentBorder?.setThinking(text);
 		},
 
-		endStreaming() {
-			streamingMsg?.finalize(); // 加 ╰──╯ 底边框
-			streamingMsg = null;
+		addTool(name) {
+			agentBorder?.addTool(name);
 		},
+
+		updateToolResult(text) {
+			agentBorder?.updateToolResult(text);
+		},
+
+		endTool() {
+			agentBorder?.endTool();
+		},
+
+		finalizeTurn(text) {
+			agentBorder?.finalize(text);
+		},
+
+		clearTurn() {
+			agentBorder?.dispose();
+			agentBorder = null;
+		},
+
+		// ── ToolExecution ──
 
 		appendToolStart(toolCallId, toolName) {
 			const component = new ToolExecution(toolCallId, toolName);
@@ -76,7 +105,8 @@ export function createChatContainer(): ChatContainer {
 			}
 			pendingTools.clear();
 			container.clear();
-			streamingMsg = null;
+			agentBorder?.dispose();
+			agentBorder = null;
 		},
 	};
 }
