@@ -94,10 +94,13 @@ export class AgentStatusBorder implements Component {
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
 
+		// 内框颜色：折叠时灰色，展开时亮绿色
+		const boxColor = this.collapsed ? g : h;
+
 		if (this.finalText && this.collapsed && hasLogs) {
 			const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
 			const summary = `${turnCount} Turns  ${toolCount} Tools  耗时 ${elapsed}s`;
-			drawInnerBox(lines, c, g, label, innerW, width, [g(` ${summary}`)]);
+			drawInnerBox(lines, c, boxColor, label, innerW, width, [h(` ${summary}`)]);
 
 			lines.push(pad(c("│"), "", width, c("│")));
 			const cl = wrapLines(this.finalText, width - 4);
@@ -135,7 +138,7 @@ export class AgentStatusBorder implements Component {
 				}
 				lastKind = entry.kind;
 			}
-			drawInnerBox(lines, c, g, label, innerW, width, body);
+			drawInnerBox(lines, c, boxColor, label, innerW, width, body);
 
 			if (this.finalText) {
 				lines.push(pad(c("│"), "", width, c("│")));
@@ -180,17 +183,17 @@ export class AgentStatusBorder implements Component {
 }
 
 function drawInnerBox(
-	lines: string[], c: (s: string) => string, g: (s: string) => string,
+	lines: string[], c: (s: string) => string, box: (s: string) => string,
 	label: string, innerW: number, fullW: number, body: string[],
 ): void {
 	const padInner = Math.max(0, innerW - 2);
 	const labelPart = label;
 	const capLab = Math.max(0, padInner - visibleWidth(labelPart));
-	lines.push(pad(c("│"), ` ${g(`┌${labelPart}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
+	lines.push(pad(c("│"), ` ${box(`┌${labelPart}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
 	for (const bline of body) {
-		lines.push(pad(c("│"), ` ${g("│")}${bline}${" ".repeat(Math.max(0, innerW - 2 - visibleWidth(bline)))}${g("│")}`, fullW, c("│")));
+		lines.push(pad(c("│"), ` ${box("│")}${bline}${" ".repeat(Math.max(0, innerW - 2 - visibleWidth(bline)))}${box("│")}`, fullW, c("│")));
 	}
-	lines.push(pad(c("│"), ` ${g(`└${"─".repeat(padInner)}┘`)}`, fullW, c("│")));
+	lines.push(pad(c("│"), ` ${box(`└${"─".repeat(padInner)}┘`)}`, fullW, c("│")));
 }
 
 function pad(border: string, content: string, width: number, right: string): string {
