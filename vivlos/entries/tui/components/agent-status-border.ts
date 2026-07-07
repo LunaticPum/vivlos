@@ -165,7 +165,7 @@ export class AgentStatusBorder implements Component {
 				}
 				return;
 			}
-			const mdLines = this.mdComponent.render(contentW);
+			const mdLines = this.mdComponent.render(Math.max(1, contentW - 2));
 			for (const ml of mdLines) {
 				lines.push(makeLine(c("│"), ` ${truncateToWidth(ml, contentW)}`, width, c("│")));
 			}
