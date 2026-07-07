@@ -1,5 +1,5 @@
 import type { Component, TUI } from "@earendil-works/pi-tui";
-import { visibleWidth, truncateToWidth, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { visibleWidth, truncateToWidth, Markdown, type MarkdownTheme, type DefaultTextStyle } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 const MIN_SPIN_MS = 400;
@@ -21,11 +21,15 @@ const FG = {
 	strikethrough: (t: string) => `\x1b[9m${t}\x1b[29m`,
 } as const;
 
+const MARKDOWN_DEFAULT_TEXT: DefaultTextStyle = {
+	color: (t) => t, // 保持默认终端颜色
+};
+
 const MARKDOWN_THEME: MarkdownTheme = {
 	heading: (t) => FG.bold(FG.cyan(t)),
 	link: (t) => FG.underline(FG.cyan(t)),
 	linkUrl: (t) => FG.gray(t),
-	code: (t) => FG.gray(t),
+	code: (t) => FG.gray(`\`${t}\``),
 	codeBlock: (t) => FG.gray(t),
 	codeBlockBorder: (t) => FG.gray(t),
 	quote: (t) => FG.gray(t),
@@ -36,6 +40,8 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	italic: (t) => FG.italic(t),
 	strikethrough: (t) => FG.strikethrough(t),
 	underline: (t) => FG.underline(t),
+	highlightCode: (code) => code.split("\n").map((line) => FG.gray(`  ${line}`)),
+	codeBlockIndent: "",
 };
 
 type Cache = { width: number; collapsed: boolean; lines: string[] };
@@ -44,7 +50,6 @@ export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private logs: LogEntry[] = [];
 	private activeThinkingIdx = -1;
-	/** callId → logs 索引映射，解决并行 tool 事件交错时 result 写到错误条目 */
 	private callIdMap = new Map<string, number>();
 	private finalText = "";
 	private collapsed = false;
@@ -53,8 +58,6 @@ export class AgentStatusBorder implements Component {
 	private timer?: ReturnType<typeof setInterval>;
 	private spinnerFrame = 0;
 	private cache?: Cache;
-
-	/** 缓存 Markdown 组件，finalize() 时更新文本 */
 	private mdComponent: Markdown | null = null;
 
 	constructor(tui: TUI) {
@@ -106,7 +109,6 @@ export class AgentStatusBorder implements Component {
 		}
 	}
 
-	/** turn 结束时标记分隔线并清除 thinking 活跃状态 */
 	turnComplete(): void {
 		this.activeThinkingIdx = -1;
 		this.logs.push({ kind: "turn_sep" });
@@ -117,12 +119,12 @@ export class AgentStatusBorder implements Component {
 		this.finalText = text;
 		this.activeThinkingIdx = -1;
 		this.stopSpinner();
-		// 更新或创建 Markdown 组件
-		if (this.mdComponent) {
-			this.mdComponent.setText(text);
-		} else {
-			this.mdComponent = new Markdown(text, 0, 0, MARKDOWN_THEME);
+		// 移除最后一条 turn_sep（末尾不需要分割线）
+		const last = this.logs[this.logs.length - 1];
+		if (last?.kind === "turn_sep") {
+			this.logs.pop();
 		}
+		this.mdComponent = new Markdown(text, 0, 0, MARKDOWN_THEME, MARKDOWN_DEFAULT_TEXT);
 		this.cache = undefined;
 	}
 
@@ -155,7 +157,6 @@ export class AgentStatusBorder implements Component {
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
 
-		// ── 渲染 finalMessage（Markdown） ──
 		const renderFinalText = (contentW: number) => {
 			if (!this.mdComponent) {
 				const cl = wrapLines(this.finalText, contentW);
@@ -166,7 +167,6 @@ export class AgentStatusBorder implements Component {
 			}
 			const mdLines = this.mdComponent.render(contentW);
 			for (const ml of mdLines) {
-				// Markdown 渲染行长可能略超 contentW（如不可断长词），截断防崩溃
 				lines.push(makeLine(c("│"), ` ${truncateToWidth(ml, contentW)}`, width, c("│")));
 			}
 		};
@@ -186,7 +186,6 @@ export class AgentStatusBorder implements Component {
 			for (let i = 0; i < this.logs.length; i++) {
 				const e = this.logs[i]!;
 
-				// turn 分隔线：cyan 全宽横线
 				if (e.kind === "turn_sep") {
 					body.push(c(` ${"─".repeat(innerContentW)}`));
 					continue;
@@ -247,12 +246,6 @@ export class AgentStatusBorder implements Component {
 	}
 }
 
-/**
- * drawInnerBox: 画 ┌── label ──┐ ... └──────┘
- *
- * body 行的左右 border │ 不套 ANSI，纯文本。
- * 避免 ANSI 嵌套导致 visibleWidth 计算错位。
- */
 function drawInnerBox(
 	lines: string[], label: string, innerW: number, fullW: number,
 	body: string[], _expanded: boolean,
@@ -269,7 +262,6 @@ function drawInnerBox(
 		const row = `│${bline}${" ".repeat(padding)}│`;
 		lines.push(makeLine(FG.cyan("│"), ` ${row}`, fullW, FG.cyan("│")));
 	}
-	// └──────┘ — 宽度 = padInner + 2 = innerW
 	const innerBot = `└${"─".repeat(Math.max(0, padInner))}┘`;
 	lines.push(makeLine(FG.cyan("│"), ` ${innerBot}`, fullW, FG.cyan("│")));
 }
