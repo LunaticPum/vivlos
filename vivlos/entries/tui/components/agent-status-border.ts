@@ -107,34 +107,43 @@ export class AgentStatusBorder implements Component {
 			}
 		} else if (hasLogs) {
 			const body: string[] = [];
-			let lastKind: string | null = null;
+			const thinkList: { idx: number; entry: LogEntry & { kind: "thinking" } }[] = [];
+			const toolList: { idx: number; entry: LogEntry & { kind: "tool" } }[] = [];
 
 			for (let i = 0; i < this.logs.length; i++) {
-				const entry = this.logs[i]!;
-				const isActive = !this.finalText && this.isActiveEntry(i);
+				const e = this.logs[i]!;
+				if (e.kind === "thinking") thinkList.push({ idx: i, entry: e });
+				else toolList.push({ idx: i, entry: e });
+			}
 
-				if (entry.kind === "thinking") {
-					const icon = isActive ? `${spin}` : "✓";
-					body.push(` ${d(icon)} ${h("Thinking...")}`);
-					const ctxLines = wrapLines(entry.text, innerW - 6).slice(0, 3);
-					for (let j = 0; j < ctxLines.length; j++) {
+			for (const { idx, entry } of thinkList) {
+				const isActive = !this.finalText && this.isActiveEntry(idx);
+				const icon = isActive ? `${spin}` : "✓";
+				body.push(` ${d(icon)} ${h("Thinking...")}`);
+				const ctxLines = wrapLines(entry.text, innerW - 6).slice(0, 3);
+				for (let j = 0; j < ctxLines.length; j++) {
+					const prefix = j === 0 ? g("╰─> ") : "    ";
+					body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, innerW - 6))}`);
+				}
+			}
+
+			if (thinkList.length > 0 && toolList.length > 0) {
+				body.push(g(" ────────────────────────────"));
+			}
+
+			for (const { idx, entry } of toolList) {
+				const isActive = !this.finalText && this.isActiveEntry(idx);
+				const icon = isActive ? `${spin}` : "✓";
+				body.push(` ${d(icon)} ${h(`Calling ${entry.name}`)}`);
+				if (entry.result) {
+					const resLines = wrapLines(entry.result, innerW - 6).slice(0, 2);
+					for (let j = 0; j < resLines.length; j++) {
 						const prefix = j === 0 ? g("╰─> ") : "    ";
-						body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, innerW - 6))}`);
-					}
-				} else {
-					if (lastKind === "thinking") body.push(g(" ────────────────────────────"));
-					const icon = isActive ? `${spin}` : "✓";
-					body.push(` ${d(icon)} ${h(`Calling ${entry.name}`)}`);
-					if (entry.result) {
-						const resLines = wrapLines(entry.result, innerW - 6).slice(0, 2);
-						for (let j = 0; j < resLines.length; j++) {
-							const prefix = j === 0 ? g("╰─> ") : "    ";
-							body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, innerW - 6))}`);
-						}
+						body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, innerW - 6))}`);
 					}
 				}
-				lastKind = entry.kind;
 			}
+
 			drawInnerBox(lines, c, boxColor, label, innerW, width, body);
 
 			if (this.finalText) {
@@ -161,10 +170,7 @@ export class AgentStatusBorder implements Component {
 		if (this.finalText) return false;
 		const last = this.logs[this.logs.length - 1];
 		if (!last) return false;
-
 		if (last.kind === "thinking") return i === this.logs.length - 1;
-
-		// tool：未完成显示 spin，或已完成但不足 MIN_SPIN_MS 也继续显示 spin
 		if (last.kind === "tool") {
 			if (!last.done) return i === this.logs.length - 1;
 			if (Date.now() - last.startedAt < MIN_SPIN_MS) return i === this.logs.length - 1;
