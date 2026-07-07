@@ -89,14 +89,11 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	// thinking_delta → 从 messageSnapshot.content 提取累积 thinking
+	// thinking_delta → 从 messageSnapshot.content 仅取最后一条 thinking block
 	eventBus.on("agent:thinking_delta", (e) => {
 		const fromSnapshot = extractThinkingFromSnapshot(e.messageSnapshot);
-		if (fromSnapshot) {
-			chat.setThinking(fromSnapshot);
-		} else {
-			chat.setThinking(e.delta);
-		}
+		const thinkingText = fromSnapshot || e.delta;
+		if (thinkingText) chat.setThinking(thinkingText);
 		tui.requestRender();
 	});
 
