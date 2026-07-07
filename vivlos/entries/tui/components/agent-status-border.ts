@@ -34,10 +34,7 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
-	startTurn(_turn: number): void {
-		this.logs.push({ kind: "thinking", text: "" }); // placeholder, 后续 setThinking 更新
-		this.cache = undefined;
-	}
+	startTurn(_turn: number): void { this.cache = undefined; }
 
 	setThinking(text: string): void {
 		const last = this.logs[this.logs.length - 1];
