@@ -2,10 +2,11 @@ import type { Component, TUI } from "@earendil-works/pi-tui";
 import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
+const MIN_SPIN_MS = 400;
 
 type LogEntry =
 	| { kind: "thinking"; text: string }
-	| { kind: "tool"; name: string; result: string; done: boolean };
+	| { kind: "tool"; name: string; result: string; done: boolean; startedAt: number };
 
 const FG = {
 	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
@@ -43,7 +44,7 @@ export class AgentStatusBorder implements Component {
 	}
 
 	addTool(name: string): void {
-		this.logs.push({ kind: "tool", name, result: "", done: false });
+		this.logs.push({ kind: "tool", name, result: "", done: false, startedAt: Date.now() });
 		this.cache = undefined;
 	}
 
@@ -84,7 +85,6 @@ export class AgentStatusBorder implements Component {
 		const lines: string[] = [];
 		const innerW = width - 4;
 
-		// ╭── vivlos ──╮
 		const header = "── vivlos ──";
 		const dashR = Math.max(0, width - visibleWidth(header) - 2);
 		lines.push(c(`╭${header}${"─".repeat(dashR)}╮`));
@@ -93,8 +93,6 @@ export class AgentStatusBorder implements Component {
 		const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
-
-		// 内框颜色：折叠时灰色，展开时亮绿色
 		const boxColor = this.collapsed ? g : h;
 
 		if (this.finalText && this.collapsed && hasLogs) {
@@ -116,7 +114,6 @@ export class AgentStatusBorder implements Component {
 				const isActive = !this.finalText && this.isActiveEntry(i);
 
 				if (entry.kind === "thinking") {
-					if (lastKind === "tool") body.push(g(" ────────────────────────────"));
 					const icon = isActive ? `${spin}` : "✓";
 					body.push(` ${d(icon)} ${h("Thinking...")}`);
 					const ctxLines = wrapLines(entry.text, innerW - 6).slice(0, 3);
@@ -164,8 +161,15 @@ export class AgentStatusBorder implements Component {
 		if (this.finalText) return false;
 		const last = this.logs[this.logs.length - 1];
 		if (!last) return false;
-		return last.kind === "tool" && !last.done ? i === this.logs.length - 1
-			: last.kind === "thinking" ? i === this.logs.length - 1 : false;
+
+		if (last.kind === "thinking") return i === this.logs.length - 1;
+
+		// tool：未完成显示 spin，或已完成但不足 MIN_SPIN_MS 也继续显示 spin
+		if (last.kind === "tool") {
+			if (!last.done) return i === this.logs.length - 1;
+			if (Date.now() - last.startedAt < MIN_SPIN_MS) return i === this.logs.length - 1;
+		}
+		return false;
 	}
 
 	private startSpinner(): void {
@@ -187,9 +191,8 @@ function drawInnerBox(
 	label: string, innerW: number, fullW: number, body: string[],
 ): void {
 	const padInner = Math.max(0, innerW - 2);
-	const labelPart = label;
-	const capLab = Math.max(0, padInner - visibleWidth(labelPart));
-	lines.push(pad(c("│"), ` ${box(`┌${labelPart}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
+	const capLab = Math.max(0, padInner - visibleWidth(label));
+	lines.push(pad(c("│"), ` ${box(`┌${label}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
 	for (const bline of body) {
 		lines.push(pad(c("│"), ` ${box("│")}${bline}${" ".repeat(Math.max(0, innerW - 2 - visibleWidth(bline)))}${box("│")}`, fullW, c("│")));
 	}

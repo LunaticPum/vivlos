@@ -105,6 +105,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("agent:toolCall_end", (e) => {
+		chat.updateToolResult(e.result);
 		chat.endTool();
 		status.showToolDone(e.success);
 		tui.requestRender();
