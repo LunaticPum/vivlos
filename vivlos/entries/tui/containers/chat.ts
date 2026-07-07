@@ -21,6 +21,9 @@ export interface ChatContainer {
 	endTool(): void;
 	finalizeTurn(text: string): void;
 	clearTurn(): void;
+	/** 切换推理细节折叠/展开 */
+	toggleDetail(): void;
+	/** 追加一条 assistant 消息（非流式路径用） */
 
 	appendToolStart(toolCallId: string, toolName: string): void;
 	appendToolEnd(toolCallId: string, isSuccess: boolean, summary: string): void;
@@ -81,6 +84,10 @@ export function createChatContainer(tui: TUI): ChatContainer {
 		clearTurn() {
 			agentBorder?.dispose();
 			agentBorder = null;
+		},
+
+		toggleDetail() {
+			agentBorder?.toggle();
 		},
 
 		// ── ToolExecution ──

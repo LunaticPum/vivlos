@@ -4,11 +4,13 @@ import { quitCommand } from "./quit.ts";
 import { clearCommand } from "./clear.ts";
 import { sessionCommand } from "./session.ts";
 import { modelCommand } from "./model.ts";
+import { detailCommand } from "./detail.ts";
 
 export const builtinSlashCommands: SlashCommand[] = [
 	helpCommand,
 	modelCommand,
 	sessionCommand,
 	clearCommand,
+	detailCommand,
 	quitCommand,
 ];

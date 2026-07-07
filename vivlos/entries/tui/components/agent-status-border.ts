@@ -12,10 +12,10 @@ interface ToolEntry {
 
 const FG = {
 	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
-	pink: (t: string) => `\x1b[38;5;218m${t}\x1b[0m`,
-	yellow: (t: string) => `\x1b[38;5;220m${t}\x1b[0m`,
+	green: (t: string) => `\x1b[38;5;120m${t}\x1b[0m`,  // 浅绿 → thinking
+	purple: (t: string) => `\x1b[38;5;183m${t}\x1b[0m`, // 浅紫 → tool
 	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
-	green: (t: string) => `\x1b[32m${t}\x1b[0m`,
+	done: (t: string) => `\x1b[32m${t}\x1b[0m`,         // 深绿 → tool done
 } as const;
 
 type Cache = { width: number; collapsed: boolean; lines: string[] };
@@ -23,14 +23,15 @@ type Cache = { width: number; collapsed: boolean; lines: string[] };
 /**
  * Agent Turn 状态边框。
  *
- * finalMessage 到达后自动折叠 thinking/tool 为灰色摘要行。
- * toggle() 展开/收起，后续接键盘 Ctrl+O。
+ * thinking 显示时 spin 动画播放；tool 调用时 thinking 冻结为 ✓，
+ * 当前 tool 显示 spin。
  */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private turn = 0;
 	private turnCount = 0;
 	private thinkingContext = "";
+	private thinkingDone = false; // 首个 tool 进来后冻结 thinking
 	private tools: ToolEntry[] = [];
 	private finalText = "";
 	private collapsed = false;
@@ -48,6 +49,7 @@ export class AgentStatusBorder implements Component {
 		this.turn = turn;
 		this.turnCount++;
 		this.thinkingContext = "";
+		this.thinkingDone = false;
 		this.cache = undefined;
 	}
 
@@ -59,6 +61,7 @@ export class AgentStatusBorder implements Component {
 
 	addTool(name: string): void {
 		if (this.finalText) return;
+		this.thinkingDone = true; // 冻结 thinking
 		this.tools.push({ name, result: "", done: false });
 		this.cache = undefined;
 	}
@@ -77,25 +80,19 @@ export class AgentStatusBorder implements Component {
 
 	finalize(text: string): void {
 		this.finalText = text;
-		this.collapsed = true; // 默认折叠
+		this.collapsed = true;
 		this.stopSpinner();
 		this.cache = undefined;
 	}
 
-	/** 切换折叠/展开 */
 	toggle(): void {
 		this.collapsed = !this.collapsed;
 		this.cache = undefined;
 		this.tui.requestRender();
 	}
 
-	dispose(): void {
-		this.stopSpinner();
-	}
-
-	invalidate(): void {
-		this.cache = undefined;
-	}
+	dispose(): void { this.stopSpinner(); }
+	invalidate(): void { this.cache = undefined; }
 
 	render(width: number): string[] {
 		if (this.cache && this.cache.width === width && this.cache.collapsed === this.collapsed) {
@@ -111,14 +108,14 @@ export class AgentStatusBorder implements Component {
 		const dashRight = Math.max(0, width - visibleWidth(labelPart) - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
 
-		// —— 折叠摘要行 ——
+		// —— 折叠摘要 ——
 		if (this.finalText && this.collapsed) {
 			const toolCount = this.tools.length;
 			const summary = toolCount > 0
-				? `推理细节 ... ${this.turnCount} turns, ${toolCount} tools ── Ctrl+O 展开`
-				: `推理细节 ... ${this.turnCount} turns ── Ctrl+O 展开`;
+				? `推理细节 ... ${this.turnCount} turns, ${toolCount} tools ── /detail 展开`
+				: `推理细节 ... ${this.turnCount} turns ── /detail 展开`;
 			lines.push(padLine(c("│"), ` ${FG.gray(summary)}`, width, c("│")));
-			lines.push(padLine(c("│"), "", width, c("│"))); // 空行分隔
+			lines.push(padLine(c("│"), "", width, c("│")));
 		}
 
 		// —— 最终消息 ——
@@ -129,15 +126,17 @@ export class AgentStatusBorder implements Component {
 			}
 		}
 
-		// —— thinking/tool 日志（折叠时跳过）——
-		if (!this.finalText || (this.finalText && !this.collapsed)) {
-			if (!this.finalText) {
-				// thinking header（有 finalText 时不画 spinner）
-				const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
-				lines.push(padLine(c("│"), ` ${header}`, width, c("│")));
-			} else {
-				// 展开态：折叠行已画在顶部，这里画 frozen 的摘要标题
+		// —— thinking/tool 日志 ——
+		if (!this.finalText || !this.collapsed) {
+			if (this.finalText) {
+				// 展开态冻结摘要标题
 				lines.push(padLine(c("│"), ` ${FG.gray(`${turnNum}  ·  Thinking`)}`, width, c("│")));
+			} else {
+				// thinking header——thinking 未冻结时 spin，已冻结显示 ✓
+				const thinkingIcon = this.thinkingDone
+					? FG.green(`${turnNum}  ✓  Thinking`)
+					: FG.green(`${turnNum} ${spin}  Thinking`);
+				lines.push(padLine(c("│"), ` ${thinkingIcon}`, width, c("│")));
 			}
 
 			if (this.thinkingContext && !this.finalText) {
@@ -154,17 +153,22 @@ export class AgentStatusBorder implements Component {
 			if (this.tools.length > 0) {
 				lines.push(padLine(c("│"), `   ${c("────")}`, width, c("│")));
 
-				for (const tool of this.tools) {
+				for (let ti = 0; ti < this.tools.length; ti++) {
+					const tool = this.tools[ti]!;
+					const isLast = ti === this.tools.length - 1;
+					// 当前（最后一个未完成的）tool 显示 spin，否则显示 ✓
 					const toolHeader = tool.done
-						? FG.green(`${turnNum}  ✓  ${tool.name}`)
-						: FG.yellow(`${turnNum} ${spin}  Calling ${tool.name}`);
+						? FG.done(`${turnNum}  ✓  ${tool.name}`)
+						: isLast
+							? FG.purple(`${turnNum} ${spin}  Calling ${tool.name}`)
+							: FG.done(`${turnNum}  ✓  ${tool.name}`);
 					lines.push(padLine(c("│"), ` ${toolHeader}`, width, c("│")));
 
 					if (tool.result) {
 						const resLines = wrapLines(tool.result, width - 11).slice(0, 2);
 						for (let i = 0; i < resLines.length; i++) {
 							if (i === 0) {
-								const prefix = tool.done ? FG.gray("╰─>") : FG.yellow("╰─>");
+								const prefix = tool.done ? FG.gray("╰─>") : FG.purple("╰─>");
 								lines.push(padLine(c("│"), `   ${prefix} ${truncateToWidth(resLines[i]!, width - 12)}`, width, c("│")));
 							} else {
 								lines.push(padLine(c("│"), `         ${truncateToWidth(resLines[i]!, width - 15)}`, width, c("│")));

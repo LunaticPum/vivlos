@@ -22,6 +22,10 @@ export interface CommandContext {
 
 	/** 优雅退出——/quit 调用此方法而非 process.exit */
 	readonly shutdown: () => void;
+	/** 切换推理细节面板展开/折叠——/detail 调用 */
+	readonly toggleDetail?: () => void;
+	/** 当前细节面板状态——/detail 用 */
+	readonly expanded?: boolean;
 }
 
 /**
