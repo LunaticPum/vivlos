@@ -18,20 +18,22 @@ const FG = {
 	green: (t: string) => `\x1b[32m${t}\x1b[0m`,
 } as const;
 
-type Cache = { width: number; lines: string[] };
+type Cache = { width: number; collapsed: boolean; lines: string[] };
 
 /**
  * Agent Turn 状态边框。
  *
- * 内容驱动：有 finalText 就画最终消息，否则 thinking 和 tool 各自按内容显示。
- * thinking 永远在上方，tool 追加在下面。
+ * finalMessage 到达后自动折叠 thinking/tool 为灰色摘要行。
+ * toggle() 展开/收起，后续接键盘 Ctrl+O。
  */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private turn = 0;
+	private turnCount = 0;
 	private thinkingContext = "";
 	private tools: ToolEntry[] = [];
 	private finalText = "";
+	private collapsed = false;
 
 	private timer?: ReturnType<typeof setInterval>;
 	private spinnerFrame = 0;
@@ -44,37 +46,47 @@ export class AgentStatusBorder implements Component {
 
 	startTurn(turn: number): void {
 		this.turn = turn;
+		this.turnCount++;
 		this.thinkingContext = "";
 		this.cache = undefined;
-		// tools 不清——pi 的工具在 turn 之间执行，保留上个 turn 的 tool 条目
 	}
 
 	setThinking(text: string): void {
+		if (this.finalText) return;
 		this.thinkingContext = text;
 		this.cache = undefined;
 	}
 
 	addTool(name: string): void {
+		if (this.finalText) return;
 		this.tools.push({ name, result: "", done: false });
 		this.cache = undefined;
 	}
 
 	updateToolResult(text: string): void {
-		if (this.tools.length === 0) return;
+		if (this.tools.length === 0 || this.finalText) return;
 		this.tools[this.tools.length - 1]!.result = text;
 		this.cache = undefined;
 	}
 
 	endTool(): void {
-		if (this.tools.length === 0) return;
+		if (this.tools.length === 0 || this.finalText) return;
 		this.tools[this.tools.length - 1]!.done = true;
 		this.cache = undefined;
 	}
 
 	finalize(text: string): void {
 		this.finalText = text;
+		this.collapsed = true; // 默认折叠
 		this.stopSpinner();
 		this.cache = undefined;
+	}
+
+	/** 切换折叠/展开 */
+	toggle(): void {
+		this.collapsed = !this.collapsed;
+		this.cache = undefined;
+		this.tui.requestRender();
 	}
 
 	dispose(): void {
@@ -86,7 +98,9 @@ export class AgentStatusBorder implements Component {
 	}
 
 	render(width: number): string[] {
-		if (this.cache && this.cache.width === width) return this.cache.lines;
+		if (this.cache && this.cache.width === width && this.cache.collapsed === this.collapsed) {
+			return this.cache.lines;
+		}
 
 		const c = FG.cyan;
 		const lines: string[] = [];
@@ -97,17 +111,36 @@ export class AgentStatusBorder implements Component {
 		const dashRight = Math.max(0, width - visibleWidth(labelPart) - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
 
+		// —— 折叠摘要行 ——
+		if (this.finalText && this.collapsed) {
+			const toolCount = this.tools.length;
+			const summary = toolCount > 0
+				? `推理细节 ... ${this.turnCount} turns, ${toolCount} tools ── Ctrl+O 展开`
+				: `推理细节 ... ${this.turnCount} turns ── Ctrl+O 展开`;
+			lines.push(padLine(c("│"), ` ${FG.gray(summary)}`, width, c("│")));
+			lines.push(padLine(c("│"), "", width, c("│"))); // 空行分隔
+		}
+
+		// —— 最终消息 ——
 		if (this.finalText) {
 			const cl = wrapLines(this.finalText, width - 4);
 			for (const cline of cl) {
 				lines.push(`  ${truncateToWidth(cline, width - 4)}`);
 			}
-		} else {
-			// ── thinking（始终显示）──
-			const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
-			lines.push(padLine(c("│"), ` ${header}`, width, c("│")));
+		}
 
-			if (this.thinkingContext) {
+		// —— thinking/tool 日志（折叠时跳过）——
+		if (!this.finalText || (this.finalText && !this.collapsed)) {
+			if (!this.finalText) {
+				// thinking header（有 finalText 时不画 spinner）
+				const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
+				lines.push(padLine(c("│"), ` ${header}`, width, c("│")));
+			} else {
+				// 展开态：折叠行已画在顶部，这里画 frozen 的摘要标题
+				lines.push(padLine(c("│"), ` ${FG.gray(`${turnNum}  ·  Thinking`)}`, width, c("│")));
+			}
+
+			if (this.thinkingContext && !this.finalText) {
 				const ctxLines = wrapLines(this.thinkingContext, width - 11).slice(0, 3);
 				for (let i = 0; i < ctxLines.length; i++) {
 					if (i === 0) {
@@ -118,7 +151,6 @@ export class AgentStatusBorder implements Component {
 				}
 			}
 
-			// ── tool section（追加在 thinking 下方）──
 			if (this.tools.length > 0) {
 				lines.push(padLine(c("│"), `   ${c("────")}`, width, c("│")));
 
@@ -145,7 +177,7 @@ export class AgentStatusBorder implements Component {
 
 		lines.push(c(`╰${"─".repeat(width - 2)}╯`));
 
-		this.cache = { width, lines };
+		this.cache = { width, collapsed: this.collapsed, lines };
 		return lines;
 	}
 
