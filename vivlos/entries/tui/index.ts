@@ -7,7 +7,6 @@ import {
 	createStatusContainer,
 } from "./containers/index.ts";
 import type { CommandContext } from "@vivlos/commands/types.ts";
-import type { CommandRegistry } from "@vivlos/commands/index.ts";
 import { InputDecorator } from "./components/input-decorator.ts";
 
 export interface CreateTuiAppParams {
@@ -26,8 +25,13 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	const cmdCtxWithTui: CommandContext = {
 		...cmdCtx,
 		tui,
-		toggleDetail: () => { detailExpanded = !detailExpanded; chat.toggleDetail(); },
-		get expanded() { return detailExpanded; },
+		toggleDetail: () => {
+			detailExpanded = !detailExpanded;
+			chat.toggleDetail();
+		},
+		get expanded() {
+			return detailExpanded;
+		},
 	};
 
 	const chat = createChatContainer(tui);
@@ -147,7 +151,9 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		try {
 			await agent.prompt(value);
 		} catch (err) {
-			status.showError(`fatal: ${err instanceof Error ? err.message : String(err)}`);
+			status.showError(
+				`fatal: ${err instanceof Error ? err.message : String(err)}`,
+			);
 			inputContainer.enable();
 			tui.requestRender();
 		}
@@ -158,5 +164,12 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		cmdCtxWithTui.shutdown();
 	};
 
-	return { start() { tui.start(); }, stop() { tui.stop(); } };
+	return {
+		start() {
+			tui.start();
+		},
+		stop() {
+			tui.stop();
+		},
+	};
 }
