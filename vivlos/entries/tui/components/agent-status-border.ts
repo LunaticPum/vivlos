@@ -197,11 +197,12 @@ export class AgentStatusBorder implements Component {
 					const icon = isActive ? `${spin}` : "✓";
 					body.push(` ${d(icon)} ${h("Thinking...")}`);
 					if (e.text) {
-						const ctxLines = wrapLines(e.text, innerContentW).slice(0, 3);
+						// 可用宽度: innerW - 2(inner│) - 5(prefix " ╰─> ") = innerW - 7
+						const maxTextW = Math.max(1, innerW - 7);
+						const ctxLines = wrapLines(e.text, maxTextW).slice(0, 3);
 						for (let j = 0; j < ctxLines.length; j++) {
 							const prefix = j === 0 ? g("╰─> ") : "    ";
-							const maxTextW = innerW - 2 - 5; // 5 = " ╰─> " prefix width
-							body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, Math.max(1, maxTextW)))}`);
+							body.push(` ${prefix}${g(ctxLines[j]!)}`);
 						}
 					}
 				} else {
@@ -209,11 +210,11 @@ export class AgentStatusBorder implements Component {
 					const icon = isActive ? `${spin}` : "✓";
 					body.push(` ${d(icon)} ${t(`Calling ${e.name}`)}`);
 					if (e.result) {
-						const resLines = wrapLines(e.result, innerContentW).slice(0, 3);
+						const maxTextW = Math.max(1, innerW - 7);
+						const resLines = wrapLines(e.result, maxTextW).slice(0, 3);
 						for (let j = 0; j < resLines.length; j++) {
 							const prefix = j === 0 ? g("╰─> ") : "    ";
-							const maxTextW = innerW - 2 - 5; // 5 = " ╰─> " prefix width
-							body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, Math.max(1, maxTextW)))}`);
+							body.push(` ${prefix}${g(resLines[j]!)}`);
 						}
 					}
 				}
