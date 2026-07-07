@@ -29,7 +29,7 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	heading: (t) => FG.bold(FG.cyan(t)),
 	link: (t) => FG.underline(FG.cyan(t)),
 	linkUrl: (t) => FG.gray(t),
-	code: (t) => FG.gray(`\`${t}\``),
+	code: (t) => FG.gray(t),
 	codeBlock: (t) => FG.gray(t),
 	codeBlockBorder: (t) => FG.gray(t),
 	quote: (t) => FG.gray(t),
@@ -40,7 +40,7 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	italic: (t) => FG.italic(t),
 	strikethrough: (t) => FG.strikethrough(t),
 	underline: (t) => FG.underline(t),
-	highlightCode: (code) => code.split("\n").map((line) => FG.gray(`  ${line}`)),
+	highlightCode: (code) => code.split("\n").map((line) => FG.gray(line)),
 	codeBlockIndent: "",
 };
 
@@ -59,6 +59,8 @@ export class AgentStatusBorder implements Component {
 	private spinnerFrame = 0;
 	private cache?: Cache;
 	private mdComponent: Markdown | null = null;
+	/** thinking 文本 → Markdown 组件缓存，仅 text 变化时重建 */
+	private thinkingMdCache: { text: string; md: Markdown } | null = null;
 
 	constructor(tui: TUI) {
 		this.tui = tui;
@@ -206,10 +208,11 @@ export class AgentStatusBorder implements Component {
 					if (e.text) {
 						// 可用宽度: innerW - 2(inner│) - 5(prefix " ╰─> ") = innerW - 7
 						const maxTextW = Math.max(1, innerW - 7);
-						const ctxLines = wrapLines(e.text, maxTextW).slice(0, 3);
-						for (let j = 0; j < ctxLines.length; j++) {
-							const prefix = j === 0 ? g("╰─> ") : "    ";
-							body.push(` ${prefix}${g(ctxLines[j]!)}`);
+						const md = this.getThinkingMd(e.text);
+						const mdLines = md.render(maxTextW).slice(0, 3);
+						for (let j = 0; j < mdLines.length; j++) {
+							const prefix = g(j === 0 ? "╰─> " : "  ┆ ");
+							body.push(` ${prefix}${mdLines[j]!}`);
 						}
 					}
 				} else {
@@ -220,7 +223,7 @@ export class AgentStatusBorder implements Component {
 						const maxTextW = Math.max(1, innerW - 7);
 						const resLines = wrapLines(e.result, maxTextW).slice(0, 3);
 						for (let j = 0; j < resLines.length; j++) {
-							const prefix = j === 0 ? g("╰─> ") : "    ";
+							const prefix = g(j === 0 ? "╰─> " : "  ┆ ");
 							body.push(` ${prefix}${g(resLines[j]!)}`);
 						}
 					}
@@ -254,6 +257,16 @@ export class AgentStatusBorder implements Component {
 
 	private stopSpinner(): void {
 		if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
+	}
+
+	/** 获取 thinking 文本对应的 Markdown 组件（缓存复用） */
+	private getThinkingMd(text: string): Markdown {
+		if (this.thinkingMdCache && this.thinkingMdCache.text === text) {
+			return this.thinkingMdCache.md;
+		}
+		const md = new Markdown(text, 0, 0, MARKDOWN_THEME, MARKDOWN_DEFAULT_TEXT);
+		this.thinkingMdCache = { text, md };
+		return md;
 	}
 }
 
