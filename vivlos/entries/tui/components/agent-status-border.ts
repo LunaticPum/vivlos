@@ -4,8 +4,6 @@ import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 const TURN_NUMBERS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
 
-type Phase = "thinking" | "tool" | "final";
-
 interface ToolEntry {
 	name: string;
 	result: string;
@@ -25,13 +23,12 @@ type Cache = { width: number; lines: string[] };
 /**
  * Agent Turn 状态边框。
  *
- * thinking 永远在最上方，tool 追加在下面用 ──── 分隔。
- * 所有 context/result 行与首行箭头对齐。
+ * 内容驱动：有 finalText 就画最终消息，否则 thinking 和 tool 各自按内容显示。
+ * thinking 永远在上方，tool 追加在下面。
  */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private turn = 0;
-	private phase: Phase = "thinking";
 	private thinkingContext = "";
 	private tools: ToolEntry[] = [];
 	private finalText = "";
@@ -45,27 +42,20 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
-	// ── API ──
-
 	startTurn(turn: number): void {
 		this.turn = turn;
 		this.tools = [];
 		this.thinkingContext = "";
 		this.finalText = "";
-		this.phase = "thinking";
 		this.cache = undefined;
 	}
 
 	setThinking(text: string): void {
-		if (this.phase === "final") return;
-		this.phase = "thinking";
 		this.thinkingContext = text;
 		this.cache = undefined;
 	}
 
 	addTool(name: string): void {
-		if (this.phase === "final") return;
-		this.phase = "tool";
 		this.tools.push({ name, result: "", done: false });
 		this.cache = undefined;
 	}
@@ -84,7 +74,6 @@ export class AgentStatusBorder implements Component {
 
 	finalize(text: string): void {
 		this.finalText = text;
-		this.phase = "final";
 		this.stopSpinner();
 		this.cache = undefined;
 	}
@@ -97,8 +86,6 @@ export class AgentStatusBorder implements Component {
 		this.cache = undefined;
 	}
 
-	// ── render ──
-
 	render(width: number): string[] {
 		if (this.cache && this.cache.width === width) return this.cache.lines;
 
@@ -107,36 +94,32 @@ export class AgentStatusBorder implements Component {
 		const turnNum = TURN_NUMBERS[(this.turn - 1) % TURN_NUMBERS.length] ?? String(this.turn);
 		const spin = BRAILLE[this.spinnerFrame % BRAILLE.length] ?? "?";
 
-		// ╭── vivlos ──╮
 		const labelPart = "── vivlos ──";
 		const dashRight = Math.max(0, width - visibleWidth(labelPart) - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
 
-		if (this.phase === "final") {
-			if (this.finalText) {
-				const cl = wrapLines(this.finalText, width - 4);
-				for (const cline of cl) {
-					lines.push(`  ${truncateToWidth(cline, width - 4)}`);
-				}
+		if (this.finalText) {
+			const cl = wrapLines(this.finalText, width - 4);
+			for (const cline of cl) {
+				lines.push(`  ${truncateToWidth(cline, width - 4)}`);
 			}
 		} else {
-			// ── thinking 区（始终显示）──
+			// ── thinking（始终显示）──
 			const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
 			lines.push(padLine(c("│"), ` ${header}`, width, c("│")));
 
 			if (this.thinkingContext) {
-				const arrowIndent = "      "; // 与 "  ⠋  " + 4空格对齐
 				const ctxLines = wrapLines(this.thinkingContext, width - 11).slice(0, 3);
 				for (let i = 0; i < ctxLines.length; i++) {
 					if (i === 0) {
 						lines.push(padLine(c("│"), `   ${FG.gray("╰─>")} ${truncateToWidth(ctxLines[i]!, width - 12)}`, width, c("│")));
 					} else {
-						lines.push(padLine(c("│"), `   ${arrowIndent}${truncateToWidth(ctxLines[i]!, width - 12)}`, width, c("│")));
+						lines.push(padLine(c("│"), `         ${truncateToWidth(ctxLines[i]!, width - 15)}`, width, c("│")));
 					}
 				}
 			}
 
-			// ── tool 区（追加在 thinking 下面，用分隔线隔开）──
+			// ── tool section（追加在 thinking 下方）──
 			if (this.tools.length > 0) {
 				lines.push(padLine(c("│"), `   ${c("────")}`, width, c("│")));
 
@@ -147,14 +130,13 @@ export class AgentStatusBorder implements Component {
 					lines.push(padLine(c("│"), ` ${toolHeader}`, width, c("│")));
 
 					if (tool.result) {
-						const arrowIndent = "      ";
 						const resLines = wrapLines(tool.result, width - 11).slice(0, 2);
 						for (let i = 0; i < resLines.length; i++) {
 							if (i === 0) {
 								const prefix = tool.done ? FG.gray("╰─>") : FG.yellow("╰─>");
 								lines.push(padLine(c("│"), `   ${prefix} ${truncateToWidth(resLines[i]!, width - 12)}`, width, c("│")));
 							} else {
-								lines.push(padLine(c("│"), `   ${arrowIndent}${truncateToWidth(resLines[i]!, width - 12)}`, width, c("│")));
+								lines.push(padLine(c("│"), `         ${truncateToWidth(resLines[i]!, width - 15)}`, width, c("│")));
 							}
 						}
 					}
@@ -182,7 +164,6 @@ export class AgentStatusBorder implements Component {
 	}
 }
 
-/** 生成一行带左右边框的等宽填充行 */
 function padLine(border: string, content: string, width: number, rightBorder: string): string {
 	const contentWidth = visibleWidth(content);
 	const pad = Math.max(0, width - contentWidth - visibleWidth(rightBorder) - 1);
