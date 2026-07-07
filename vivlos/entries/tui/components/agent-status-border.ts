@@ -44,10 +44,9 @@ export class AgentStatusBorder implements Component {
 
 	startTurn(turn: number): void {
 		this.turn = turn;
-		this.tools = [];
 		this.thinkingContext = "";
-		this.finalText = "";
 		this.cache = undefined;
+		// tools 不清——pi 的工具在 turn 之间执行，保留上个 turn 的 tool 条目
 	}
 
 	setThinking(text: string): void {
