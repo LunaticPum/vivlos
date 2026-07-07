@@ -16,14 +16,14 @@ export interface ChatContainer {
 	// AgentStatusBorder 生命周期
 	startTurn(turn: number): void;
 	setThinking(text: string): void;
-	addTool(name: string): void;
-	updateToolResult(text: string): void;
-	endTool(): void;
+	addTool(name: string, callId: string): void;
+	updateToolResult(callId: string, text: string): void;
+	endTool(callId: string): void;
+	turnComplete(): void;
 	finalizeTurn(text: string): void;
 	clearTurn(): void;
 	/** 切换推理细节折叠/展开 */
 	toggleDetail(): void;
-	/** 追加一条 assistant 消息（非流式路径用） */
 
 	appendToolStart(toolCallId: string, toolName: string): void;
 	appendToolEnd(toolCallId: string, isSuccess: boolean, summary: string): void;
@@ -65,16 +65,20 @@ export function createChatContainer(tui: TUI): ChatContainer {
 			agentBorder?.setThinking(text);
 		},
 
-		addTool(name) {
-			agentBorder?.addTool(name);
+		addTool(name, callId) {
+			agentBorder?.addTool(name, callId);
 		},
 
-		updateToolResult(text) {
-			agentBorder?.updateToolResult(text);
+		updateToolResult(callId, text) {
+			agentBorder?.updateToolResult(callId, text);
 		},
 
-		endTool() {
-			agentBorder?.endTool();
+		endTool(callId) {
+			agentBorder?.endTool(callId);
+		},
+
+		turnComplete() {
+			agentBorder?.turnComplete();
 		},
 
 		finalizeTurn(text) {

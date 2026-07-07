@@ -86,7 +86,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		if (fromSnapshot) {
 			chat.setThinking(fromSnapshot);
 		} else {
-			// fallback: delta 累积（某些模型可能只发 delta 不带 snapshot）
 			chat.setThinking(e.delta);
 		}
 		tui.requestRender();
@@ -112,24 +111,28 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	});
 
 	eventBus.on("agent:toolCall_start", (e) => {
-		chat.addTool(e.toolName);
+		chat.addTool(e.toolName, e.callId);
 		status.showToolRunning(e.toolName);
 		tui.requestRender();
 	});
 
 	eventBus.on("agent:toolCall_delta", (e) => {
-		chat.updateToolResult(extractToolText(e.partialResult));
+		chat.updateToolResult(e.callId, extractToolText(e.partialResult));
 		tui.requestRender();
 	});
 
 	eventBus.on("agent:toolCall_end", (e) => {
-		chat.updateToolResult(extractToolText(e.result));
-		chat.endTool();
+		chat.updateToolResult(e.callId, extractToolText(e.result));
+		chat.endTool(e.callId);
 		status.showToolDone(e.success);
 		tui.requestRender();
 	});
 
-	eventBus.on("agent:turn_complete", () => {});
+	eventBus.on("agent:turn_complete", () => {
+		chat.turnComplete();
+		tui.requestRender();
+	});
+
 	eventBus.on("agent:error", (e) => {
 		chat.clearTurn();
 		status.showError(e.error.message);

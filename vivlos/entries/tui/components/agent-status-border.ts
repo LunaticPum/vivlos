@@ -6,7 +6,8 @@ const MIN_SPIN_MS = 400;
 
 type LogEntry =
 	| { kind: "thinking"; text: string }
-	| { kind: "tool"; name: string; result: string; done: boolean; startedAt: number };
+	| { kind: "tool"; name: string; callId: string; result: string; done: boolean; startedAt: number }
+	| { kind: "turn_sep" };
 
 const FG = {
 	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
@@ -21,6 +22,9 @@ type Cache = { width: number; collapsed: boolean; lines: string[] };
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private logs: LogEntry[] = [];
+	private activeThinkingIdx = -1;
+	/** callId → logs 索引映射，解决并行 tool 事件交错时 result 写到错误条目 */
+	private callIdMap = new Map<string, number>();
 	private finalText = "";
 	private collapsed = false;
 	private startTime = 0;
@@ -35,32 +39,59 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
-	startTurn(_turn: number): void { this.cache = undefined; }
+	startTurn(_turn: number): void {
+		this.cache = undefined;
+		this.activeThinkingIdx = -1;
+	}
 
 	setThinking(text: string): void {
-		const last = this.logs[this.logs.length - 1];
-		if (last && last.kind === "thinking") { last.text = text; }
-		else { this.logs.push({ kind: "thinking", text }); }
+		if (this.activeThinkingIdx >= 0 && this.activeThinkingIdx < this.logs.length) {
+			const entry = this.logs[this.activeThinkingIdx];
+			if (entry?.kind === "thinking") {
+				entry.text = text;
+				this.cache = undefined;
+				return;
+			}
+		}
+		this.logs.push({ kind: "thinking", text });
+		this.activeThinkingIdx = this.logs.length - 1;
 		this.cache = undefined;
 	}
 
-	addTool(name: string): void {
-		this.logs.push({ kind: "tool", name, result: "", done: false, startedAt: Date.now() });
+	addTool(name: string, callId: string): void {
+		this.activeThinkingIdx = -1;
+		const idx = this.logs.length;
+		this.logs.push({ kind: "tool", name, callId, result: "", done: false, startedAt: Date.now() });
+		this.callIdMap.set(callId, idx);
 		this.cache = undefined;
 	}
 
-	updateToolResult(text: string): void {
-		const last = this.logs[this.logs.length - 1];
-		if (last?.kind === "tool") { last.result = text; this.cache = undefined; }
+	updateToolResult(callId: string, text: string): void {
+		const idx = this.callIdMap.get(callId);
+		if (idx !== undefined) {
+			const entry = this.logs[idx];
+			if (entry?.kind === "tool") { entry.result = text; this.cache = undefined; }
+		}
 	}
 
-	endTool(): void {
-		const last = this.logs[this.logs.length - 1];
-		if (last?.kind === "tool") { last.done = true; this.cache = undefined; }
+	endTool(callId: string): void {
+		const idx = this.callIdMap.get(callId);
+		if (idx !== undefined) {
+			const entry = this.logs[idx];
+			if (entry?.kind === "tool") { entry.done = true; this.cache = undefined; }
+		}
+	}
+
+	/** turn 结束时标记分隔线并清除 thinking 活跃状态 */
+	turnComplete(): void {
+		this.activeThinkingIdx = -1;
+		this.logs.push({ kind: "turn_sep" });
+		this.cache = undefined;
 	}
 
 	finalize(text: string): void {
 		this.finalText = text;
+		this.activeThinkingIdx = -1;
 		this.stopSpinner();
 		this.cache = undefined;
 	}
@@ -91,12 +122,12 @@ export class AgentStatusBorder implements Component {
 		const dashR = Math.max(0, width - visibleWidth(header) - 2);
 		lines.push(c(`╭${header}${"─".repeat(dashR)}╮`));
 
-		const turnCount = this.logs.filter((e) => e.kind === "thinking").length;
-		const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 		const hasLogs = this.logs.length > 0;
 		const label = "── 推理过程 ──";
 
 		if (this.finalText && this.collapsed && hasLogs) {
+			const turnCount = this.logs.filter((e) => e.kind === "turn_sep").length + 1;
+			const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 			const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
 			const summary = `${turnCount} Turns  ${toolCount} Tools  耗时 ${elapsed}s`;
 			drawInnerBox(lines, label, innerW, width, [h(` ${summary}`)], false);
@@ -108,39 +139,38 @@ export class AgentStatusBorder implements Component {
 			}
 		} else if (hasLogs) {
 			const body: string[] = [];
-			const thinkList: { idx: number; entry: LogEntry & { kind: "thinking" } }[] = [];
-			const toolList: { idx: number; entry: LogEntry & { kind: "tool" } }[] = [];
+			const innerContentW = innerW - 4;
 
 			for (let i = 0; i < this.logs.length; i++) {
 				const e = this.logs[i]!;
-				if (e.kind === "thinking") thinkList.push({ idx: i, entry: e });
-				else toolList.push({ idx: i, entry: e });
-			}
 
-			for (const { idx, entry } of thinkList) {
-				const isActive = !this.finalText && this.isActiveEntry(idx);
-				const icon = isActive ? `${spin}` : "✓";
-				body.push(` ${d(icon)} ${h("Thinking...")}`);
-				const ctxLines = wrapLines(entry.text, innerW - 6).slice(0, 3);
-				for (let j = 0; j < ctxLines.length; j++) {
-					const prefix = j === 0 ? g("╰─> ") : "    ";
-					body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, innerW - 6))}`);
+				// turn 分隔线：cyan 全宽横线
+				if (e.kind === "turn_sep") {
+					body.push(c(` ${"─".repeat(innerContentW)}`));
+					continue;
 				}
-			}
 
-			if (thinkList.length > 0 && toolList.length > 0) {
-				body.push(g(" ────────────────────────────"));
-			}
-
-			for (const { idx, entry } of toolList) {
-				const isActive = !this.finalText && this.isActiveEntry(idx);
-				const icon = isActive ? `${spin}` : "✓";
-				body.push(` ${d(icon)} ${t(`Calling ${entry.name}`)}`);
-				if (entry.result) {
-					const resLines = wrapLines(entry.result, innerW - 6).slice(0, 2);
-					for (let j = 0; j < resLines.length; j++) {
-						const prefix = j === 0 ? g("╰─> ") : "    ";
-						body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, innerW - 6))}`);
+				if (e.kind === "thinking") {
+					const isActive = !this.finalText && i === this.activeThinkingIdx;
+					const icon = isActive ? `${spin}` : "✓";
+					body.push(` ${d(icon)} ${h("Thinking...")}`);
+					if (e.text) {
+						const ctxLines = wrapLines(e.text, innerContentW).slice(0, 3);
+						for (let j = 0; j < ctxLines.length; j++) {
+							const prefix = j === 0 ? g("╰─> ") : "    ";
+							body.push(` ${prefix}${g(truncateToWidth(ctxLines[j]!, innerContentW))}`);
+						}
+					}
+				} else {
+					const isActive = !this.finalText && i === this.logs.length - 1 && !e.done;
+					const icon = isActive ? `${spin}` : "✓";
+					body.push(` ${d(icon)} ${t(`Calling ${e.name}`)}`);
+					if (e.result) {
+						const resLines = wrapLines(e.result, innerContentW).slice(0, 3);
+						for (let j = 0; j < resLines.length; j++) {
+							const prefix = j === 0 ? g("╰─> ") : "    ";
+							body.push(` ${prefix}${g(truncateToWidth(resLines[j]!, innerContentW))}`);
+						}
 					}
 				}
 			}
@@ -167,18 +197,6 @@ export class AgentStatusBorder implements Component {
 		return lines;
 	}
 
-	private isActiveEntry(i: number): boolean {
-		if (this.finalText) return false;
-		const last = this.logs[this.logs.length - 1];
-		if (!last) return false;
-		if (last.kind === "thinking") return i === this.logs.length - 1;
-		if (last.kind === "tool") {
-			if (!last.done) return i === this.logs.length - 1;
-			if (Date.now() - last.startedAt < MIN_SPIN_MS) return i === this.logs.length - 1;
-		}
-		return false;
-	}
-
 	private startSpinner(): void {
 		if (this.timer) return;
 		this.timer = setInterval(() => {
@@ -195,33 +213,28 @@ export class AgentStatusBorder implements Component {
 
 /**
  * drawInnerBox: 画 ┌── label ──┐ ... └──────┘
- * 
- * 关键：body 行的左右 border │ 不套 ANSI 转义——
- * 避免 ANSI 嵌套导致 visibleWidth 计算错位、边框断裂。
- * border 字符用纯文本，body 内容的 ANSI 不影响宽度计算。
+ *
+ * body 行的左右 border │ 不套 ANSI，纯文本。
+ * 避免 ANSI 嵌套导致 visibleWidth 计算错位。
  */
 function drawInnerBox(
 	lines: string[], label: string, innerW: number, fullW: number,
-	body: string[], expanded: boolean,
+	body: string[], _expanded: boolean,
 ): void {
 	const padInner = Math.max(0, innerW - 2);
-	const capLab = Math.max(0, padInner - visibleWidth(label));
-	// top line: │ ┌── label ──┐ │
-	// 左 │ 用 cyan ANSI，内框 ┌──label──┐ 不套 ANSI
+	const labelW = visibleWidth(label);
+	const capLab = Math.max(0, padInner - labelW);
 	const innerTop = `┌${label}${"─".repeat(capLab)}┐`;
 	lines.push(makeLine(FG.cyan("│"), ` ${innerTop}`, fullW, FG.cyan("│")));
 
 	for (const bline of body) {
-		// body 行: │ │ content padding │ │
-		// 内框左右 │ 不套 ANSI，纯文本
 		const contentW = visibleWidth(bline);
 		const padding = Math.max(0, innerW - 2 - contentW);
 		const row = `│${bline}${" ".repeat(padding)}│`;
 		lines.push(makeLine(FG.cyan("│"), ` ${row}`, fullW, FG.cyan("│")));
 	}
 
-	// bottom line: │ └──────┘ │
-	const innerBot = `└${"─".repeat(padInner)}┘`;
+	const innerBot = `└${"─".repeat(Math.max(0, padInner - 2))}┘`;
 	lines.push(makeLine(FG.cyan("│"), ` ${innerBot}`, fullW, FG.cyan("│")));
 }
 
