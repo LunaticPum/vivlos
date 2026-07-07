@@ -22,7 +22,13 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	const terminal = new ProcessTerminal();
 	const tui = new TUI(terminal);
 
-	const cmdCtxWithTui: CommandContext = { ...cmdCtx, tui };
+	let detailExpanded = false;
+	const cmdCtxWithTui: CommandContext = {
+		...cmdCtx,
+		tui,
+		toggleDetail: () => { detailExpanded = !detailExpanded; chat.toggleDetail(); },
+		get expanded() { return detailExpanded; },
+	};
 
 	const chat = createChatContainer(tui);
 	const status = createStatusContainer(tui);
@@ -40,17 +46,12 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	tui.addChild(inputBottomDecorator);
 	tui.setFocus(inputContainer.input);
 
-	// ── 状态追踪 ──
 	let currentTurn = 0;
 	let thinkingBuffer = "";
-	let textBuffer = "";
-
-	// ── EventBus → UI ──
 
 	eventBus.on("agent:start", () => {
 		currentTurn = 0;
 		thinkingBuffer = "";
-		textBuffer = "";
 		chat.clearTurn();
 		status.showLoading();
 		tui.requestRender();
@@ -59,28 +60,36 @@ export function createTuiApp(params: CreateTuiAppParams) {
 	eventBus.on("agent:turn_start", (e) => {
 		currentTurn = e.turn;
 		thinkingBuffer = "";
-		textBuffer = "";
 		chat.startTurn(e.turn);
 		status.clear();
 		tui.requestRender();
 	});
 
-	// thinking_delta → 填充 thinking context
+	// thinking_delta → 推送 thinking 到日志
 	eventBus.on("agent:thinking_delta", (e) => {
 		thinkingBuffer += e.delta;
 		chat.setThinking(thinkingBuffer);
 		tui.requestRender();
 	});
 
-	// message_delta (text_delta) → LLM 正文，不覆盖 thinking
+	// message_delta (text_delta) → 如果无 thinking_delta，用首个 text_delta 作为 thinking
 	eventBus.on("agent:message_delta", (e) => {
-		textBuffer += e.delta;
+		if (!thinkingBuffer) {
+			chat.setThinking(e.delta);
+		}
 		tui.requestRender();
 	});
 
-	eventBus.on("agent:message_complete", (e) => {
-		chat.finalizeTurn(e.content);
+	// turn 结束——不 finalize（留到 agent:complete 再收尾）
+	eventBus.on("agent:message_complete", () => {
+		tui.requestRender();
+	});
+
+	// agent 结束——传入 finalMessage 作为最终回复
+	eventBus.on("agent:complete", (e) => {
+		chat.finalizeTurn(e.finalMessage);
 		status.clear();
+		inputContainer.enable();
 		tui.requestRender();
 	});
 
@@ -103,13 +112,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	eventBus.on("agent:turn_complete", () => {});
 
-	eventBus.on("agent:complete", () => {
-		status.clear();
-		chat.clearTurn();
-		inputContainer.enable();
-		tui.requestRender();
-	});
-
 	eventBus.on("agent:error", (e) => {
 		chat.clearTurn();
 		status.showError(e.error.message);
@@ -117,7 +119,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		tui.requestRender();
 	});
 
-	// ── 输入提交 ──
 	inputContainer.onSubmit = async (value: string) => {
 		if (!value.trim()) return;
 
@@ -145,9 +146,7 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		try {
 			await agent.prompt(value);
 		} catch (err) {
-			status.showError(
-				`fatal: ${err instanceof Error ? err.message : String(err)}`,
-			);
+			status.showError(`fatal: ${err instanceof Error ? err.message : String(err)}`);
 			inputContainer.enable();
 			tui.requestRender();
 		}
@@ -158,8 +157,5 @@ export function createTuiApp(params: CreateTuiAppParams) {
 		cmdCtxWithTui.shutdown();
 	};
 
-	return {
-		start() { tui.start(); },
-		stop() { tui.stop(); },
-	};
+	return { start() { tui.start(); }, stop() { tui.stop(); } };
 }

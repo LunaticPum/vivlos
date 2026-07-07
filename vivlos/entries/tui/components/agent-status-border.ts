@@ -3,27 +3,19 @@ import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 
-// ── 日志条目 ──
 type LogEntry =
 	| { kind: "thinking"; text: string }
 	| { kind: "tool"; name: string; result: string; done: boolean };
 
-// ── 颜色 ──
 const FG = {
-	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,       // 外框
-	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,       // 内框 + 普通文本
-	green: (t: string) => `\x1b[92m${t}\x1b[0m`,      // Thinking... / Calling
-	done: (t: string) => `\x1b[32m${t}\x1b[0m`,       // ✓
+	cyan: (t: string) => `\x1b[36m${t}\x1b[0m`,
+	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
+	green: (t: string) => `\x1b[92m${t}\x1b[0m`,
+	done: (t: string) => `\x1b[32m${t}\x1b[0m`,
 } as const;
 
 type Cache = { width: number; collapsed: boolean; lines: string[] };
 
-/**
- * Agent Turn 状态边框。
- *
- * 外框 ╭╮╰╯ + 内框 ┌─┐└─┘（推理过程）。
- * thinking/tool 日志追加式存储，render 时遍历渲染。
- */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
 	private logs: LogEntry[] = [];
@@ -41,25 +33,16 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
-	startTurn(_turn: number): void {
-		// 不主动 push thinking——thinking 由 setThinking() 追加
-		this.cache = undefined;
-	}
+	startTurn(_turn: number): void { this.cache = undefined; }
 
 	setThinking(text: string): void {
-		if (this.finalText) return;
 		const last = this.logs[this.logs.length - 1];
-		if (last && last.kind === "thinking") {
-			// 同一段 thinking 内更新文本
-			last.text = text;
-		} else {
-			this.logs.push({ kind: "thinking", text });
-		}
+		if (last && last.kind === "thinking") { last.text = text; }
+		else { this.logs.push({ kind: "thinking", text }); }
 		this.cache = undefined;
 	}
 
 	addTool(name: string): void {
-		if (this.finalText) return;
 		this.logs.push({ kind: "tool", name, result: "", done: false });
 		this.cache = undefined;
 	}
@@ -99,6 +82,7 @@ export class AgentStatusBorder implements Component {
 		const d = FG.done;
 		const spin = BRAILLE[this.spinnerFrame % BRAILLE.length] ?? "?";
 		const lines: string[] = [];
+		const innerW = width - 4;
 
 		// ╭── vivlos ──╮
 		const header = "── vivlos ──";
@@ -108,22 +92,25 @@ export class AgentStatusBorder implements Component {
 		const turnCount = this.logs.filter((e) => e.kind === "thinking").length;
 		const toolCount = this.logs.filter((e) => e.kind === "tool").length;
 		const hasLogs = this.logs.length > 0;
-
-		// ──── 内框（推理过程）────
-		const innerW = width - 4; // 左右各缩进 1 个 │ + 1 空格
+		const label = "── 推理过程 ──";
 
 		if (this.finalText && this.collapsed && hasLogs) {
-			// 折叠摘要行
 			const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
 			const summary = `${turnCount} Turns  ${toolCount} Tools  耗时 ${elapsed}s`;
-			drawInnerBox(lines, c, g, innerW, width, [g(` ${summary}`)]);
+			drawInnerBox(lines, c, g, label, innerW, width, [g(` ${summary}`)]);
+
+			lines.push(pad(c("│"), "", width, c("│")));
+			const cl = wrapLines(this.finalText, width - 4);
+			for (const cline of cl) {
+				lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
+			}
 		} else if (hasLogs) {
 			const body: string[] = [];
 			let lastKind: string | null = null;
 
 			for (let i = 0; i < this.logs.length; i++) {
 				const entry = this.logs[i]!;
-				const isActive = this.isActiveEntry(i);
+				const isActive = !this.finalText && this.isActiveEntry(i);
 
 				if (entry.kind === "thinking") {
 					if (lastKind === "tool") body.push(g(" ────────────────────────────"));
@@ -137,7 +124,7 @@ export class AgentStatusBorder implements Component {
 				} else {
 					if (lastKind === "thinking") body.push(g(" ────────────────────────────"));
 					const icon = isActive ? `${spin}` : "✓";
-					body.push(` ${d(icon)} ${isActive ? h(`Calling ${entry.name}`) : h(entry.name)}`);
+					body.push(` ${d(icon)} ${h(`Calling ${entry.name}`)}`);
 					if (entry.result) {
 						const resLines = wrapLines(entry.result, innerW - 6).slice(0, 2);
 						for (let j = 0; j < resLines.length; j++) {
@@ -148,33 +135,34 @@ export class AgentStatusBorder implements Component {
 				}
 				lastKind = entry.kind;
 			}
-			drawInnerBox(lines, c, g, innerW, width, body);
-		}
+			drawInnerBox(lines, c, g, label, innerW, width, body);
 
-		// ──── final 文本 ────
-		if (this.finalText) {
-			if (hasLogs) lines.push(c(`│ ${" ".repeat(width - 4)} ${c("│")}`)); // 空行分隔
+			if (this.finalText) {
+				lines.push(pad(c("│"), "", width, c("│")));
+				const cl = wrapLines(this.finalText, width - 4);
+				for (const cline of cl) {
+					lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
+				}
+			}
+		} else if (this.finalText) {
 			const cl = wrapLines(this.finalText, width - 4);
 			for (const cline of cl) {
-				lines.push(`  ${truncateToWidth(cline, width - 4)}`);
+				lines.push(pad(c("│"), ` ${truncateToWidth(cline, width - 4)}`, width, c("│")));
 			}
 		}
 
-		// ╰──...──╯
 		lines.push(c(`╰${"─".repeat(width - 2)}╯`));
 
 		this.cache = { width, collapsed: this.collapsed, lines };
 		return lines;
 	}
 
-	/** 判断 logs[i] 是否为当前 active 条目（显示 spin） */
 	private isActiveEntry(i: number): boolean {
 		if (this.finalText) return false;
-		// 最后一个未完成的条目是 active
 		const last = this.logs[this.logs.length - 1];
 		if (!last) return false;
-		if (last.kind === "tool" && !last.done) return i === this.logs.length - 1;
-		return last.kind === "thinking" && i === this.logs.length - 1;
+		return last.kind === "tool" && !last.done ? i === this.logs.length - 1
+			: last.kind === "thinking" ? i === this.logs.length - 1 : false;
 	}
 
 	private startSpinner(): void {
@@ -191,17 +179,14 @@ export class AgentStatusBorder implements Component {
 	}
 }
 
-/** 画内框 ┌─...─┐ / │body│ / └─...─┘ */
 function drawInnerBox(
-	lines: string[],
-	c: (s: string) => string,
-	g: (s: string) => string,
-	innerW: number,
-	fullW: number,
-	body: string[],
+	lines: string[], c: (s: string) => string, g: (s: string) => string,
+	label: string, innerW: number, fullW: number, body: string[],
 ): void {
 	const padInner = Math.max(0, innerW - 2);
-	lines.push(pad(c("│"), ` ${g(`┌${"─".repeat(padInner)}┐`)}`, fullW, c("│")));
+	const labelPart = label;
+	const capLab = Math.max(0, padInner - visibleWidth(labelPart));
+	lines.push(pad(c("│"), ` ${g(`┌${labelPart}${"─".repeat(capLab)}┐`)}`, fullW, c("│")));
 	for (const bline of body) {
 		lines.push(pad(c("│"), ` ${g("│")}${bline}${" ".repeat(Math.max(0, innerW - 2 - visibleWidth(bline)))}${g("│")}`, fullW, c("│")));
 	}
@@ -210,8 +195,8 @@ function drawInnerBox(
 
 function pad(border: string, content: string, width: number, right: string): string {
 	const cw = visibleWidth(content);
-	const pad = Math.max(0, width - cw - visibleWidth(right) - 1);
-	return `${border}${content}${" ".repeat(pad)}${right}`;
+	const p = Math.max(0, width - cw - visibleWidth(right) - 1);
+	return `${border}${content}${" ".repeat(p)}${right}`;
 }
 
 function wrapLines(text: string, maxWidth: number): string[] {
