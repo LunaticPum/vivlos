@@ -66,10 +66,22 @@
 ### P4：TUI 入口（M1 里程碑 🎯）
 
 - [x] `vivlos/entries/types.ts` — ChannelAdapter 接口、ChannelMessage 统一格式
-- [x] `vivlos/entries/tui/containers/` — chat / input / status 三个容器（各留有 TODO 标注扩展方向）
+- [x] `vivlos/entries/tui/containers/` — chat / input / status 三个容器
 - [x] `vivlos/entries/tui/index.ts` — createTuiApp（组装 pi-tui + EventBus 绑定）
 - [x] `vivlos/main.ts` — 组合根：装配 LLMClient + EventBus + Agent + TUI
-- [x] tsconfig.json 加 @earendil-works/\* paths → pakcages/\*/src
+- [x] `vivlos/entries/tui/components/agent-status-border.ts` — AgentStatusBorder 组件
+  - 双层边框：外层 vivlos header + 内层推理过程 box
+  - ReAct 顺序的 think→tool→think 流程可视化
+  - thinking 内容 Markdown 渲染（缓存复用，支持粗体/斜体/代码块）
+  - tool 调用摘要+结果展示，续行标记 `╰─> ` / `  ┆ `
+  - 完成后自动折叠为摘要行（turn/tool 计数 + 耗时）
+  - `/detail` 切换折叠/展开
+- [x] Markdown 渲染增强
+  - h3+ 标题 `### ` 前缀自动剥离
+  - 行内代码 `` `xxx` `` 青色（`FG.cyan`）
+  - 代码块内容绿色（`FG.green`），围栏灰色（`FG.gray`）
+  - 分隔符宽度适配 CJK 终端（`─` ambiguous width）
+- [x] tsconfig.json 加 @earendil-works/\* paths → packages/\*/src
 
 **验证**：`npm run dev` → 输入文字 → deepseek-v4-flash 流式回复 ✅
 
@@ -79,7 +91,7 @@
 
 - [x] `vivlos/agent/tools/registry.ts` — createToolRegistry（register/list/get）
 - [x] `vivlos/agent/tools/builtin/` — read / write / bash / ls / grep / find 六个工具
-- [x] `vivlos/entries/tui/containers/tool.ts` — ToolExecution 组件（P5 最小版，单行 Text √/✗）
+- [x] `vivlos/entries/tui/containers/tool.ts` — ToolExecution 组件
 - [x] agent-loop → AgentContext.tools 注入，pi loop 自动处理 tool calling
 - [x] TUI tool:call_start / tool:call_end 事件绑定
 
@@ -127,20 +139,15 @@
 
 ## 📋 后续核心功能（必做）
 
-### S1：TUI 体验全面升级
-
-**参照**：Hermes TUI (tui.ts + components/) + coding-agent interactive-mode
+### S1：TUI 体验持续优化
 
 - [ ] 聊天历史滚动（PageUp/PageDown）
-- [ ] user/assistant/tool 消息差异样式（缩进、颜色、前缀标记）
-- [ ] Markdown 渲染（替换 Text 为 Markdown 组件，代码高亮）
-- [ ] ToolExecution 组件完善——Box 边框/背景色、展开/折叠、流式中间态更新
-- [ ] header 区域（标题栏、模型名、版本号）
-- [ ] footer 区域（快捷键提示、token 计数）
-- [ ] 主题/配色支持（暗色/亮色切换，参照 coding-agent ThemeController）
 - [ ] 多行输入 + 输入历史（上/下箭头翻历史）
 - [ ] 自动补全（slash command、文件路径）
 - [ ] Ctrl+C / Ctrl+D 优雅退出
+- [ ] 主题/配色支持（暗色/亮色切换）
+- [ ] header 区域（标题栏、模型名、版本号）
+- [ ] footer 区域（快捷键提示、token 计数）
 
 ---
 
@@ -148,41 +155,34 @@
 
 **目标**：清理当前冗余、统一风格、提升可维护性
 
-- [ ] 去除不用的 barrel 文件、dead code（VivlosAgentContext 等）
+- [ ] 去除不用的 barrel 文件、dead code
 - [ ] 统一 import 风格（`import type` vs `import`、`.ts` 后缀一致性）
 - [ ] 表达式统一（`readonly` 修饰、函数声明风格、interface vs type）
 - [ ] shared/types.ts 里的旧定义清理/整合
-- [ ] 提取公共重复逻辑（如 MAX_CHARS 截断到 shared/utils）
+- [ ] 提取公共重复逻辑到 shared/utils
 - [ ] 整体 review + 补全 TODO
 
 ---
 
 ### S3：多聊天渠道适配
 
-**参照**：Hermes 的 gateway 架构（20+ 平台适配器）
-
 - [ ] `vivlos/entries/adapters/` — 渠道适配器接口 + 注册
 - [ ] TUI adapter 重构为 ChannelAdapter 实现
 - [ ] 后续：HTTP API / WebSocket / Telegram Bot 等渠道接入
-- [ ] 统一 ChannelAdapter 接口：所有渠道的输入 → ChannelMessage → agent.prompt() 统一管道
 
 ---
 
 ### S4：Skills 系统
 
-**参照**：Hermes 的 skills 系统（SKILL.md + 动态加载 + curator）
-
 - [ ] Skill 类型定义（name / description / content / filePath）
 - [ ] skill loader（从文件系统加载 SKILL.md）
-- [ ] skill 注入 prompt builder（参照 Hermes `<available_skills>` XML 块）
+- [ ] skill 注入 prompt builder
 - [ ] `/skill <name>` slash command
-- [ ] skill 管理（安装/卸载/更新，参照 Hermes skills CLI）
+- [ ] skill 管理（安装/卸载/更新）
 
 ---
 
 ### S5：任务编排与工作流设计
-
-**参照**：Hermes 的 Kanban + Workflow 系统
 
 - [ ] Task 类型定义（title/status/assignee/context）
 - [ ] 任务生命周期管理（create/assign/complete/fail）
@@ -194,56 +194,22 @@
 ## 💡 视情况扩展功能
 
 ### E1：场景 Demo——定时资讯简报
-
-**依赖**：P7 Cron + S3 多渠道
-
-- [ ] 定时任务：每天早上 8:00 拉取指定 RSS/API 资讯
-- [ ] agent 自动摘要 + 格式化
-- [ ] 通过 Telegram/Email 等渠道推送（需先完成 S3）
-
----
+- 依赖：P7 Cron + S3 多渠道
 
 ### E2：场景 Demo——自动化开发助手
-
-**依赖**：P7 子 agent 委派 + S5 任务编排
-
-- [ ] 用户描述需求 → agent 拆解为子任务（read code → write → test → commit）
-- [ ] 多个子 agent 并行执行不同子任务
-- [ ] 结果汇总 + 用户确认
-
----
+- 依赖：P7 子 agent 委派 + S5 任务编排
 
 ### E3：多智能体协作
-
-**参照**：Hermes 的 Kanban（multi-profile worker dispatch）
-
-- [ ] 多个 vivlos 实例（不同模型/不同系统提示词）协作完成复杂任务
-- [ ] 任务分派（dispatch + claim）
-- [ ] 角色分工（planner / coder / reviewer / tester）
-
----
+- 依赖：P7 + S5
 
 ### E4：工具生态扩展
-
-- [ ] 更多内置工具（edit diff、web search、browser、git 操作）
-- [ ] 第三方工具插件机制
-- [ ] 工具权限控制（readonly mode / approve before execute）
-
----
+- 更多内置工具、第三方插件机制、权限控制
 
 ### E5：在线持久化
-
-- [ ] session 云端同步
-- [ ] memory 跨设备同步
-- [ ] agent 状态备份/恢复
-
----
+- session 云端同步、memory 跨设备同步
 
 ### E6：发布与分发
-
-- [ ] CLI 打包（pkg / ncc）
-- [ ] npm 包发布
-- [ ] 配置向导（hermes setup 风格）
+- CLI 打包、npm 发布、配置向导
 
 ---
 
