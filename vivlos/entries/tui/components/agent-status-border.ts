@@ -25,17 +25,13 @@ const MARKDOWN_DEFAULT_TEXT: DefaultTextStyle = {
 	color: (t) => t,
 };
 
-const CODE_BG = "\x1b[48;5;236m"; // 暗灰背景，区分普通文本
-const CODE_FG = "\x1b[38;5;120m"; // 绿色前景（对齐 pi dark theme）
-const CODE_BD = "\x1b[90m";         // 灰色围栏
-
 const MARKDOWN_THEME: MarkdownTheme = {
 	heading: (t) => FG.bold(FG.cyan(t)),
 	link: (t) => FG.underline(FG.cyan(t)),
 	linkUrl: (t) => FG.gray(t),
 	code: (t) => FG.cyan(t),
-	codeBlock: (t) => `${CODE_BG}${CODE_FG}${t}\x1b[0m`,
-	codeBlockBorder: (t) => `${CODE_BG}${CODE_BD}${t}\x1b[0m`,
+	codeBlock: (t) => FG.green(t),
+	codeBlockBorder: (t) => FG.gray(t),
 	quote: (t) => FG.gray(t),
 	quoteBorder: (t) => FG.gray(t),
 	hr: (_t) => FG.gray("─".repeat(40)),
@@ -44,7 +40,7 @@ const MARKDOWN_THEME: MarkdownTheme = {
 	italic: (t) => FG.italic(t),
 	strikethrough: (t) => FG.strikethrough(t),
 	underline: (t) => FG.underline(t),
-	highlightCode: (code) => code.split("\n").map((line) => `${CODE_BG}${CODE_FG} ${line}\x1b[0m`),
+	highlightCode: (code) => code.split("\n").map((line) => FG.green(` ${line}`)),
 	codeBlockIndent: "",
 };
 
@@ -192,13 +188,7 @@ export class AgentStatusBorder implements Component {
 				const content = ` ${ml}`;
 				const cw = visibleWidth(content);
 				const padding = Math.max(0, width - cw - 2);
-				// 代码块行补暗色背景至行尾
-				const isCodeLine = ml.includes(CODE_BG);
-				const padPrefix = isCodeLine ? CODE_BG : "";
-				const padSuffix = isCodeLine ? "\x1b[0m" : "";
-				lines.push(
-					`${c("│")}${content}${padPrefix}${" ".repeat(padding)}${padSuffix}${c("│")}`,
-				);
+				lines.push(`${c("│")}${content}${" ".repeat(padding)}${c("│")}`);
 			}
 		};
 
