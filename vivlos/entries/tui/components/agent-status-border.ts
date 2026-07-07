@@ -3,6 +3,7 @@ import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 const BRAILLE = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
 const TURN_NUMBERS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+const TOOL_MIN_DISPLAY_MS = 600; // tool 最少展示时长
 
 type Phase = "thinking" | "tool" | "final";
 
@@ -10,6 +11,7 @@ interface ToolEntry {
 	name: string;
 	result: string;
 	done: boolean;
+	doneAt: number; // Date.now() when completed
 }
 
 const FG = {
@@ -17,6 +19,7 @@ const FG = {
 	pink: (t: string) => `\x1b[38;5;218m${t}\x1b[0m`,
 	yellow: (t: string) => `\x1b[38;5;220m${t}\x1b[0m`,
 	gray: (t: string) => `\x1b[90m${t}\x1b[0m`,
+	green: (t: string) => `\x1b[32m${t}\x1b[0m`,
 } as const;
 
 type Cache = { width: number; lines: string[] };
@@ -24,10 +27,7 @@ type Cache = { width: number; lines: string[] };
 /**
  * Agent Turn 状态边框。
  *
- * thinking 和 tool 两种状态互斥：
- *   - thinking → 显示 spin + context（3行截断）
- *   - tool → 替换 thinking，显示 Calling xxx + partial result（2行截断）
- *   - final → 清空所有，只显示最终回复
+ * thinking 和 tool 互斥展示，tool 最少展示 600ms 防闪烁。
  */
 export class AgentStatusBorder implements Component {
 	private tui: TUI;
@@ -46,8 +46,6 @@ export class AgentStatusBorder implements Component {
 		this.startSpinner();
 	}
 
-	// ── API ──
-
 	startTurn(turn: number): void {
 		this.turn = turn;
 		this.tools = [];
@@ -65,7 +63,7 @@ export class AgentStatusBorder implements Component {
 
 	addTool(name: string): void {
 		this.phase = "tool";
-		this.tools.push({ name, result: "", done: false });
+		this.tools.push({ name, result: "", done: false, doneAt: 0 });
 		this.cache = undefined;
 	}
 
@@ -77,7 +75,9 @@ export class AgentStatusBorder implements Component {
 
 	endTool(): void {
 		if (this.tools.length === 0) return;
-		this.tools[this.tools.length - 1]!.done = true;
+		const tool = this.tools[this.tools.length - 1]!;
+		tool.done = true;
+		tool.doneAt = Date.now();
 		this.cache = undefined;
 	}
 
@@ -99,6 +99,15 @@ export class AgentStatusBorder implements Component {
 	// ── render ──
 
 	render(width: number): string[] {
+		// tool 过期检查——如果 tool 已完成超过 TOOL_MIN_DISPLAY_MS，回到 thinking
+		if (this.phase === "tool" && this.tools.length > 0) {
+			const last = this.tools[this.tools.length - 1]!;
+			if (last.done && Date.now() - last.doneAt > TOOL_MIN_DISPLAY_MS) {
+				this.phase = "thinking";
+				this.cache = undefined;
+			}
+		}
+
 		if (this.cache && this.cache.width === width) return this.cache.lines;
 
 		const c = FG.cyan;
@@ -106,7 +115,6 @@ export class AgentStatusBorder implements Component {
 		const turnNum = TURN_NUMBERS[(this.turn - 1) % TURN_NUMBERS.length] ?? String(this.turn);
 		const spin = BRAILLE[this.spinnerFrame % BRAILLE.length] ?? "?";
 
-		// ╭── vivlos ──╮
 		const labelPart = "── vivlos ──";
 		const dashRight = Math.max(0, width - visibleWidth(labelPart) - 2);
 		lines.push(c(`╭${labelPart}${"─".repeat(dashRight)}╮`));
@@ -119,22 +127,24 @@ export class AgentStatusBorder implements Component {
 				}
 			}
 		} else if (this.phase === "tool") {
-			// tool 替换 thinking
 			const tool = this.tools[this.tools.length - 1];
 			if (tool) {
-				const header = FG.yellow(`${turnNum} ${spin}  Calling ${tool.name}`);
+				const header = tool.done
+					? FG.green(`${turnNum}  ✓  ${tool.name}`)
+					: FG.yellow(`${turnNum} ${spin}  Calling ${tool.name}`);
 				lines.push(`${c("│")} ${header}${" ".repeat(Math.max(0, width - visibleWidth(header) - 4))} ${c("│")}`);
 
 				if (tool.result) {
 					const resLines = wrapLines(tool.result, width - 8).slice(0, 2);
 					for (let i = 0; i < resLines.length; i++) {
-						const prefix = i === 0 ? FG.yellow("╰─> ") : "    ";
+						const prefix = i === 0
+							? (tool.done ? FG.gray("╰─> ") : FG.yellow("╰─> "))
+							: "    ";
 						lines.push(`${c("│")}   ${prefix}${truncateToWidth(resLines[i]!, width - 11)} ${c("│")}`);
 					}
 				}
 			}
 		} else {
-			// thinking
 			const header = FG.pink(`${turnNum} ${spin}  Thinking...`);
 			lines.push(`${c("│")} ${header}${" ".repeat(Math.max(0, width - visibleWidth(header) - 4))} ${c("│")}`);
 
@@ -150,8 +160,6 @@ export class AgentStatusBorder implements Component {
 		this.cache = { width, lines };
 		return lines;
 	}
-
-	// ── spinner ──
 
 	private startSpinner(): void {
 		if (this.timer) return;
