@@ -4,7 +4,10 @@ import { homedir } from "node:os";
 
 // —— 基础设施 ——
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
-import { createMarkdownLogWriter, initLogger } from "@vivlos/infra/logger/index.ts";
+import {
+	createMarkdownLogWriter,
+	initLogger,
+} from "@vivlos/infra/logger/index.ts";
 import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 
@@ -84,6 +87,7 @@ async function main(): Promise<void> {
 
 	// ── 退出清理 ──
 	const cleanup = () => {
+		process.stdout.write("\x1b[2J\x1b[H");
 		logger.stop();
 		closeDb();
 		process.exit(0);
@@ -96,8 +100,13 @@ async function main(): Promise<void> {
 		agent,
 		eventBus,
 		cmdCtx: {
-			llm, eventBus, sessionManager, memoryManager,
-			registry, shutdown: cleanup,
+			llm,
+			eventBus,
+			sessionManager,
+			memoryManager,
+			registry,
+			// 专门给 cmd 使用的 fn
+			shutdown: cleanup,
 		},
 	});
 	tuiApp.start();

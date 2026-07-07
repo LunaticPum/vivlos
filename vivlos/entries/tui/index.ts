@@ -149,7 +149,6 @@ export function createTuiApp(params: CreateTuiAppParams) {
 
 	inputContainer.onEscape = () => {
 		tui.stop();
-		process.stdout.write("\x1b[2J\x1b[H");
 		cmdCtxWithTui.shutdown();
 	};
 
