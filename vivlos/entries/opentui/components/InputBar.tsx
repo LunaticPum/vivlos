@@ -30,14 +30,15 @@ export function InputBar({
       <VDivider />
       <box flexDirection="row">
         <text content="> " fg={colors.accent.bright} />
-        <input
-          focused
-          flexGrow={1}
-          value={text}
-          onInput={setText}
-          onSubmit={handleSubmit}
-          textColor={loading ? colors.text.muted : colors.text.primary}
-        />
+        <box flexGrow={1}>
+          <input
+            focused
+            onInput={setText}
+            onSubmit={handleSubmit}
+            placeholder={loading ? "请等待回复..." : undefined}
+            textColor={colors.text.primary}
+          />
+        </box>
       </box>
       <VDivider />
     </box>
