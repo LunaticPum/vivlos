@@ -211,8 +211,11 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
     async (text: string) => {
       if (loading) return;
       try {
+        process.stderr.write(`[useAgent] submitting: ${text.slice(0, 50)}...\n`);
         await agent.prompt(text);
+        process.stderr.write(`[useAgent] submit done\n`);
       } catch (err) {
+        process.stderr.write(`[useAgent] ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
         setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
         setLoading(false);
       }
