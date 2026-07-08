@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from "better-sqlite3";
+import { Database, type DatabaseType } from "bun:sqlite";
 
 const instances = new Map<string, DatabaseType>();
 
@@ -17,8 +17,8 @@ export function getDb(dbPath: string): DatabaseType {
 	if (existing) return existing;
 
 	const db = new Database(dbPath);
-	db.pragma("journal_mode = WAL");
-	db.pragma("foreign_keys = ON");
+	db.run("PRAGMA journal_mode = WAL");
+	db.run("PRAGMA foreign_keys = ON");
 
 	// ── schema ──
 	db.exec(`
