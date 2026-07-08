@@ -1,32 +1,32 @@
 {
-	"name": "my-agent",
-	"type": "module",
-	"private": true,
-	"engines": {
-		"node": ">=22.19.0"
-	},
-	"scripts": {
-		"dev": "tsx -r tsconfig-paths/register vivlos/main.ts",
-		"test": "vitest --run",
-		"typecheck": "tsc --noEmit"
-	},
-	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.80.3",
-		"@earendil-works/pi-ai": "^0.80.3",
-		"@earendil-works/pi-tui": "^0.80.3",
-		"@opentui/core": "^0.4.3",
-		"@opentui/react": "^0.4.3",
-		"@types/better-sqlite3": "^7.6.13",
-		"dotenv": "^16.5.0",
-		"openai": "^6.10.0",
-		"react": "^19.2.7"
-	},
-	"devDependencies": {
-		"@types/node": "^24.10.0",
-		"@types/react": "^19.2.17",
-		"tsconfig-paths": "^4.2.0",
-		"tsx": "4.22.1",
-		"typescript": "5.9.3",
-		"vitest": "4.1.0"
-	}
+  "name": "my-agent",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "bun run vivlos/entries/opentui/main.tsx",
+    "test": "vitest --run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.80.3",
+    "@earendil-works/pi-ai": "^0.80.3",
+    "@earendil-works/pi-tui": "^0.80.3",
+    "@opentui/core": "^0.4.3",
+    "@opentui/react": "^0.4.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "dotenv": "^16.5.0",
+    "openai": "^6.10.0",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.17",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "4.22.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
 }
