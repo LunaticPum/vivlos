@@ -7,7 +7,8 @@
 
 import type { LogEntry } from "../hooks/useAgent";
 import { VBox } from "../ui/primitives/VBox";
-import { UserMessage } from "../ui/patterns/UserMessage";
+import { VText } from "../ui/primitives/VText";
+import { MessageCard } from "../ui/patterns/MessageCard";
 import { AgentCard } from "./AgentCard";
 
 export function ChatArea({
@@ -24,7 +25,9 @@ export function ChatArea({
   return (
     <VBox flexDirection="column" flexGrow={1}>
       {messages.map((msg, i) => (
-        <UserMessage key={i} text={msg} />
+        <MessageCard key={i} sender="You">
+          <VText content={msg} />
+        </MessageCard>
       ))}
       {(logs.length > 0 || finalText) ? (
         <AgentCard logs={logs} finalText={finalText} spin={spin} />
