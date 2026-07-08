@@ -1,8 +1,8 @@
 /**
- * 组装层 App
+ * App 顶层布局
  *
- * 顶层布局：StatusBar + ChatArea + InputBar，纵向 Flexbox。
- * useAgent hook 桥接事件流，分发给各子组件。
+ * StatusBar（顶） + ChatArea（中，flexGrow） + InputBar（底）
+ * useAgent hook 桥接事件流，消息历史本地 state。
  */
 
 import { useState } from "react";
@@ -26,16 +26,17 @@ export function App({
   const { logs, finalText, loading, status, submit, spin } = useAgent(agent, eventBus);
   const [messages, setMessages] = useState<string[]>([]);
 
-  const handleSubmit = (text: string) => {
-    setMessages((prev) => [...prev, text]);
-    submit(text);
-  };
-
   return (
-    <VBox flexDirection="column" height="100%">
+    <VBox flexDirection="column">
       <StatusBar modelLabel={modelLabel} status={status} />
       <ChatArea messages={messages} logs={logs} finalText={finalText} spin={spin} />
-      <InputBar loading={loading} onSubmit={handleSubmit} />
+      <InputBar
+        loading={loading}
+        onSubmit={(text) => {
+          setMessages((prev) => [...prev, text]);
+          submit(text);
+        }}
+      />
     </VBox>
   );
 }
