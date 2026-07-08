@@ -2,6 +2,7 @@
  * App 顶层布局
  *
  * ChatArea（中，flexGrow + scrollbox） + StatusBar（底） + InputBar（底）
+ * useCommands 桥接 vivlos/commands/ 的 slash 命令到 OpenTUI。
  */
 
 import { useState } from "react";
@@ -13,6 +14,7 @@ import type { MemoryManager } from "@vivlos/agent/memory/index.ts";
 import type { CommandRegistry } from "@vivlos/commands/registry.ts";
 import { useAgent } from "./hooks/useAgent";
 import { useCommands } from "./hooks/useCommands";
+import { VBox } from "./ui/primitives/VBox";
 import { StatusBar } from "./components/StatusBar";
 import { ChatArea } from "./components/ChatArea";
 import { InputBar } from "./components/InputBar";
@@ -42,28 +44,35 @@ export function App({
   const [cmdFeedback, setCmdFeedback] = useState("");
 
   const handleCommand = useCommands({
-    registry, llm, eventBus, sessionManager, memoryManager,
-    shutdown, detailExpanded,
+    registry,
+    llm,
+    eventBus,
+    sessionManager,
+    memoryManager,
+    shutdown,
+    detailExpanded,
     onToggleDetail: () => setDetailExpanded((v) => !v),
     onClear: () => setMessages([]),
   });
 
   const handleSubmit = async (text: string) => {
+    // 检查 slash 命令
     const cmd = await handleCommand(text);
     if (cmd.handled) {
       setCmdFeedback(cmd.feedback ?? "");
       return;
     }
+
     setCmdFeedback("");
     setMessages((prev) => [...prev, text]);
     submit(text);
   };
 
   return (
-    <box flexDirection="column">
+    <VBox flexDirection="column">
       <ChatArea messages={messages} logs={logs} finalText={finalText} spin={spin} />
       <StatusBar modelLabel={modelLabel} status={status || cmdFeedback} />
       <InputBar loading={loading} onSubmit={handleSubmit} />
-    </box>
+    </VBox>
   );
 }

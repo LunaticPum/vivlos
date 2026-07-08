@@ -1,6 +1,11 @@
+/**
+ * InputBar — 底部输入栏
+ *
+ * 对齐 pi-tui：> 提示符 + input
+ */
+
 import { useState } from "react";
 import { colors } from "../ui/colors";
-import { VDivider } from "../ui/primitives/VDivider";
 
 export function InputBar({
   loading,
@@ -11,22 +16,25 @@ export function InputBar({
 }) {
   const [text, setText] = useState("");
 
+  const handleSubmit = () => {
+    const trimmed = text.trim();
+    if (trimmed) {
+      void onSubmit(trimmed);
+      setText("");
+    }
+  };
+
   return (
     <box flexDirection="column">
-      <VDivider />
-      <text content="> " fg={colors.accent.bright} />
-      <box>
-        <input
-          focused
-          onInput={setText}
-          onSubmit={() => {
-            const trimmed = text.trim();
-            if (trimmed) { void onSubmit(trimmed); setText(""); }
-          }}
-          placeholder={loading ? "请等待回复..." : undefined}
-        />
-      </box>
-      <VDivider />
+      <text
+        content={loading ? "⏳ 请等待回复..." : "> 输入消息... (Enter 发送)"}
+        fg={colors.accent.bright}
+      />
+      <input
+        onInput={setText}
+        onSubmit={handleSubmit}
+        textColor={loading ? colors.text.muted : colors.text.primary}
+      />
     </box>
   );
 }

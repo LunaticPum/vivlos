@@ -51,16 +51,6 @@ function extractToolText(raw: unknown): string {
   return String(raw);
 }
 
-/** 从 messageSnapshot 提取完整 thinking 文本（优先于 delta 增量片段） */
-function extractThinkingFromSnapshot(snapshot: unknown): string | null {
-  const msg = snapshot as { content?: Array<{ type: string; thinking?: string }> } | undefined;
-  if (!msg?.content) return null;
-  const blocks = msg.content.filter((c) => c.type === "thinking" && c.thinking);
-  if (blocks.length === 0) return null;
-  // 取最后一个 thinking block（pi snapshot 可能包含历史累积）
-  return blocks[blocks.length - 1]!.thinking!;
-}
-
 // ── hook ──
 
 export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
@@ -91,16 +81,15 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
 
   useEffect(() => {
     const handleThinkingDelta = (e: { delta: string; messageSnapshot?: unknown }) => {
-      const text = extractThinkingFromSnapshot(e.messageSnapshot) || e.delta;
-
       setLogs((prev: LogEntry[]) => {
         const idx = activeThinkingIdx.current;
         if (idx >= 0 && idx < prev.length && prev[idx]?.kind === "thinking") {
           const updated = [...prev];
-          updated[idx] = { ...updated[idx], text } as ThinkingEntry;
+          updated[idx] = { ...updated[idx], text: e.delta } as ThinkingEntry;
           return updated;
         }
-        const entry: ThinkingEntry = { kind: "thinking", text, active: true };
+        // 新的 thinking 条目
+        const entry: ThinkingEntry = { kind: "thinking", text: e.delta, active: true };
         const next = [...prev, entry];
         activeThinkingIdx.current = next.length - 1;
         return next;
@@ -108,19 +97,7 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
     };
 
     const handleToolStart = (e: { toolName: string; callId: string }) => {
-      // 标记当前 thinking 为完成
-      const thinkIdx = activeThinkingIdx.current;
       activeThinkingIdx.current = -1;
-      if (thinkIdx >= 0) {
-        setLogs((prev: LogEntry[]) => {
-          if (thinkIdx < prev.length && prev[thinkIdx]?.kind === "thinking") {
-            const updated = [...prev];
-            updated[thinkIdx] = { ...updated[thinkIdx], active: false } as ThinkingEntry;
-            return updated;
-          }
-          return prev;
-        });
-      }
       const entry: ToolEntry = { kind: "tool", name: e.toolName, callId: e.callId, active: true };
       setLogs((prev: LogEntry[]) => {
         const next = [...prev, entry];
@@ -144,19 +121,7 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
     };
 
     const handleTurnComplete = () => {
-      // 标记当前 thinking 为完成
-      const thinkIdx = activeThinkingIdx.current;
       activeThinkingIdx.current = -1;
-      if (thinkIdx >= 0) {
-        setLogs((prev: LogEntry[]) => {
-          if (thinkIdx < prev.length && prev[thinkIdx]?.kind === "thinking") {
-            const updated = [...prev];
-            updated[thinkIdx] = { ...updated[thinkIdx], active: false } as ThinkingEntry;
-            return updated;
-          }
-          return prev;
-        });
-      }
       setLogs((prev: LogEntry[]) => [...prev, { kind: "turn_sep" }]);
     };
 
@@ -211,11 +176,8 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
     async (text: string) => {
       if (loading) return;
       try {
-        process.stderr.write(`[useAgent] submitting: ${text.slice(0, 50)}...\n`);
         await agent.prompt(text);
-        process.stderr.write(`[useAgent] submit done\n`);
       } catch (err) {
-        process.stderr.write(`[useAgent] ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
         setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
         setLoading(false);
       }
