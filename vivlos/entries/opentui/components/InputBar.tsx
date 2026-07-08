@@ -1,8 +1,8 @@
 /**
  * 组装层 InputBar
  *
- * 底部输入栏：OpenTUI <input> + 发送逻辑。
- * loading 时禁用输入，onSubmit 回调提交文本。
+ * 底部输入栏。loading 时占位文案提示等待，Enter 提交。
+ * 参照 OpenTUI skill docs/bindings/react.mdx 的 Login form 示例。
  */
 
 import { colors } from "../ui/colors";
@@ -12,9 +12,7 @@ export function InputBar({
   loading,
   onSubmit,
 }: {
-  /** 是否正在等待 agent 回复 */
   loading: boolean;
-  /** 用户按 Enter 时调用 */
   onSubmit: (text: string) => void;
 }) {
   return (
@@ -25,7 +23,7 @@ export function InputBar({
     >
       <input
         placeholder={loading ? "请等待回复..." : "输入消息... (Enter 发送)"}
-        onSubmit={(value: string) => onSubmit(value)}
+        onSubmit={onSubmit}
         backgroundColor={loading ? colors.bg.inputFocus : undefined}
         textColor={loading ? colors.text.muted : colors.text.primary}
       />
