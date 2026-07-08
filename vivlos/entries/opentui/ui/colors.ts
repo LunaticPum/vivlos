@@ -32,6 +32,8 @@ export const colors = {
     thinking: "#87FF87",
     /** 工具调用 */
     tool: "#D7AFFF",
+    /** 工具名（橙色） */
+    toolName: "#FF8800",
     /** 错误 */
     error: "#CC6666",
     /** 警告 */
