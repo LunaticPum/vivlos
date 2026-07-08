@@ -7,6 +7,16 @@
     "jsx": "react-jsx",
     "jsxImportSource": "@opentui/react",
     "strict": true,
-    "skipLibCheck": true
-  }
+    "skipLibCheck": true,
+    "baseUrl": "../../..",
+    "paths": {
+      "@vivlos/infra/eventbus/index.ts": ["vivlos/infra/eventbus/index.ts"],
+      "@vivlos/infra/eventbus/*": ["vivlos/infra/eventbus/*"],
+      "@vivlos/agent/types.ts": ["vivlos/agent/types.ts"],
+      "@vivlos/agent/*": ["vivlos/agent/*"],
+      "@vivlos/*": ["vivlos/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../../vivlos/**/*.ts"],
+  "exclude": ["node_modules"]
 }
