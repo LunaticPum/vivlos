@@ -19,7 +19,7 @@ export function InputBar({
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (trimmed) {
-      onSubmit(trimmed);
+      void onSubmit(trimmed);
       setText("");
     }
   };

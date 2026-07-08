@@ -1,0 +1,239 @@
+╭── You ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ 你好，我想问一下双向链表数据结构的python代码是怎么写的                                                                                │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭── vivlos ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ┌── 推理过程 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │ ✓ Thinking...                                                                                                                     │ │
+│ │ ╰─> 用户想了解双向链表（doubly linked list）数据结构的 Python 代码实现。我来给出一个完整的实现示例，包括节点类和双向链表类，以及常│ │
+│ │   ┆ 用操作。                                                                                                                      │ │
+│ └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                                                                       │
+│ 双向链表在 Python 中的实现主要包含两个部分：节点类和链表类。下面是一个完整的实现：                                                    │
+│                                                                                                                                       │
+│ ```python                                                                                                                             │
+│  class Node:                                                                                                                          │
+│      """双向链表节点"""                                                                                                               │
+│      def __init__(self, data):                                                                                                        │
+│          self.data = data      # 节点数据                                                                                             │
+│          self.prev = None      # 指向前驱节点                                                                                         │
+│          self.next = None      # 指向后继节点                                                                                         │
+│                                                                                                                                       │
+│                                                                                                                                       │
+│  class DoublyLinkedList:                                                                                                              │
+│      """双向链表"""                                                                                                                   │
+│      def __init__(self):                                                                                                              │
+│          self.head = None      # 头节点                                                                                               │
+│          self.tail = None      # 尾节点                                                                                               │
+│          self.size = 0         # 链表长度                                                                                             │
+│                                                                                                                                       │
+│      # -------- 插入操作 --------                                                                                                     │
+│                                                                                                                                       │
+│      def prepend(self, data):                                                                                                         │
+│          """头插：在链表头部插入"""                                                                                                   │
+│          new_node = Node(data)                                                                                                        │
+│          if self.head is None:                                                                                                        │
+│              self.head = self.tail = new_node                                                                                         │
+│          else:                                                                                                                        │
+│              new_node.next = self.head                                                                                                │
+│              self.head.prev = new_node                                                                                                │
+│              self.head = new_node                                                                                                     │
+│          self.size += 1                                                                                                               │
+│                                                                                                                                       │
+│      def append(self, data):                                                                                                          │
+│          """尾插：在链表尾部插入"""                                                                                                   │
+│          new_node = Node(data)                                                                                                        │
+│          if self.tail is None:                                                                                                        │
+│              self.head = self.tail = new_node                                                                                         │
+│          else:                                                                                                                        │
+│              new_node.prev = self.tail                                                                                                │
+│              self.tail.next = new_node                                                                                                │
+│              self.tail = new_node                                                                                                     │
+│          self.size += 1                                                                                                               │
+│                                                                                                                                       │
+│      def insert_at(self, index, data):                                                                                                │
+│          """在指定位置插入（0起始）"""                                                                                                │
+│          if index < 0 or index > self.size:                                                                                           │
+│              raise IndexError("索引越界")                                                                                             │
+│          if index == 0:                                                                                                               │
+│              self.prepend(data)                                                                                                       │
+│              return                                                                                                                   │
+│          if index == self.size:                                                                                                       │
+│              self.append(data)                                                                                                        │
+│              return                                                                                                                   │
+│                                                                                                                                       │
+│          new_node = Node(data)                                                                                                        │
+│          # 走到目标位置                                                                                                               │
+│          current = self.head                                                                                                          │
+│          for _ in range(index):                                                                                                       │
+│              current = current.next                                                                                                   │
+│                                                                                                                                       │
+│          prev_node = current.prev                                                                                                     │
+│          prev_node.next = new_node                                                                                                    │
+│          new_node.prev = prev_node                                                                                                    │
+│          new_node.next = current                                                                                                      │
+│          current.prev = new_node                                                                                                      │
+│          self.size += 1                                                                                                               │
+│                                                                                                                                       │
+│      # -------- 删除操作 --------                                                                                                     │
+│                                                                                                                                       │
+│      def delete_head(self):                                                                                                           │
+│          """删除头节点"""                                                                                                             │
+│          if self.head is None:                                                                                                        │
+│              return None                                                                                                              │
+│          data = self.head.data                                                                                                        │
+│          if self.head == self.tail:                                                                                                   │
+│              self.head = self.tail = None                                                                                             │
+│          else:                                                                                                                        │
+│              self.head = self.head.next                                                                                               │
+│              self.head.prev = None                                                                                                    │
+│          self.size -= 1                                                                                                               │
+│          return data                                                                                                                  │
+│                                                                                                                                       │
+│      def delete_tail(self):                                                                                                           │
+│          """删除尾节点"""                                                                                                             │
+│          if self.tail is None:                                                                                                        │
+│              return None                                                                                                              │
+│          data = self.tail.data                                                                                                        │
+│          if self.head == self.tail:                                                                                                   │
+│              self.head = self.tail = None                                                                                             │
+│          else:                                                                                                                        │
+│              self.tail = self.tail.prev                                                                                               │
+│              self.tail.next = None                                                                                                    │
+│          self.size -= 1                                                                                                               │
+│          return data                                                                                                                  │
+│                                                                                                                                       │
+│      def delete(self, data):                                                                                                          │
+│          """删除第一个值等于 data 的节点"""                                                                                           │
+│          current = self.head                                                                                                          │
+│          while current:                                                                                                               │
+│              if current.data == data:                                                                                                 │
+│                  # 头节点                                                                                                             │
+│                  if current.prev is None:                                                                                             │
+│                      return self.delete_head()                                                                                        │
+│                  # 尾节点                                                                                                             │
+│                  if current.next is None:                                                                                             │
+│                      return self.delete_tail()                                                                                        │
+│                  # 中间节点                                                                                                           │
+│                  current.prev.next = current.next                                                                                     │
+│                  current.next.prev = current.prev                                                                                     │
+│                  self.size -= 1                                                                                                       │
+│                  return data                                                                                                          │
+│              current = current.next                                                                                                   │
+│          return None                                                                                                                  │
+│                                                                                                                                       │
+│      # -------- 查找操作 --------                                                                                                     │
+│                                                                                                                                       │
+│      def find(self, data):                                                                                                            │
+│          """查找节点，返回索引，找不到返回 -1"""                                                                                      │
+│          current = self.head                                                                                                          │
+│          index = 0                                                                                                                    │
+│          while current:                                                                                                               │
+│              if current.data == data:                                                                                                 │
+│                  return index                                                                                                         │
+│              current = current.next                                                                                                   │
+│              index += 1                                                                                                               │
+│          return -1                                                                                                                    │
+│                                                                                                                                       │
+│      def get(self, index):                                                                                                            │
+│          """按索引取值"""                                                                                                             │
+│          if index < 0 or index >= self.size:                                                                                          │
+│              raise IndexError("索引越界")                                                                                             │
+│          current = self.head                                                                                                          │
+│          for _ in range(index):                                                                                                       │
+│              current = current.next                                                                                                   │
+│          return current.data                                                                                                          │
+│                                                                                                                                       │
+│      # -------- 遍历打印 --------                                                                                                     │
+│                                                                                                                                       │
+│      def display_forward(self):                                                                                                       │
+│          """正向遍历"""                                                                                                               │
+│          current = self.head                                                                                                          │
+│          result = []                                                                                                                  │
+│          while current:                                                                                                               │
+│              result.append(str(current.data))                                                                                         │
+│              current = current.next                                                                                                   │
+│          print(" <-> ".join(result) + "  (size={})".format(self.size))                                                                │
+│                                                                                                                                       │
+│      def display_backward(self):                                                                                                      │
+│          """反向遍历"""                                                                                                               │
+│          current = self.tail                                                                                                          │
+│          result = []                                                                                                                  │
+│          while current:                                                                                                               │
+│              result.append(str(current.data))                                                                                         │
+│              current = current.prev                                                                                                   │
+│          print(" <-> ".join(result) + "  (size={})".format(self.size))                                                                │
+│                                                                                                                                       │
+│      def __len__(self):                                                                                                               │
+│          return self.size                                                                                                             │
+│                                                                                                                                       │
+│      def __iter__(self):                                                                                                              │
+│          """支持 for...in 遍历"""                                                                                                     │
+│          current = self.head                                                                                                          │
+│          while current:                                                                                                               │
+│              yield current.data                                                                                                       │
+│              current = current.next                                                                                                   │
+│ ```                                                                                                                                   │
+│                                                                                                                                       │
+│ ────────────────────────────────────────                                                                                              │
+│                                                                                                                                       │
+│ 使用示例                                                                                                                              │
+│                                                                                                                                       │
+│ ```python                                                                                                                             │
+│  dll = DoublyLinkedList()                                                                                                             │
+│                                                                                                                                       │
+│  # 尾插                                                                                                                               │
+│  dll.append(1)                                                                                                                        │
+│  dll.append(2)                                                                                                                        │
+│  dll.append(3)                                                                                                                        │
+│  dll.display_forward()   # 1 <-> 2 <-> 3  (size=3)                                                                                    │
+│                                                                                                                                       │
+│  # 头插                                                                                                                               │
+│  dll.prepend(0)                                                                                                                       │
+│  dll.display_forward()   # 0 <-> 1 <-> 2 <-> 3  (size=4)                                                                              │
+│                                                                                                                                       │
+│  # 反向遍历                                                                                                                           │
+│  dll.display_backward()  # 3 <-> 2 <-> 1 <-> 0  (size=4)                                                                              │
+│                                                                                                                                       │
+│  # 在位置 2 插入                                                                                                                      │
+│  dll.insert_at(2, 99)                                                                                                                 │
+│  dll.display_forward()   # 0 <-> 1 <-> 99 <-> 2 <-> 3  (size=5)                                                                       │
+│                                                                                                                                       │
+│  # 查找                                                                                                                               │
+│  print(dll.find(99))     # 2                                                                                                          │
+│                                                                                                                                       │
+│  # 删除                                                                                                                               │
+│  dll.delete(99)                                                                                                                       │
+│  dll.display_forward()   # 0 <-> 1 <-> 2 <-> 3  (size=4)                                                                              │
+│                                                                                                                                       │
+│  # 头删、尾删                                                                                                                         │
+│  dll.delete_head()       # 删除 0                                                                                                     │
+│  dll.delete_tail()       # 删除 3                                                                                                     │
+│  dll.display_forward()   # 1 <-> 2  (size=2)                                                                                          │
+│ ```                                                                                                                                   │
+│                                                                                                                                       │
+│ ────────────────────────────────────────                                                                                              │
+│                                                                                                                                       │
+│ 关键点总结                                                                                                                            │
+│                                                                                                                                       │
+│ ┌─────────────────┬────────────┬──────────────────────┐                                                                               │
+│ │ 操作            │ 时间复杂度 │ 说明                 │                                                                               │
+│ ├─────────────────┼────────────┼──────────────────────┤                                                                               │
+│ │ 头插/头删       │ O(1)       │ 直接操作 head        │                                                                               │
+│ ├─────────────────┼────────────┼──────────────────────┤                                                                               │
+│ │ 尾插/尾删       │ O(1)       │ 有 tail 指针直接操作 │                                                                               │
+│ ├─────────────────┼────────────┼──────────────────────┤                                                                               │
+│ │ 按索引插入/删除 │ O(n)       │ 需要遍历到目标位置   │                                                                               │
+│ ├─────────────────┼────────────┼──────────────────────┤                                                                               │
+│ │ 按值查找        │ O(n)       │ 需要遍历             │                                                                               │
+│ └─────────────────┴────────────┴──────────────────────┘                                                                               │
+│                                                                                                                                       │
+│ 和单向链表相比，双向链表的核心优势是 O(1) 尾删（因为有 prev 指针），以及可以双向遍历，代价是每个节点多存一个 prev 指针，内存开销稍大  │
+│ 。                                                                                                                                    │
+│                                                                                                                                       │
+│ 需要我针对某个操作再详细解释吗？                                                                                                      │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+─── model: deepseek/deepseek-v4-pro ─────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

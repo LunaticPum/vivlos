@@ -20,6 +20,9 @@ import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
 import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
 
+// —— 命令系统 ——
+import { createCommandRegistry, builtinSlashCommands } from "@vivlos/commands/index.ts";
+
 // —— OpenTUI 渲染 ——
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
@@ -32,10 +35,7 @@ async function main(): Promise<void> {
   const eventBus = createEventBus();
   initLogger(eventBus);
 
-  // 数据库路径
   const dbPath = process.env.VIVLOS_DB_PATH ?? resolve(process.cwd(), "vivlos.db");
-
-  // 日志目录
   const logDir = process.env.VIVLOS_LOG_DIR ?? resolve(homedir(), ".vivlos", "logs");
 
   // ── 装配 agent ──
@@ -57,6 +57,12 @@ async function main(): Promise<void> {
     llm, eventBus, model, maxTurns: 10, tools, memoryManager, sessionManager, thinkingLevel: "medium",
   });
 
+  // ── 命令系统 ──
+  const registry = createCommandRegistry();
+  for (const cmd of builtinSlashCommands) {
+    registry.registerSlash(cmd);
+  }
+
   // ── 退出清理 ──
   const cleanup = () => {
     process.stdout.write("\x1b[2J\x1b[H");
@@ -71,7 +77,16 @@ async function main(): Promise<void> {
   const modelLabel = `${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`;
   const renderer = await createCliRenderer({ exitOnCtrlC: true });
   createRoot(renderer).render(
-    <App agent={agent} eventBus={eventBus} modelLabel={modelLabel} />,
+    <App
+      agent={agent}
+      eventBus={eventBus}
+      modelLabel={modelLabel}
+      llm={llm}
+      sessionManager={sessionManager}
+      memoryManager={memoryManager}
+      registry={registry}
+      shutdown={cleanup}
+    />,
   );
 }
 
