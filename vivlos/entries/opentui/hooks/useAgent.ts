@@ -2,13 +2,14 @@
  * useAgent hook
  *
  * 桥接 vivlos EventBus → OpenTUI React state。
- * 返回 { logs, finalText, loading, status, submit }，
+ * 返回 { logs, finalText, loading, status, submit, spin }，
  * 组件层只消费这些数据，不直接触 EventBus。
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
+import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "../ui/animations/loading.ts";
 
 // ── 类型 ──
 
@@ -33,8 +34,6 @@ interface TurnSepEntry {
 export type LogEntry = ThinkingEntry | ToolEntry | TurnSepEntry;
 
 // ── 工具 ──
-
-const BRAILLE = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /** 提取 tool result 内的可读文本 */
 function extractToolText(raw: unknown): string {
@@ -64,18 +63,19 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
   // spinner 动画
   useEffect(() => {
     if (!loading) return;
-    const id = setInterval(() => setSpinnerFrame((f: number) => (f + 1) % BRAILLE.length), 400);
+    const id = setInterval(
+      () => setSpinnerFrame((f: number) => (f + 1) % SPINNER_FRAMES.length),
+      SPINNER_INTERVAL_MS,
+    );
     return () => clearInterval(id);
   }, [loading]);
 
   // 当前 spinner 图标
-  const spin = BRAILLE[spinnerFrame] ?? "?";
+  const spin = SPINNER_FRAMES[spinnerFrame] ?? "?";
 
   // tracking refs（跨 render 不丢）
   const activeThinkingIdx = useRef(-1);
   const callIdMap = useRef(new Map<string, number>());
-  const logsRef = useRef(logs);
-  logsRef.current = logs;
 
   // ── EventBus 订阅 ──
 
@@ -130,7 +130,6 @@ export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
       setFinalText(e.finalMessage);
       setLoading(false);
       setStatus("");
-      // 末尾 turn_sep 不需要，移除
       setLogs((prev: LogEntry[]) => {
         const last = prev[prev.length - 1];
         if (last?.kind === "turn_sep") return prev.slice(0, -1);

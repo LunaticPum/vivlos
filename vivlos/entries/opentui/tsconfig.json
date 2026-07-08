@@ -8,6 +8,7 @@
     "jsxImportSource": "@opentui/react",
     "strict": true,
     "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "baseUrl": "../../..",
     "paths": {
       "@vivlos/infra/eventbus/index.ts": ["vivlos/infra/eventbus/index.ts"],

@@ -12,43 +12,43 @@ import { LogLine } from "../ui/patterns/LogLine";
 import { VDivider } from "../ui/primitives/VDivider";
 import { VBox } from "../ui/primitives/VBox";
 
-export function ThinkingList({
-  logs,
-  spin,
+export function AgentLog({
+	logs,
+	spin,
 }: {
-  logs: LogEntry[];
-  /** 当前 spinner 图标 */
-  spin: string;
+	logs: LogEntry[];
+	/** 当前 spinner 图标 */
+	spin: string;
 }) {
-  return (
-    <VBox flexDirection="column">
-      {logs.map((entry, i) => {
-        if (entry.kind === "turn_sep") {
-          return <VDivider key={i} />;
-        }
+	return (
+		<VBox flexDirection="column">
+			{logs.map((entry, i) => {
+				if (entry.kind === "turn_sep") {
+					return <VDivider key={i} />;
+				}
 
-        if (entry.kind === "thinking") {
-          return (
-            <LogLine
-              key={i}
-              kind="thinking"
-              icon={entry.active ? spin : "✓"}
-              text={entry.text}
-            />
-          );
-        }
+				if (entry.kind === "thinking") {
+					return (
+						<LogLine
+							key={i}
+							kind="thinking"
+							icon={entry.active ? spin : "✓"}
+							text={entry.text}
+						/>
+					);
+				}
 
-        // tool
-        return (
-          <LogLine
-            key={i}
-            kind="tool"
-            icon={entry.active ? spin : "✓"}
-            toolName={entry.name}
-            toolResult={entry.result}
-          />
-        );
-      })}
-    </VBox>
-  );
+				// tool
+				return (
+					<LogLine
+						key={i}
+						kind="tool"
+						icon={entry.active ? spin : "✓"}
+						toolName={entry.name}
+						toolResult={entry.result}
+					/>
+				);
+			})}
+		</VBox>
+	);
 }
