@@ -32,6 +32,7 @@ export function InputBar({
         <text content="> " fg={colors.accent.bright} />
         <input
           focused
+          flexGrow={1}
           value={text}
           onInput={setText}
           onSubmit={handleSubmit}
