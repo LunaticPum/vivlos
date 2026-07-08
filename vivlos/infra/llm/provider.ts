@@ -5,7 +5,7 @@ import type {
 	Context,
 	AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all.ts";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import type { ApiKeyCredential } from "@earendil-works/pi-ai";
 import type { LLMClient, LLMConfig } from "./types.ts";
