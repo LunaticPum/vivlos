@@ -63,8 +63,15 @@ async function main(): Promise<void> {
     registry.registerSlash(cmd);
   }
 
-  // ── 退出清理 ──
+  // ── 退出清理（双击 Ctrl+C） ──
+  let ctrlCPressed = false;
   const cleanup = () => {
+    if (!ctrlCPressed) {
+      ctrlCPressed = true;
+      process.stderr.write("\n再按一次 Ctrl+C 退出...\n");
+      setTimeout(() => { ctrlCPressed = false; }, 2000);
+      return;
+    }
     process.stdout.write("\x1b[2J\x1b[H");
     logger.stop();
     closeDb();
@@ -75,7 +82,7 @@ async function main(): Promise<void> {
 
   // ── 装配 TUI（OpenTUI） ──
   const modelLabel = `${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`;
-  const renderer = await createCliRenderer({ exitOnCtrlC: true });
+  const renderer = await createCliRenderer();
   createRoot(renderer).render(
     <App
       agent={agent}
