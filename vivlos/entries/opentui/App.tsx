@@ -1,7 +1,7 @@
 /**
  * App 顶层布局
  *
- * StatusBar（顶） + ChatArea（中，flexGrow） + InputBar（底）
+ * ChatArea（中，flexGrow + scrollbox） + StatusBar（底） + InputBar（底）
  */
 
 import { useState } from "react";
@@ -27,8 +27,8 @@ export function App({
 
   return (
     <VBox flexDirection="column">
-      <StatusBar modelLabel={modelLabel} status={status} />
       <ChatArea messages={messages} logs={logs} finalText={finalText} spin={spin} />
+      <StatusBar modelLabel={modelLabel} status={status} />
       <InputBar
         loading={loading}
         onSubmit={(text) => {
