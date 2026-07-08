@@ -6,7 +6,7 @@
 		"node": ">=22.19.0"
 	},
 	"scripts": {
-		"dev": "bun run vivlos/entries/opentui/main.tsx",
+		"dev": "tsx -r tsconfig-paths/register vivlos/main.ts",
 		"test": "vitest --run",
 		"typecheck": "tsc --noEmit"
 	},
@@ -17,12 +17,12 @@
 		"@opentui/core": "^0.4.3",
 		"@opentui/react": "^0.4.3",
 		"@types/better-sqlite3": "^7.6.13",
+		"better-sqlite3": "^12.11.1",
 		"dotenv": "^16.5.0",
 		"openai": "^6.10.0",
 		"react": "^19.2.7"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.3.14",
 		"@types/node": "^24.10.0",
 		"@types/react": "^19.2.17",
 		"tsconfig-paths": "^4.2.0",
