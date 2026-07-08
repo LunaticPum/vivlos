@@ -10,15 +10,25 @@ import { theme } from "../theme";
 
 export interface VBoxProps {
   children?: unknown;
-  borderStyle?: "rounded" | "single" | "double" | "none" | "bold" | "hidden";
+  /** 边框样式，默认 rounded。OpenTUI 支持：single | double | rounded | heavy */
+  borderStyle?: "single" | "double" | "rounded" | "heavy";
+  /** 内边距，默认 sm(1) */
   padding?: number;
+  /** 标题（显示在边框左上角） */
   title?: string;
+  /** 主轴方向 */
   flexDirection?: "row" | "column";
+  /** 高度 */
   height?: number | string;
+  /** 宽度 */
   width?: number | string;
+  /** flex-grow */
   flexGrow?: number;
+  /** 边框颜色 */
   borderColor?: string;
+  /** 背景色 */
   backgroundColor?: string;
+  /** 子元素间距 */
   gap?: number;
 }
 
