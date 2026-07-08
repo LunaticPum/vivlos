@@ -2,42 +2,40 @@
  * 原子组件 VBox
  *
  * 封装 OpenTUI <box>，注入 vivlos 默认边框样式和间距。
- * 组件层直接用 <VBox>，不需要每次写 borderStyle/padding。
+ * 组件层直接用 <VBox>，不需要每次写 borderStyle/padding/borderColor。
+ * 其余 props 透传原生 <box>，类型由 OpenTUI JSX 类型推断。
  */
 
 import { colors } from "../colors";
 import { theme } from "../theme";
 
-export interface VBoxProps {
-  children?: unknown;
-  /** 边框样式，默认 rounded。OpenTUI 支持：single | double | rounded | heavy */
-  borderStyle?: "single" | "double" | "rounded" | "heavy";
+type BorderStyleVariant = "single" | "double" | "rounded" | "heavy";
+
+export function VBox(props: {
+  /** 边框样式，默认 rounded */
+  borderStyle?: BorderStyleVariant;
   /** 内边距，默认 sm(1) */
   padding?: number;
+  /** 边框颜色，默认 primary */
+  borderColor?: string;
   /** 标题（显示在边框左上角） */
   title?: string;
   /** 主轴方向 */
   flexDirection?: "row" | "column";
-  /** 高度 */
-  height?: number | string;
-  /** 宽度 */
-  width?: number | string;
-  /** flex-grow */
-  flexGrow?: number;
-  /** 边框颜色 */
-  borderColor?: string;
   /** 背景色 */
   backgroundColor?: string;
   /** 子元素间距 */
   gap?: number;
-}
+  /** 向后兼容：透传其余 box props */
+  [key: string]: unknown;
+}) {
+  const {
+    borderStyle = theme.border.outer as BorderStyleVariant,
+    padding = theme.spacing.sm,
+    borderColor = colors.border.primary,
+    ...rest
+  } = props;
 
-export function VBox({
-  borderStyle = theme.border.outer,
-  padding = theme.spacing.sm,
-  borderColor = colors.border.primary,
-  ...rest
-}: VBoxProps) {
   return (
     <box
       borderStyle={borderStyle}
