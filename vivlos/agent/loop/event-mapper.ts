@@ -87,9 +87,9 @@ export function mapAgentEvent(
 			if (ae.type === "thinking_end")
 				return [
 					{
-						type: "agent:thinking_delta",
+						type: "agent:thinking_end",
 						sessionId,
-						delta: ae.content,
+						content: ae.content,
 						messageSnapshot: event.message,
 					},
 				];

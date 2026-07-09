@@ -5,7 +5,7 @@ import type { LoopResult } from "./loop/types.ts";
 
 /** agent 对外接口 —— entries 层 */
 export interface VivlosAgent {
-	prompt(input: string | AgentMessage[]): Promise<LoopResult>;
+	prompt(input: string | AgentMessage[], signal?: AbortSignal): Promise<LoopResult>;
 	getMessages(): readonly Message[];
 	reset(): void;
 }

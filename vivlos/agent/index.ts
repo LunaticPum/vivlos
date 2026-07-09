@@ -76,8 +76,8 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	});
 
 	return {
-		async prompt(input: string | AgentMessage[]): Promise<LoopResult> {
-			return loop.run(input, { model, maxTurns, reasoning: params.thinkingLevel });
+		async prompt(input: string | AgentMessage[], signal?: AbortSignal): Promise<LoopResult> {
+			return loop.run(input, { model, maxTurns, reasoning: params.thinkingLevel, signal });
 		},
 		getMessages() {
 			return sessionManager.getMessages();

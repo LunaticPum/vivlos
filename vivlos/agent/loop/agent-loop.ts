@@ -143,10 +143,11 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 				return { messages: newMessages, turns: turn };
 			} catch (err) {
-				const error = err instanceof Error ? err : new Error(String(err));
-				log("error", error.message, error);
-				return { messages: [], turns: turn, error };
-			}
+					const error = err instanceof Error ? err : new Error(String(err));
+					log("error", error.message, error);
+					deps.eventBus.emit({ type: "agent:error", sessionId: sessionManager.id, error });
+					return { messages: [], turns: turn, error };
+				}
 		},
 	};
 }

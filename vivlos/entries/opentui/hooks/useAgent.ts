@@ -1,189 +1,368 @@
 /**
- * useAgent hook
+ * useAgent - EventBus -> React state 桥接 hook
  *
- * 桥接 vivlos EventBus → OpenTUI React state。
- * 返回 { logs, finalText, loading, status, submit, spin }，
- * 组件层只消费这些数据，不直接触 EventBus。
+ * 订阅 agent 生命周期事件，输出纯 state 供组件渲染。
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
-import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "../ui/animations/loading.ts";
 
 // ── 类型 ──
 
-interface ThinkingEntry {
-  kind: "thinking";
-  text: string;
-  active: boolean;
+// #region 类型
+
+/** 推理过程日志条目，按事件顺序追加 */
+export type LogEntry =
+	| { kind: "thinking"; text: string; done: boolean; turnIndex: number }
+	| {
+			kind: "tool";
+			callId: string;
+			name: string;
+			result: string;
+			done: boolean;
+			turnIndex: number;
+	  };
+
+/** 一次完整对话轮次 = 用户输入 + agent 响应（可能含多个 ReAct turn） */
+export interface AgentTurn {
+	userInput: string;
+	log: LogEntry[]; // 推理过程：thinking / tool 按顺序排列
+	finalText: string; // agent 最终回复
+	status: "running" | "complete" | "error";
+	turnCount: number; // ReAct 循环次数
+	toolCount: number; // 工具调用次数
 }
 
-interface ToolEntry {
-  kind: "tool";
-  name: string;
-  callId: string;
-  result?: string;
-  active: boolean;
+export interface UseAgentResult {
+	turns: AgentTurn[]; // 完整对话历史
+	loading: boolean; // agent 是否正在运行
+	error: string | null; // 错误信息
+	submit: (text: string) => void;
+	abort: () => void; // 打断当前 LLM 调用
 }
 
-interface TurnSepEntry {
-  kind: "turn_sep";
-}
+// #endregion
 
-export type LogEntry = ThinkingEntry | ToolEntry | TurnSepEntry;
+// ── 辅助函数（从旧 entries/tui/index.ts 搬过来） ──
 
-// ── 工具 ──
+// #region 辅助函数
 
 /** 提取 tool result 内的可读文本 */
 function extractToolText(raw: unknown): string {
-  if (!raw || typeof raw !== "object") return String(raw ?? "");
-  const r = raw as Record<string, unknown>;
-  const details = r.details as Record<string, unknown> | undefined;
-  if (details?.message && typeof details.message === "string" && details.message.trim()) {
-    return details.message;
-  }
-  const content = r.content as Array<{ type: string; text?: string }> | undefined;
-  if (content) {
-    const text = content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
-    if (text.trim()) return text;
-  }
-  return String(raw);
+	if (!raw || typeof raw !== "object") return String(raw ?? "");
+	const r = raw as Record<string, unknown>;
+	const details = r.details as Record<string, unknown> | undefined;
+	if (
+		details?.message &&
+		typeof details.message === "string" &&
+		details.message.trim()
+	) {
+		return details.message;
+	}
+	const content = r.content as
+		| Array<{ type: string; text?: string }>
+		| undefined;
+	if (content) {
+		const text = content
+			.filter((c) => c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("\n");
+		if (text.trim()) return text;
+	}
+	if (r.message && typeof r.message === "string" && r.message.trim()) {
+		return r.message;
+	}
+	return String(raw);
 }
+
+/** 从 messageSnapshot.content 提取最后一条 thinking block */
+function extractThinkingFromSnapshot(snapshot: unknown): string {
+	if (!snapshot || typeof snapshot !== "object") return "";
+	const msg = snapshot as Record<string, unknown>;
+	const content = msg.content as
+		| Array<{ type: string; thinking?: string }>
+		| undefined;
+	if (!content) return "";
+	const blocks = content.filter((c) => c.type === "thinking" && c.thinking);
+	return blocks.length > 0 ? blocks[blocks.length - 1]!.thinking! : "";
+}
+
+// ── 不可变更新辅助 ──
+
+/** 更新 turns 数组中指定索引的 turn */
+function updateCurrent(
+	turns: AgentTurn[],
+	idx: number,
+	fn: (t: AgentTurn) => AgentTurn,
+): AgentTurn[] {
+	if (idx < 0) return turns;
+	return turns.map((t, i) => (i === idx ? fn(t) : t));
+}
+
+/** 更新 log 中最后一个未完成的 thinking 条目 */
+function updateLastThinking(
+	log: LogEntry[],
+	fn: (
+		entry: Extract<LogEntry, { kind: "thinking" }>,
+	) => Extract<LogEntry, { kind: "thinking" }>,
+): LogEntry[] {
+	for (let j = log.length - 1; j >= 0; j--) {
+		const entry = log[j];
+		if (entry.kind === "thinking" && !entry.done) {
+			const updated = fn(entry);
+			return [...log.slice(0, j), updated, ...log.slice(j + 1)];
+		}
+	}
+	return log;
+}
+
+// #endregion
 
 // ── hook ──
 
-export function useAgent(agent: VivlosAgent, eventBus: EventBus) {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [finalText, setFinalText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [spinnerFrame, setSpinnerFrame] = useState(0);
+// #region useAgent 钩子
 
-  // spinner 动画
-  useEffect(() => {
-    if (!loading) return;
-    const id = setInterval(
-      () => setSpinnerFrame((f: number) => (f + 1) % SPINNER_FRAMES.length),
-      SPINNER_INTERVAL_MS,
-    );
-    return () => clearInterval(id);
-  }, [loading]);
+export function useAgent(
+	agent: VivlosAgent,
+	eventBus: EventBus,
+): UseAgentResult {
+	const [turns, setTurns] = useState<AgentTurn[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-  // 当前 spinner 图标
-  const spin = SPINNER_FRAMES[spinnerFrame] ?? "?";
+	// ref 保存当前对话轮次在 turns 数组里的索引
+	const currentIdxRef = useRef(-1);
 
-  // tracking refs（跨 render 不丢）
-  const activeThinkingIdx = useRef(-1);
-  const callIdMap = useRef(new Map<string, number>());
+	useEffect(() => {
+		const unsubs: (() => void)[] = [];
 
-  // ── EventBus 订阅 ──
+		// agent 开始运行
+		unsubs.push(
+			eventBus.on("agent:start", () => {
+				setLoading(true);
+				setError(null);
+			}),
+		);
 
-  useEffect(() => {
-    const handleThinkingDelta = (e: { delta: string; messageSnapshot?: unknown }) => {
-      setLogs((prev: LogEntry[]) => {
-        const idx = activeThinkingIdx.current;
-        if (idx >= 0 && idx < prev.length && prev[idx]?.kind === "thinking") {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], text: e.delta } as ThinkingEntry;
-          return updated;
-        }
-        // 新的 thinking 条目
-        const entry: ThinkingEntry = { kind: "thinking", text: e.delta, active: true };
-        const next = [...prev, entry];
-        activeThinkingIdx.current = next.length - 1;
-        return next;
-      });
-    };
+		// 新的 ReAct turn 开始 -> 追加一个 thinking 条目
+		unsubs.push(
+			eventBus.on("agent:turn_start", () => {
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => {
+						const newTurnCount = t.turnCount + 1;
+						return {
+							...t,
+							turnCount: newTurnCount,
+							log: [
+								...t.log,
+								{
+									kind: "thinking",
+									text: "",
+									done: false,
+									turnIndex: newTurnCount,
+								},
+							],
+						};
+					}),
+				);
+			}),
+		);
 
-    const handleToolStart = (e: { toolName: string; callId: string }) => {
-      activeThinkingIdx.current = -1;
-      const entry: ToolEntry = { kind: "tool", name: e.toolName, callId: e.callId, active: true };
-      setLogs((prev: LogEntry[]) => {
-        const next = [...prev, entry];
-        callIdMap.current.set(e.callId, next.length - 1);
-        return next;
-      });
-    };
+		// 工具调用开始 -> 追加 tool 条目
+		unsubs.push(
+			eventBus.on("agent:toolCall_start", (e) => {
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						toolCount: t.toolCount + 1,
+						log: [
+							...t.log,
+							{
+								kind: "tool",
+								callId: e.callId,
+								name: e.toolName,
+								result: "",
+								done: false,
+								turnIndex: t.turnCount,
+							},
+						],
+					})),
+				);
+			}),
+		);
 
-    const handleToolEnd = (e: { callId: string; result: unknown; success: boolean }) => {
-      const idx = callIdMap.current.get(e.callId);
-      if (idx === undefined) return;
-      const resultText = extractToolText(e.result);
-      setLogs((prev: LogEntry[]) => {
-        const updated = [...prev];
-        const entry = updated[idx];
-        if (entry?.kind === "tool") {
-          updated[idx] = { ...entry, result: resultText, active: false };
-        }
-        return updated;
-      });
-    };
+		// 工具调用流式结果
+		unsubs.push(
+			eventBus.on("agent:toolCall_delta", (e) => {
+				const text = extractToolText(e.partialResult);
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: t.log.map((entry) =>
+							entry.kind === "tool" && entry.callId === e.callId
+								? { ...entry, result: text }
+								: entry,
+						),
+					})),
+				);
+			}),
+		);
 
-    const handleTurnComplete = () => {
-      activeThinkingIdx.current = -1;
-      setLogs((prev: LogEntry[]) => [...prev, { kind: "turn_sep" }]);
-    };
+		// 工具调用结束
+		unsubs.push(
+			eventBus.on("agent:toolCall_end", (e) => {
+				const text = extractToolText(e.result);
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: t.log.map((entry) =>
+							entry.kind === "tool" && entry.callId === e.callId
+								? { ...entry, result: text, done: true }
+								: entry,
+						),
+					})),
+				);
+			}),
+		);
 
-    const handleComplete = (e: { finalMessage: string }) => {
-      activeThinkingIdx.current = -1;
-      setFinalText(e.finalMessage);
-      setLoading(false);
-      setStatus("");
-      setLogs((prev: LogEntry[]) => {
-        const last = prev[prev.length - 1];
-        if (last?.kind === "turn_sep") return prev.slice(0, -1);
-        return prev;
-      });
-    };
+		// thinking 流式更新 -> 更新最后一个未完成的 thinking 条目
+		unsubs.push(
+			eventBus.on("agent:thinking_delta", (e) => {
+				const text = extractThinkingFromSnapshot(e.messageSnapshot) || e.delta;
+				if (!text) return;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: updateLastThinking(t.log, (entry) => ({ ...entry, text })),
+					})),
+				);
+			}),
+		);
 
-    const handleError = (e: { error: Error }) => {
-      setStatus(e.error.message);
-      setLoading(false);
-    };
+		// thinking 结束 -> 标记最后一个 thinking 为 done
+		unsubs.push(
+			eventBus.on("agent:thinking_end", () => {
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: updateLastThinking(t.log, (entry) => ({
+							...entry,
+							done: true,
+						})),
+					})),
+				);
+			}),
+		);
 
-    const handleStart = () => {
-      setLogs([]);
-      setFinalText("");
-      setLoading(true);
-      setStatus("");
-      activeThinkingIdx.current = -1;
-      callIdMap.current.clear();
-    };
+		// 文本流式更新 -> 标记 thinking done + 实时写入 finalText（打字机效果）
+		unsubs.push(
+			eventBus.on("agent:message_delta", (e) => {
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						// text_delta 开始 = thinking 已结束，标记最后一个未完成的 thinking 为 done
+						log: updateLastThinking(t.log, (entry) => ({ ...entry, done: true })),
+						finalText: t.finalText + e.delta,
+					})),
+				);
+			}),
+		);
 
-    const handleTurnStart = () => {
-      activeThinkingIdx.current = -1;
-    };
+		// 消息完成 -> 不覆盖 finalText（中间 turn 的 message_complete 会覆盖流式累积的文本）
+		// finalText 只靠 agent:message_delta 流式追加 + agent:complete 最终设置
 
-    // 订阅
-    const unsubs = [
-      eventBus.on("agent:start", handleStart),
-      eventBus.on("agent:turn_start", handleTurnStart),
-      eventBus.on("agent:thinking_delta", handleThinkingDelta),
-      eventBus.on("agent:toolCall_start", handleToolStart),
-      eventBus.on("agent:toolCall_end", handleToolEnd),
-      eventBus.on("agent:turn_complete", handleTurnComplete),
-      eventBus.on("agent:complete", handleComplete),
-      eventBus.on("agent:error", handleError),
-    ];
+		// agent 完成 -> 写入最终回复
+		unsubs.push(
+			eventBus.on("agent:complete", (e) => {
+				setLoading(false);
+				const idx = currentIdxRef.current;
+				setTurns((prev) =>
+					updateCurrent(prev, idx, (t) => ({
+						...t,
+						status: "complete" as const,
+						finalText: e.finalMessage || t.finalText,
+					})),
+				);
+				currentIdxRef.current = -1;
+			}),
+		);
 
-    return () => unsubs.forEach((fn) => fn());
-  }, [eventBus]);
+		// agent 出错
+		unsubs.push(
+			eventBus.on("agent:error", (e) => {
+				setLoading(false);
+				setError(e.error.message);
+				const idx = currentIdxRef.current;
+				setTurns((prev) =>
+					updateCurrent(prev, idx, (t) => ({
+						...t,
+						status: "error" as const,
+					})),
+				);
+				currentIdxRef.current = -1;
+			}),
+		);
 
-  // ── submit ──
+		return () => unsubs.forEach((fn) => fn());
+	}, [eventBus]);
 
-  const submit = useCallback(
-    async (text: string) => {
-      if (loading) return;
-      try {
-        await agent.prompt(text);
-      } catch (err) {
-        setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
-        setLoading(false);
-      }
-    },
-    [agent, loading],
-  );
+	const abortRef = useRef<AbortController | null>(null);
 
-  return { logs, finalText, loading, status, submit, spin };
+	const submit = useCallback(
+		(text: string) => {
+			if (!text.trim()) return;
+			setError(null);
+			currentIdxRef.current = turns.length;
+			setTurns((prev) => [
+				...prev,
+				{
+					userInput: text,
+					log: [],
+					finalText: "",
+					status: "running",
+					turnCount: 0,
+					toolCount: 0,
+				},
+			]);
+
+			// 每次提交创建新的 AbortController
+			const controller = new AbortController();
+			abortRef.current = controller;
+
+			agent.prompt(text, controller.signal).then((result) => {
+				// 如果 loop 返回了 error 但没走 catch（比如 turn_end 里的 error 事件）
+				if (result.error && !controller.signal.aborted) {
+					setError(result.error.message);
+				}
+			}).catch((err) => {
+				if (controller.signal.aborted) return; // 用户主动打断，不算错误
+				setError(`fatal: ${err instanceof Error ? err.message : String(err)}`);
+				setLoading(false);
+				currentIdxRef.current = -1;
+			});
+		},
+		[agent, turns.length],
+	);
+
+	/** 打断当前 LLM 调用 */
+	const abort = useCallback(() => {
+		if (abortRef.current) {
+			abortRef.current.abort();
+			abortRef.current = null;
+			setLoading(false);
+			const idx = currentIdxRef.current;
+			setTurns((prev) =>
+				updateCurrent(prev, idx, (t) => ({
+					...t,
+					status: "error" as const,
+				})),
+			);
+			currentIdxRef.current = -1;
+		}
+	}, []);
+
+	return { turns, loading, error, submit, abort };
 }
+
+// #endregion

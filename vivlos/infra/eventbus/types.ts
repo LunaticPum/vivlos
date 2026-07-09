@@ -37,11 +37,17 @@ export type VivlosEvent =
 			readonly messageSnapshot?: unknown;
 	  }
 	| {
-			readonly type: "agent:thinking_delta";
-			readonly sessionId: string;
-			readonly delta: string;
-			readonly messageSnapshot?: unknown;
-	  }
+		readonly type: "agent:thinking_delta";
+		readonly sessionId: string;
+		readonly delta: string;
+		readonly messageSnapshot?: unknown;
+	}
+	| {
+		readonly type: "agent:thinking_end";
+		readonly sessionId: string;
+		readonly content: string;
+		readonly messageSnapshot?: unknown;
+	}
 	| {
 			readonly type: "agent:message_complete";
 			readonly sessionId: string;

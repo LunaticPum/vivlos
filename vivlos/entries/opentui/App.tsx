@@ -1,78 +1,48 @@
-/**
- * App 顶层布局
- *
- * ChatArea（中，flexGrow + scrollbox） + StatusBar（底） + InputBar（底）
- * useCommands 桥接 vivlos/commands/ 的 slash 命令到 OpenTUI。
- */
-
 import { useState } from "react";
-import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
-import type { VivlosAgent } from "@vivlos/agent/types.ts";
-import type { LLMClient } from "@vivlos/infra/llm/index.ts";
-import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemoryManager } from "@vivlos/agent/memory/index.ts";
-import type { CommandRegistry } from "@vivlos/commands/registry.ts";
+import { useKeyboard } from "@opentui/react";
+import { ChatArea } from "./containers/chat/ChatArea";
+import { StatusBar } from "./containers/chat/StatusBar";
+import { InputBar } from "./containers/chat/InputBar";
 import { useAgent } from "./hooks/useAgent";
-import { useCommands } from "./hooks/useCommands";
-import { VBox } from "./ui/primitives/VBox";
-import { StatusBar } from "./components/StatusBar";
-import { ChatArea } from "./components/ChatArea";
-import { InputBar } from "./components/InputBar";
+import type { VivlosAgent } from "@vivlos/agent/types.ts";
+import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 
 export function App({
-  agent,
-  eventBus,
-  modelLabel,
-  llm,
-  sessionManager,
-  memoryManager,
-  registry,
-  shutdown,
+	modelLabel,
+	agent,
+	eventBus,
 }: {
-  agent: VivlosAgent;
-  eventBus: EventBus;
-  modelLabel: string;
-  llm: LLMClient;
-  sessionManager: SessionManager;
-  memoryManager: MemoryManager;
-  registry: CommandRegistry;
-  shutdown: () => void;
+	modelLabel: string;
+	agent: VivlosAgent;
+	eventBus: EventBus;
 }) {
-  const { logs, finalText, loading, status, submit, spin } = useAgent(agent, eventBus);
-  const [messages, setMessages] = useState<string[]>([]);
-  const [detailExpanded, setDetailExpanded] = useState(false);
-  const [cmdFeedback, setCmdFeedback] = useState("");
+	const { turns, loading, error, submit, abort } = useAgent(agent, eventBus);
+	const [detailExpanded, setDetailExpanded] = useState(false);
 
-  const handleCommand = useCommands({
-    registry,
-    llm,
-    eventBus,
-    sessionManager,
-    memoryManager,
-    shutdown,
-    detailExpanded,
-    onToggleDetail: () => setDetailExpanded((v) => !v),
-    onClear: () => setMessages([]),
-  });
+	// Ctrl+C: loading 时打断 LLM，idle 时退出程序
+	useKeyboard((key) => {
+		if (key.ctrl && key.name === "c") {
+			if (loading) {
+				abort();
+			} else {
+				process.emit("SIGINT");
+			}
+		}
+	});
 
-  const handleSubmit = async (text: string) => {
-    // 检查 slash 命令
-    const cmd = await handleCommand(text);
-    if (cmd.handled) {
-      setCmdFeedback(cmd.feedback ?? "");
-      return;
-    }
-
-    setCmdFeedback("");
-    setMessages((prev) => [...prev, text]);
-    submit(text);
-  };
-
-  return (
-    <VBox flexDirection="column">
-      <ChatArea messages={messages} logs={logs} finalText={finalText} spin={spin} />
-      <StatusBar modelLabel={modelLabel} status={status || cmdFeedback} />
-      <InputBar loading={loading} onSubmit={handleSubmit} />
-    </VBox>
-  );
+	return (
+		<box flexDirection="column" width="100%" height="100%">
+			<ChatArea turns={turns} detailExpanded={detailExpanded} />
+			<StatusBar modelLabel={modelLabel} loading={loading} error={error} />
+			<InputBar
+				onSubmit={(text) => {
+					if (text === "/detail") {
+						setDetailExpanded((v) => !v);
+						return;
+					}
+					submit(text);
+				}}
+			/>
+		</box>
+	);
 }
