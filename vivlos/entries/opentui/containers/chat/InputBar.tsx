@@ -18,9 +18,12 @@ import type {
 	ContentChangeEvent,
 } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { getColors } from "../../designs/colors";
 
-const colors = getColors();
+const C = {
+	border: "#ca9ee6",
+	text: "#cdd6f4",
+	subtext: "#a6adc8",
+} as const;
 
 const inputBorder: BorderCharacters = {
 	topLeft: "─",
@@ -28,7 +31,7 @@ const inputBorder: BorderCharacters = {
 	bottomLeft: "─",
 	bottomRight: "─",
 	horizontal: "─",
-	vertical: " ",
+	vertical: "❯",
 	topT: "─",
 	bottomT: "─",
 	leftT: "─",
@@ -154,20 +157,19 @@ export function InputBar({ onSubmit }: InputBarProps) {
 		<box
 			height={boxHeight}
 			width="100%"
-			border={true}
-			borderStyle="single"
+			border={["top", "bottom", "left"]}
 			customBorderChars={inputBorder}
-			borderColor={"#f5a97f"}
+			borderColor={C.border}
 			flexDirection="row"
+			paddingX={1}
 		>
-			<text fg={colors.text.primary}>{"❯ "}</text>
 			<textarea
 				ref={textareaRef}
 				focused={true}
 				flexGrow={1}
 				placeholder="输入消息... (Ctrl+Enter 换行)"
-				placeholderColor={colors.text.muted}
-				textColor={colors.text.primary}
+				placeholderColor={C.subtext}
+				textColor={C.text}
 				wrapMode="none"
 				keyBindings={[
 					{ name: "return", ctrl: true, action: "newline" },

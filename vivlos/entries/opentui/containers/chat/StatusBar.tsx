@@ -9,13 +9,16 @@
 
 import { useState, useEffect } from "react";
 import { t, fg } from "@opentui/core";
-import spinners from "cli-spinners";
-import { getColors } from "../../designs/colors";
 
-const colors = getColors();
-
-const SPINNER = spinners.mindblown;
-const SPINNER_INTERVAL = 110;
+const C = {
+	model: "#74c7ec",
+	default: "#74c7ec",
+	usage: "#a6da95",
+	clock: "#fab387",
+	error: "#f38ba8",
+	divider: "#ca9ee6",
+	bg: "#232634",
+} as const;
 
 export interface StatusBarProps {
 	/** 模型标签，如 "deepseek/deepseek-v4-pro" */
@@ -42,19 +45,6 @@ function useSessionDuration(): string {
 	return `${mm}m${ss.toString().padStart(2, "0")}s`;
 }
 
-/** 纯文本 spinner，返回当前帧，可嵌入 t 模板 */
-function useTextSpinner(active: boolean): string {
-	const [frame, setFrame] = useState(0);
-	useEffect(() => {
-		if (!active) return;
-		const timer = setInterval(() => {
-			setFrame((f) => (f + 1) % SPINNER.frames.length);
-		}, SPINNER_INTERVAL);
-		return () => clearInterval(timer);
-	}, [active]);
-	return active ? SPINNER.frames[frame]! : "";
-}
-
 /** 上下文进度条占位 */
 // TODO: 后续接入真实 token 统计
 function useContextBar() {
@@ -67,23 +57,18 @@ function useContextBar() {
 
 export function StatusBar({
 	modelLabel,
-	loading = false,
 	error = null,
 }: StatusBarProps) {
-	const spin = useTextSpinner(loading);
 	const duration = useSessionDuration();
 	const { bar, percent } = useContextBar();
 
-	const color1 = colors.code.inline;
-	const color2 = colors.code.block;
-	const color3 = colors.border.divider;
 	const sep = " │ ";
 
-	const content = t` ${spin ? `${spin}` : ""}${fg(color1)(modelLabel)}${fg(color3)(sep)}${fg(color1)("0k/1M")}${fg(color3)(sep)}${fg(color2)(`${bar} ${percent}%`)}${fg(color3)(sep)}${fg(color1)(duration)}${error ? fg(color3)(sep) : ""}${error ? fg(colors.semantic.error)(`✗ ${error}`) : ""} `;
+	const content = t`${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${error ? fg(C.divider)(sep) : ""}${error ? fg(C.error)(`✗ ${error}`) : ""}`;
 
 	return (
 		<box height={1} width="100%" flexDirection="row" alignItems="center">
-			<text bg={colors.bg.mantle} fg={colors.text.primary} content={content} />
+			<text bg={C.bg} content={content} />
 		</box>
 	);
 }
