@@ -1,23 +1,27 @@
 /**
  * AgentMessageCard - Agent 消息卡片
  *
- * 推理过程三状态：
- *   running  -> 只显示当前 turn 的日志（最多 8 行），bottomTitle 动态计时
- *   collapsed -> 最后一次 thinking 的 text + (输入 /detail 查看详细...)，bottomTitle 固定
- *   expanded -> 所有 turn 的日志 + 分隔线，bottomTitle 固定
+ * 推理过程两状态：
+ *   compact  -> scrollbox height=8 sticky bottom，running 时 spinner 转，complete 时 ✓
+ *   expanded -> 完整展示所有内容，无高度限制
  *
  * 状态切换：
- *   running -> collapsed：agent:complete 触发
- *   collapsed <-> expanded：用户输入 /detail 切换
+ *   compact -> expanded：用户输入 /detail
+ *   expanded -> compact：用户再次输入 /detail
  */
 
 import { useState, useEffect, useRef } from "react";
 import spinners from "cli-spinners";
+import { SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core";
 import type { AgentTurn, LogEntry } from "../hooks/useAgent";
 
-const MAX_LOG_LINES = 8;
-const SPINNER = spinners.dots;
+const SCROLL_HEIGHT = 8;
+const SPINNER = spinners.sand;
 const SPINNER_INTERVAL = 80;
+const BREATHING_INTERVAL = 130;
+
+/** 全局 SyntaxStyle 实例，markdown 渲染用 */
+const syntaxStyle = SyntaxStyle.create();
 
 // #region 颜色常量
 
@@ -25,13 +29,13 @@ const C = {
 	borderOuter: "#74c7ec",
 	borderInner: "#94e2d5",
 	text: "#cdd6f4",
-	muted: "#6c7086",
-	thinking: "#94e2d5",
-	tool: "#74c7ec",
-	toolName: "#fab387",
+	subtext: "#bac2de",
+	thinking: "#cba6f7",
+	tool: "#cba6f7",
+	toolName: "#f9e2af",
 	done: "#a6e3a1",
-	running: "#cba6f7",
-	divider: "#6c7086",
+	bright: "#cdd6f4",
+	dim: "#6c7086",
 } as const;
 
 // #endregion
@@ -62,7 +66,28 @@ function useReasoningDuration(status: AgentTurn["status"]): number {
 		}
 	}, [status]);
 
-	return status === "running" ? seconds : (finalRef.current || seconds);
+	return status === "running" ? seconds : finalRef.current || seconds;
+}
+
+// #endregion
+
+// #region 呼吸动画
+
+function useBreathingText(
+	text: string,
+	active: boolean,
+): { char: string; color: string }[] {
+	const [tick, setTick] = useState(0);
+	useEffect(() => {
+		if (!active) return;
+		const timer = setInterval(() => setTick((t) => t + 1), BREATHING_INTERVAL);
+		return () => clearInterval(timer);
+	}, [active]);
+	const highlightIdx = tick % text.length;
+	return text.split("").map((char, i) => ({
+		char,
+		color: i === highlightIdx ? C.bright : C.dim,
+	}));
 }
 
 // #endregion
@@ -73,13 +98,18 @@ export function AgentMessageCard({
 }: AgentMessageCardProps) {
 	const duration = useReasoningDuration(turn.status);
 	const isRunning = turn.status === "running";
-	const isCollapsed = !isRunning && !detailExpanded;
 	const isExpanded = !isRunning && detailExpanded;
 
 	// 推理框 bottomTitle
 	const bottomTitle = isRunning
 		? `Turn ${turn.turnCount} · ${duration}s`
 		: `${turn.turnCount} Turns · ${turn.toolCount} Tools · ${duration}s`;
+
+	// 呼吸动画
+	const breathing = useBreathingText(
+		"少女祈祷中...",
+		isRunning && !turn.finalText,
+	);
 
 	return (
 		<box
@@ -103,93 +133,82 @@ export function AgentMessageCard({
 					paddingX={1}
 					marginBottom={1}
 				>
-					{isRunning && <RunningLog log={turn.log} />}
-					{isCollapsed && <CollapsedLog turn={turn} />}
-					{isExpanded && <ExpandedLog log={turn.log} />}
+					{isExpanded ? (
+						<ExpandedLog log={turn.log} />
+					) : (
+						<CompactLog log={turn.log} active={isRunning} />
+					)}
 				</box>
 			)}
 
 			{/* 最终回复 */}
 			{turn.finalText ? (
-				<text fg={C.text}>{turn.finalText}</text>
+				<markdown
+					content={turn.finalText}
+					syntaxStyle={syntaxStyle}
+					streaming={isRunning}
+					conceal={true}
+				/>
 			) : isRunning ? (
-				<text fg={C.muted}>Thinking...</text>
+				<box flexDirection="row">
+					{breathing.map((item, i) => (
+						<text key={i} fg={item.color}>
+							{item.char}
+						</text>
+					))}
+				</box>
 			) : null}
 		</box>
 	);
 }
 
-// #region RunningLog -- 当前 turn 的日志，最多 8 行
+// #region CompactLog -- scrollbox 最多 8 行，sticky bottom
 
-/** 纯文本 spinner 帧，用于 running 状态的日志条目前缀 */
-function useSpinnerFrame(active: boolean): string {
-	const [frame, setFrame] = useState(0);
+function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
+	const spin = useSpinnerFrame(active);
+	const lines = log.flatMap((entry) =>
+		entryToLines(entry, active ? spin : "✓"),
+	);
+	const height = Math.min(lines.length, SCROLL_HEIGHT);
+
+	const scrollRef = useRef<ScrollBoxRenderable>(null);
+
+	// 覆写 onMouseEvent，阻止 scroll 事件冒泡到外层
 	useEffect(() => {
-		if (!active) return;
-		const timer = setInterval(() => {
-			setFrame((f) => (f + 1) % SPINNER.frames.length);
-		}, SPINNER_INTERVAL);
-		return () => clearInterval(timer);
-	}, [active]);
-	return SPINNER.frames[frame]!;
-}
+		const sb = scrollRef.current as any;
+		if (!sb) return;
+		const original = sb.onMouseEvent.bind(sb);
+		sb.onMouseEvent = (event: any) => {
+			original(event);
+			if (event.type === "scroll") event.stopPropagation?.();
+		};
+	}, []);
 
-function RunningLog({ log }: { log: LogEntry[] }) {
-	const spin = useSpinnerFrame(true);
-	const lines = log.flatMap((entry) => entryToLines(entry, spin));
-
-	// 超过 8 行：只取最后 7 条 + 末尾 (truncated...)
-	if (lines.length > MAX_LOG_LINES) {
-		const visible = lines.slice(0, MAX_LOG_LINES - 1);
-		return (
-			<box flexDirection="column">
-				{visible.map((line, i) => (
-					<text key={i} fg={line.color}>{line.text}</text>
+	return (
+		<box overflow="hidden" height={height}>
+			<scrollbox
+				ref={scrollRef}
+				height={height}
+				stickyScroll={true}
+				stickyStart="bottom"
+			>
+				{lines.map((line, i) => (
+					<box key={i} flexDirection="row">
+						{line.segments.map((seg, j) => (
+							<text key={j} fg={seg.color}>{seg.text}</text>
+						))}
+					</box>
 				))}
-				<text fg={C.muted}>{"(truncated...)"}</text>
-			</box>
-		);
-	}
-
-	return (
-		<box flexDirection="column">
-			{lines.map((line, i) => (
-				<text key={i} fg={line.color}>{line.text}</text>
-			))}
+			</scrollbox>
 		</box>
 	);
 }
 
 // #endregion
 
-// #region CollapsedLog -- 最后一次 thinking 的文本 + 提示
-
-function CollapsedLog({ turn }: { turn: AgentTurn }) {
-	const lastThinking = [...turn.log]
-		.reverse()
-		.find((e) => e.kind === "thinking" && e.done);
-
-	return (
-		<box flexDirection="column">
-			{lastThinking && lastThinking.kind === "thinking" && (
-				<>
-					<text fg={C.done}>{"✓ Thinking..."}</text>
-					{lastThinking.text && (
-						<text fg={C.muted}>{"  ┆ "}{lastThinking.text}</text>
-					)}
-				</>
-			)}
-			<text fg={C.muted}>{"(输入 /detail 查看详细...)"}</text>
-		</box>
-	);
-}
-
-// #endregion
-
-// #region ExpandedLog -- 所有 turn 的日志 + 分隔线
+// #region ExpandedLog -- 完整展示，按 turn 分组 + 分隔线
 
 function ExpandedLog({ log }: { log: LogEntry[] }) {
-	// 按 turnIndex 分组
 	const groups = new Map<number, LogEntry[]>();
 	for (const entry of log) {
 		const idx = getTurnIndex(entry);
@@ -204,13 +223,17 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 		<box flexDirection="column">
 			{sortedTurns.map((turnIdx, i) => (
 				<box key={turnIdx} flexDirection="column">
-					{i > 0 && (
-						<text fg={C.divider}>{`─── Turn ${turnIdx} ───`}</text>
-					)}
+					<text fg={C.borderInner}>{`──── Turn ${turnIdx} ────`}</text>
 					{groups.get(turnIdx)!.map((entry, j) => {
 						const lines = entryToLines(entry, "✓");
 						return lines.map((line, k) => (
-							<text key={`${turnIdx}-${j}-${k}`} fg={line.color}>{line.text}</text>
+							<box key={`${turnIdx}-${j}-${k}`} flexDirection="row">
+								{line.segments.map((seg, s) => (
+									<text key={s} fg={seg.color}>
+										{seg.text}
+									</text>
+								))}
+							</box>
 						));
 					})}
 				</box>
@@ -223,39 +246,63 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 
 // #region 辅助函数
 
+/** 纯文本 spinner 帧 */
+function useSpinnerFrame(active: boolean): string {
+	const [frame, setFrame] = useState(0);
+	useEffect(() => {
+		if (!active) return;
+		const timer = setInterval(() => {
+			setFrame((f) => (f + 1) % SPINNER.frames.length);
+		}, SPINNER_INTERVAL);
+		return () => clearInterval(timer);
+	}, [active]);
+	return SPINNER.frames[frame]!;
+}
+
 /** 从 LogEntry 提取 turnIndex */
 function getTurnIndex(entry: LogEntry): number {
 	return entry.turnIndex;
 }
 
 /** 一条 LogEntry 渲染为若干行文本 */
-interface RenderLine {
+interface RenderSegment {
 	text: string;
 	color: string;
+}
+
+interface RenderLine {
+	segments: RenderSegment[];
 }
 
 function entryToLines(entry: LogEntry, spin: string): RenderLine[] {
 	if (entry.kind === "thinking") {
 		const lines: RenderLine[] = [
 			{
-				text: `${entry.done ? "✓" : spin} Thinking...`,
-				color: entry.done ? C.done : C.thinking,
+				segments: [
+					{
+						text: `${entry.done ? "✓" : spin} Thinking...`,
+						color: entry.done ? C.done : C.thinking,
+					},
+				],
 			},
 		];
 		if (entry.text) {
-			lines.push({ text: `  ┆ ${entry.text}`, color: C.muted });
+			lines.push({ segments: [{ text: `┆ ${entry.text}`, color: C.subtext }] });
 		}
 		return lines;
 	}
 
+	const prefix = entry.done ? "✓" : spin;
 	const lines: RenderLine[] = [
 		{
-			text: `${entry.done ? "✓" : spin} Calling ${entry.name}`,
-			color: entry.done ? C.done : C.tool,
+			segments: [
+				{ text: `${prefix} Calling `, color: entry.done ? C.done : C.tool },
+				{ text: entry.name, color: C.toolName },
+			],
 		},
 	];
 	if (entry.result) {
-		lines.push({ text: `  ┆ ${entry.result}`, color: C.muted });
+		lines.push({ segments: [{ text: `┆ ${entry.result}`, color: C.subtext }] });
 	}
 	return lines;
 }
