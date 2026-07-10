@@ -47,6 +47,7 @@ export function App({
 				}}
 			/>
 			<SlashBar
+				// loading={true}
 				loading={loading}
 				detailExpanded={detailExpanded}
 				hasCompletedTurn={hasCompletedTurn}

@@ -20,7 +20,7 @@ import type {
 import { useKeyboard } from "@opentui/react";
 
 const C = {
-	border: "#ca9ee6",
+	border: "#cba6f7",
 	text: "#cdd6f4",
 	subtext: "#a6adc8",
 } as const;

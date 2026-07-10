@@ -16,7 +16,7 @@ const C = {
 	usage: "#a6da95",
 	clock: "#fab387",
 	error: "#f38ba8",
-	divider: "#ca9ee6",
+	divider: "#cba6f7",
 	bg: "#232634",
 } as const;
 
