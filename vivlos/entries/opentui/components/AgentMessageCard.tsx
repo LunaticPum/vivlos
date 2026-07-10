@@ -15,29 +15,31 @@ import {
 } from "@opentui/core";
 import type { AgentTurn, LogEntry } from "../hooks/useAgent";
 
+// #region 常量
+
 const SCROLL_HEIGHT = 8;
-const SPINNER = spinners.sand;
+const SPINNER = spinners.dots7;
 const SPINNER_INTERVAL = 80;
 const BREATHING_INTERVAL = 110;
 
 /** 全局 SyntaxStyle 实例，markdown 渲染用 */
 const syntaxStyle = SyntaxStyle.create();
 
-// #region 颜色常量
+/** 颜色常量 */
 const C = {
 	borderOuter: "#74c7ec",
 	borderInner: "#94e2d5",
+	text: "#cdd6f4",
 	subtext: "#bac2de",
-	thinking: "#cba6f7",
-	tool: "#cba6f7",
+	thinking: "#f5c2e7",
+	tool: "#eba0ac",
 	toolName: "#fab387",
 	done: "#a6e3a1",
-	bright: "#ffdbdb",
-	dim: "#ff9d9d",
+	bright: "#f5c2e7",
+	dim: "#eba0ac",
 } as const;
-// #endregion
 
-// #region 子文本左竖线边框
+/** 子文本左竖线边框字符 */
 const textBlock: BorderCharacters = {
 	topLeft: "─",
 	topRight: "─",
@@ -51,14 +53,17 @@ const textBlock: BorderCharacters = {
 	rightT: "─",
 	cross: "─",
 };
+
 // #endregion
+
+// #region Agent 消息卡片
 
 export interface AgentMessageCardProps {
 	turn: AgentTurn;
 	detailExpanded: boolean;
 }
 
-// #region 推理计时器
+/** 推理框计时器 */
 function useReasoningDuration(status: AgentTurn["status"]): number {
 	const [seconds, setSeconds] = useState(0);
 	const startRef = useRef(0);
@@ -76,9 +81,8 @@ function useReasoningDuration(status: AgentTurn["status"]): number {
 	}, [status]);
 	return status === "running" ? seconds : finalRef.current || seconds;
 }
-// #endregion
 
-// #region 呼吸动画
+/** 呼吸动画："少女祈祷中..." 逐字符高亮 */
 function useBreathingText(
 	text: string,
 	active: boolean,
@@ -95,7 +99,6 @@ function useBreathingText(
 		color: i === idx ? C.bright : C.dim,
 	}));
 }
-// #endregion
 
 export function AgentMessageCard({
 	turn,
@@ -105,8 +108,8 @@ export function AgentMessageCard({
 	const isRunning = turn.status === "running";
 	const isExpanded = !isRunning && detailExpanded;
 	const bottomTitle = isRunning
-		? `Turn ${turn.turnCount} · ${duration}s`
-		: `${turn.turnCount} Turns · ${turn.toolCount} Tools · ${duration}s`;
+		? ` Turn ${turn.turnCount} · ${duration}s `
+		: ` ${turn.turnCount} Turns · ${turn.toolCount} Tools · ${duration}s `;
 	const breathing = useBreathingText(
 		"少女祈祷中...",
 		isRunning && !turn.finalText,
@@ -116,7 +119,7 @@ export function AgentMessageCard({
 		<box
 			borderStyle="double"
 			borderColor={C.borderOuter}
-			title="Vivlos"
+			title=" Vivlos "
 			titleAlignment="left"
 			padding={1}
 			marginBottom={1}
@@ -126,7 +129,7 @@ export function AgentMessageCard({
 				<box
 					borderStyle="single"
 					borderColor={C.borderInner}
-					title="推理过程"
+					title=" 推理过程 "
 					titleAlignment="left"
 					bottomTitle={bottomTitle}
 					bottomTitleAlignment="right"
@@ -146,6 +149,7 @@ export function AgentMessageCard({
 					syntaxStyle={syntaxStyle}
 					streaming={isRunning}
 					conceal={!isRunning}
+					fg={C.text}
 				/>
 			) : isRunning ? (
 				<box flexDirection="row">
@@ -160,7 +164,9 @@ export function AgentMessageCard({
 	);
 }
 
-// #region 类型 & entryToLines
+// #endregion
+
+// #region 数据模型
 
 interface RenderSegment {
 	text: string;
@@ -168,27 +174,40 @@ interface RenderSegment {
 }
 interface RenderLine {
 	segments: RenderSegment[];
+	markdown?: boolean;
+	streaming?: boolean;
 }
 type LogLines = [RenderLine, ...RenderLine[]];
 
+/** 估算 markdown 文本渲染行数，用于 scrollbox 高度自适应 */
+function estimateHeight(text: string): number {
+	return text.split("\n").length;
+}
+
+/**
+ * 将一条 LogEntry 转为渲染项。
+ * 返回 [主行, ...子文本行]。主行是 "✓ Thinking..." / "✓ Calling xxx"，
+ * 子文本行用 markdown 或纯文本渲染。
+ */
 function entryToLines(entry: LogEntry, spin: string): LogLines {
 	if (entry.kind === "thinking") {
 		const main: RenderLine = {
 			segments: [
 				{
-					text: `${entry.done ? "✓" : spin} Thinking...`,
+					text: `${entry.done ? "✓ Thinking" : spin + " Thinking..."}`,
 					color: entry.done ? C.done : C.thinking,
 				},
 			],
 		};
 		if (!entry.text) return [main];
-		const sub: RenderLine[] = entry.text
-			.split("\n")
-			.filter(Boolean)
-			.map((line) => ({
-				segments: [{ text: line, color: C.subtext }],
-			}));
-		return [main, ...sub];
+		return [
+			main,
+			{
+				segments: [{ text: entry.text.trim(), color: C.subtext }],
+				markdown: true,
+				streaming: !entry.done,
+			},
+		];
 	}
 	// tool
 	const prefix = entry.done ? "✓" : spin;
@@ -204,13 +223,51 @@ function entryToLines(entry: LogEntry, spin: string): LogLines {
 
 // #endregion
 
-// #region CompactLog
+// #region 渲染组件
 
+/** 子文本左竖线框。markdown 类子文本用 <markdown> 流式渲染，否则纯 <text> */
+function renderSub(sub: RenderLine[], key: React.Key) {
+	if (sub.length === 0) return null;
+	return (
+		<box
+			key={key}
+			border={["left"]}
+			customBorderChars={textBlock}
+			borderColor={C.subtext}
+			paddingX={1}
+		>
+			{sub[0].markdown ? (
+				<markdown
+					content={sub[0].segments[0].text}
+					syntaxStyle={syntaxStyle}
+					streaming={sub[0].streaming ?? false}
+					conceal={true}
+					fg={C.subtext}
+				/>
+			) : (
+				sub.map((line, j) => (
+					<text key={j} fg={C.subtext}>
+						{line.segments[0].text}
+					</text>
+				))
+			)}
+		</box>
+	);
+}
+
+/** compact 视图：scrollbox 最多 8 行，高度自适应 1~8 */
 function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
 	const spin = useSpinnerFrame(active);
 	const entries = log.map((entry) => entryToLines(entry, active ? spin : "✓"));
-	const allLines = log.flatMap((entry) => entryToLines(entry, active ? spin : "✓"));
-	const height = Math.min(allLines.length, SCROLL_HEIGHT);
+	const height = Math.min(
+		entries.reduce((sum, [, ...sub]) => {
+			let h = 1;
+			for (const line of sub)
+				h += line.markdown ? estimateHeight(line.segments[0].text) : 1;
+			return sum + h;
+		}, 0),
+		SCROLL_HEIGHT,
+	);
 	const scrollRef = useRef<ScrollBoxRenderable>(null);
 
 	useEffect(() => {
@@ -240,20 +297,7 @@ function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
 								</text>
 							))}
 						</box>
-						{sub.length > 0 && (
-							<box
-								border={["left"]}
-								customBorderChars={textBlock}
-								borderColor={C.subtext}
-								paddingX={1}
-							>
-								{sub.map((line, j) => (
-									<text key={j} fg={C.subtext}>
-										{line.segments[0].text}
-									</text>
-								))}
-							</box>
-						)}
+						{renderSub(sub, `sub-${i}`)}
 					</box>
 				))}
 			</scrollbox>
@@ -261,10 +305,7 @@ function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
 	);
 }
 
-// #endregion
-
-// #region ExpandedLog
-
+/** expanded 视图：完整展示，按 turn 分组 + 分隔线 */
 function ExpandedLog({ log }: { log: LogEntry[] }) {
 	const groups = new Map<number, LogEntry[]>();
 	for (const entry of log) {
@@ -275,48 +316,33 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 		<box flexDirection="column">
 			{[...groups.keys()]
 				.sort((a, b) => a - b)
-				.map((turnIdx) => {
-					const entries = groups.get(turnIdx)!;
-					return (
-						<box key={turnIdx} flexDirection="column">
-							<text fg={C.borderInner}>{`──── Turn ${turnIdx} ────`}</text>
-							{entries.flatMap((entry) => {
-								const [main, ...sub] = entryToLines(entry, "✓");
-								return [
-									<box key={`${turnIdx}-main`} flexDirection="row">
-										{main.segments.map((seg, j) => (
-											<text key={j} fg={seg.color}>
-												{seg.text}
-											</text>
-										))}
-									</box>,
-									sub.length > 0 && (
-										<box
-											key={`${turnIdx}-sub`}
-											border={["left"]}
-											customBorderChars={textBlock}
-											borderColor={C.subtext}
-											paddingX={1}
-										>
-											{sub.map((line, j) => (
-												<text key={j} fg={C.subtext}>
-													{line.segments[0].text}
-												</text>
-											))}
-										</box>
-									),
-								];
-							})}
-						</box>
-					);
-				})}
+				.map((turnIdx) => (
+					<box key={turnIdx} flexDirection="column">
+						<text fg={C.borderInner}>{`───── Turn ${turnIdx} ─────`}</text>
+						{groups.get(turnIdx)!.flatMap((entry) => {
+							const [main, ...sub] = entryToLines(entry, "✓");
+							return [
+								<box key={`${turnIdx}-main`} flexDirection="row">
+									{main.segments.map((seg, j) => (
+										<text key={j} fg={seg.color}>
+											{seg.text}
+										</text>
+									))}
+								</box>,
+								renderSub(sub, `${turnIdx}-sub`),
+							];
+						})}
+					</box>
+				))}
 		</box>
 	);
 }
 
 // #endregion
 
-// #region 辅助
+// #region 工具函数
+
+/** spinner 纯文本帧 */
 function useSpinnerFrame(active: boolean): string {
 	const [frame, setFrame] = useState(0);
 	useEffect(() => {
@@ -329,4 +355,5 @@ function useSpinnerFrame(active: boolean): string {
 	}, [active]);
 	return SPINNER.frames[frame]!;
 }
+
 // #endregion

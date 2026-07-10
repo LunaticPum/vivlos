@@ -55,20 +55,17 @@ function useContextBar() {
 	return { bar, percent };
 }
 
-export function StatusBar({
-	modelLabel,
-	error = null,
-}: StatusBarProps) {
+export function StatusBar({ modelLabel, error = null }: StatusBarProps) {
 	const duration = useSessionDuration();
 	const { bar, percent } = useContextBar();
 
 	const sep = " │ ";
 
-	const content = t`${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${error ? fg(C.divider)(sep) : ""}${error ? fg(C.error)(`✗ ${error}`) : ""}`;
+	const content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${error ? fg(C.divider)(sep) : ""}${error ? fg(C.error)(`✗ ${error}`) : ""} `;
 
 	return (
 		<box height={1} width="100%" flexDirection="row" alignItems="center">
-			<text bg={C.bg} content={content} />
+			<text bg={C.bg} content={content} selectable={false} />
 		</box>
 	);
 }

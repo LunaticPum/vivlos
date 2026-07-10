@@ -32,15 +32,13 @@ export function UserMessageCard({ text }: UserMessageCardProps) {
 		<box
 			borderStyle="rounded"
 			borderColor={"#a6e3a1"}
-			title="You"
+			title=" You "
 			titleAlignment="left"
 			paddingX={1}
 			paddingY={0}
 			marginBottom={1}
 		>
-			<text fg={colors.user.text} selectionBg={"#1e1e2e"}>
-				{text}
-			</text>
+			<text fg={"#cdd6f4"}>{text}</text>
 		</box>
 	);
 }
