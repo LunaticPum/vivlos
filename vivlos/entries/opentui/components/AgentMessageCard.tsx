@@ -18,7 +18,7 @@ import type { AgentTurn, LogEntry } from "../hooks/useAgent";
 const SCROLL_HEIGHT = 8;
 const SPINNER = spinners.sand;
 const SPINNER_INTERVAL = 80;
-const BREATHING_INTERVAL = 130;
+const BREATHING_INTERVAL = 110;
 
 /** 全局 SyntaxStyle 实例，markdown 渲染用 */
 const syntaxStyle = SyntaxStyle.create();
@@ -28,14 +28,13 @@ const syntaxStyle = SyntaxStyle.create();
 const C = {
 	borderOuter: "#74c7ec",
 	borderInner: "#94e2d5",
-	text: "#cdd6f4",
 	subtext: "#bac2de",
 	thinking: "#cba6f7",
 	tool: "#cba6f7",
-	toolName: "#f9e2af",
+	toolName: "#fab387",
 	done: "#a6e3a1",
-	bright: "#cdd6f4",
-	dim: "#6c7086",
+	bright: "#ffdbdb",
+	dim: "#ff9d9d",
 } as const;
 
 // #endregion
@@ -147,7 +146,7 @@ export function AgentMessageCard({
 					content={turn.finalText}
 					syntaxStyle={syntaxStyle}
 					streaming={isRunning}
-					conceal={true}
+					conceal={!isRunning}
 				/>
 			) : isRunning ? (
 				<box flexDirection="row">
@@ -192,13 +191,26 @@ function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
 				stickyScroll={true}
 				stickyStart="bottom"
 			>
-				{lines.map((line, i) => (
-					<box key={i} flexDirection="row">
-						{line.segments.map((seg, j) => (
-							<text key={j} fg={seg.color}>{seg.text}</text>
-						))}
-					</box>
-				))}
+				{lines.map((item, i) =>
+					item.kind === "markdown" ? (
+						<markdown
+							key={i}
+							content={item.content}
+							syntaxStyle={syntaxStyle}
+							streaming={item.streaming}
+							conceal={true}
+							fg={C.subtext}
+						/>
+					) : (
+						<box key={i} flexDirection="row">
+							{item.segments.map((seg, j) => (
+								<text key={j} fg={seg.color}>
+									{seg.text}
+								</text>
+							))}
+						</box>
+					),
+				)}
 			</scrollbox>
 		</box>
 	);
@@ -226,15 +238,26 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 					<text fg={C.borderInner}>{`──── Turn ${turnIdx} ────`}</text>
 					{groups.get(turnIdx)!.map((entry, j) => {
 						const lines = entryToLines(entry, "✓");
-						return lines.map((line, k) => (
-							<box key={`${turnIdx}-${j}-${k}`} flexDirection="row">
-								{line.segments.map((seg, s) => (
-									<text key={s} fg={seg.color}>
-										{seg.text}
-									</text>
-								))}
-							</box>
-						));
+						return lines.map((item, k) =>
+							item.kind === "markdown" ? (
+								<markdown
+									key={`${turnIdx}-${j}-${k}`}
+									content={item.content}
+									syntaxStyle={syntaxStyle}
+									streaming={false}
+									conceal={true}
+									fg={C.subtext}
+								/>
+							) : (
+								<box key={`${turnIdx}-${j}-${k}`} flexDirection="row">
+									{item.segments.map((seg, s) => (
+										<text key={s} fg={seg.color}>
+											{seg.text}
+										</text>
+									))}
+								</box>
+							),
+						);
 					})}
 				</box>
 			))}
@@ -271,12 +294,21 @@ interface RenderSegment {
 }
 
 interface RenderLine {
+	kind?: undefined;
 	segments: RenderSegment[];
 }
 
-function entryToLines(entry: LogEntry, spin: string): RenderLine[] {
+interface MarkdownRenderLine {
+	kind: "markdown";
+	content: string;
+	streaming: boolean;
+}
+
+type RenderItem = RenderLine | MarkdownRenderLine;
+
+function entryToLines(entry: LogEntry, spin: string): RenderItem[] {
 	if (entry.kind === "thinking") {
-		const lines: RenderLine[] = [
+		const lines: RenderItem[] = [
 			{
 				segments: [
 					{
@@ -287,13 +319,21 @@ function entryToLines(entry: LogEntry, spin: string): RenderLine[] {
 			},
 		];
 		if (entry.text) {
-			lines.push({ segments: [{ text: `┆ ${entry.text}`, color: C.subtext }] });
+			for (const line of entry.text.split("\n")) {
+				if (line) {
+					lines.push({
+						kind: "markdown" as const,
+						content: `┆ ${line}`,
+						streaming: !entry.done,
+					});
+				}
+			}
 		}
 		return lines;
 	}
 
 	const prefix = entry.done ? "✓" : spin;
-	const lines: RenderLine[] = [
+	const lines: RenderItem[] = [
 		{
 			segments: [
 				{ text: `${prefix} Calling `, color: entry.done ? C.done : C.tool },
