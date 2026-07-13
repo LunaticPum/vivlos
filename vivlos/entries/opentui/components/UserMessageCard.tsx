@@ -5,16 +5,18 @@
  */
 
 import { BorderCharacters } from "@opentui/core";
-import { getColors } from "../designs/colors";
 
-const colors = getColors();
+const C = {
+	border: "#cba6f7",
+	bg: "#313244",
+};
 
 // const cardBorder: BorderCharacters = {
-// 	topLeft: "┌",
-// 	topRight: "",
-// 	bottomLeft: "",
-// 	bottomRight: "┘",
-// 	horizontal: " ",
+// 	topLeft: "─",
+// 	topRight: "─",
+// 	bottomLeft: "─",
+// 	bottomRight: "─",
+// 	horizontal: "─",
 // 	vertical: " ",
 // 	topT: "",
 // 	bottomT: "",
@@ -30,15 +32,20 @@ export interface UserMessageCardProps {
 export function UserMessageCard({ text }: UserMessageCardProps) {
 	return (
 		<box
-			borderStyle="rounded"
-			borderColor={"#a6e3a1"}
+			borderStyle="heavy"
+			// customBorderChars={cardBorder}
+			border={["left"]}
+			borderColor={C.border}
 			title=" You "
 			titleAlignment="left"
 			paddingX={1}
-			paddingY={0}
+			paddingY={1}
+			paddingLeft={0}
 			marginBottom={1}
+			backgroundColor={C.bg}
+			shouldFill={true}
 		>
-			<text fg={"#cdd6f4"}>{text}</text>
+			<text fg={"#cdd6f4"}>{" " + text}</text>
 		</box>
 	);
 }

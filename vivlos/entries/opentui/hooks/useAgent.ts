@@ -8,11 +8,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 
-// ── 类型 ──
-
 // #region 类型
 
-/** 推理过程日志条目，按事件顺序追加 */
+/**
+ * 推理过程日志条目（thinking / tool），按事件顺序追加
+ */
 export type LogEntry =
 	| { kind: "thinking"; text: string; done: boolean; turnIndex: number }
 	| {
@@ -24,18 +24,23 @@ export type LogEntry =
 			turnIndex: number;
 	  };
 
-/** 一次完整对话轮次 = 用户输入 + agent 响应（可能含多个 ReAct turn） */
-export interface AgentTurn {
+/**
+ * 一轮对话中 tui 能用到并展示的所有信息，注意 Conversation Turn ≠ ReAct turn，需要区分
+ */
+export interface ConversationTurn {
 	userInput: string;
 	log: LogEntry[]; // 推理过程：thinking / tool 按顺序排列
 	finalText: string; // agent 最终回复
-	status: "running" | "complete" | "error";
-	turnCount: number; // ReAct 循环次数
+	status: "running" | "complete" | "error" | "aborted";
+	turnCount: number; // ReAct turn 计数，即 ReAct Loop 循环次数
 	toolCount: number; // 工具调用次数
 }
 
+/**
+ * tui hook 结果：将 hook 到的数据封装出来传给组件使用
+ */
 export interface UseAgentResult {
-	turns: AgentTurn[]; // 完整对话历史
+	conversationTurns: ConversationTurn[]; // 完整对话历史，保存每轮对话记录
 	loading: boolean; // agent 是否正在运行
 	error: string | null; // 错误信息
 	submit: (text: string) => void;
@@ -44,14 +49,15 @@ export interface UseAgentResult {
 
 // #endregion
 
-// ── 辅助函数（从旧 entries/tui/index.ts 搬过来） ──
-
 // #region 辅助函数
 
-/** 提取 tool result 内的可读文本 */
+// ── 文本提取 ──
+
+/** 从 tool result 中提取可读文本 */
 function extractToolText(raw: unknown): string {
 	if (!raw || typeof raw !== "object") return String(raw ?? "");
 	const r = raw as Record<string, unknown>;
+
 	const details = r.details as Record<string, unknown> | undefined;
 	if (
 		details?.message &&
@@ -60,6 +66,7 @@ function extractToolText(raw: unknown): string {
 	) {
 		return details.message;
 	}
+
 	const content = r.content as
 		| Array<{ type: string; text?: string }>
 		| undefined;
@@ -70,37 +77,38 @@ function extractToolText(raw: unknown): string {
 			.join("\n");
 		if (text.trim()) return text;
 	}
-	if (r.message && typeof r.message === "string" && r.message.trim()) {
-		return r.message;
-	}
+
 	return String(raw);
 }
 
-/** 从 messageSnapshot.content 提取最后一条 thinking block */
+/** 从 messageSnapshot 中提取最后一个 thinking block 文本 */
 function extractThinkingFromSnapshot(snapshot: unknown): string {
 	if (!snapshot || typeof snapshot !== "object") return "";
+
 	const msg = snapshot as Record<string, unknown>;
 	const content = msg.content as
 		| Array<{ type: string; thinking?: string }>
 		| undefined;
 	if (!content) return "";
+
+	// 提取最新的 thinking 文本块
 	const blocks = content.filter((c) => c.type === "thinking" && c.thinking);
 	return blocks.length > 0 ? blocks[blocks.length - 1]!.thinking! : "";
 }
 
 // ── 不可变更新辅助 ──
 
-/** 更新 turns 数组中指定索引的 turn */
+/** 更新 conversation turns 数组中指定索引的 turn */
 function updateCurrent(
-	turns: AgentTurn[],
+	conversationTurns: ConversationTurn[],
 	idx: number,
-	fn: (t: AgentTurn) => AgentTurn,
-): AgentTurn[] {
-	if (idx < 0) return turns;
-	return turns.map((t, i) => (i === idx ? fn(t) : t));
+	fn: (t: ConversationTurn) => ConversationTurn,
+): ConversationTurn[] {
+	if (idx < 0) return conversationTurns;
+	return conversationTurns.map((t, i) => (i === idx ? fn(t) : t));
 }
 
-/** 更新 log 中最后一个未完成的 thinking 条目 */
+/** 更新 log 中最后一个“未完成”的 thinking 条目 */
 function updateLastThinking(
 	log: LogEntry[],
 	fn: (
@@ -119,21 +127,18 @@ function updateLastThinking(
 
 // #endregion
 
-// ── hook ──
-
-// #region useAgent 钩子
-
 export function useAgent(
 	agent: VivlosAgent,
 	eventBus: EventBus,
 ): UseAgentResult {
-	const [turns, setTurns] = useState<AgentTurn[]>([]);
+	const [conversationTurns, setTurns] = useState<ConversationTurn[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// ref 保存当前对话轮次在 turns 数组里的索引
-	const currentIdxRef = useRef(-1);
+	// #region useAgent hook
 
+	// ref 保存当前对话轮次在 conversation turns 数组里的索引
+	const currentIdxRef = useRef(-1);
 	useEffect(() => {
 		const unsubs: (() => void)[] = [];
 
@@ -149,22 +154,19 @@ export function useAgent(
 		unsubs.push(
 			eventBus.on("agent:turn_start", () => {
 				setTurns((prev) =>
-					updateCurrent(prev, currentIdxRef.current, (t) => {
-						const newTurnCount = t.turnCount + 1;
-						return {
-							...t,
-							turnCount: newTurnCount,
-							log: [
-								...t.log,
-								{
-									kind: "thinking",
-									text: "",
-									done: false,
-									turnIndex: newTurnCount,
-								},
-							],
-						};
-					}),
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						turnCount: t.turnCount + 1,
+						log: [
+							...t.log,
+							{
+								kind: "thinking",
+								text: "",
+								done: false,
+								turnIndex: t.turnCount,
+							},
+						],
+					})),
 				);
 			}),
 		);
@@ -226,11 +228,12 @@ export function useAgent(
 			}),
 		);
 
-		// thinking 流式更新 -> 更新最后一个未完成的 thinking 条目
+		// thinking 流式更新 -> 同时从增量 delta 消息或快照 snapshot 中提取 thinking 文本，确保 thinking 文本完整
 		unsubs.push(
 			eventBus.on("agent:thinking_delta", (e) => {
 				const text = extractThinkingFromSnapshot(e.messageSnapshot) || e.delta;
 				if (!text) return;
+
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -255,27 +258,28 @@ export function useAgent(
 			}),
 		);
 
-		// 文本流式更新 -> 标记 thinking done + 实时写入 finalText（打字机效果）
+		// 文本流式更新 -> 实时写入 finalText（打字机效果） + 确保 Thinking 被正确关闭
 		unsubs.push(
 			eventBus.on("agent:message_delta", (e) => {
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
-						// text_delta 开始 = thinking 已结束，标记最后一个未完成的 thinking 为 done
-						log: updateLastThinking(t.log, (entry) => ({ ...entry, done: true })),
 						finalText: t.finalText + e.delta,
+						log: updateLastThinking(t.log, (entry) => ({
+							...entry,
+							done: true,
+						})),
 					})),
 				);
 			}),
 		);
 
-		// 消息完成 -> 不覆盖 finalText（中间 turn 的 message_complete 会覆盖流式累积的文本）
-		// finalText 只靠 agent:message_delta 流式追加 + agent:complete 最终设置
-
 		// agent 完成 -> 写入最终回复
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
 				setLoading(false);
+
+				// setTurns 异步执行，先捕获 idx 避免重置 -1 后找不到目标 turn
 				const idx = currentIdxRef.current;
 				setTurns((prev) =>
 					updateCurrent(prev, idx, (t) => ({
@@ -284,22 +288,27 @@ export function useAgent(
 						finalText: e.finalMessage || t.finalText,
 					})),
 				);
+				// 重置 turns 下标
 				currentIdxRef.current = -1;
 			}),
 		);
 
-		// agent 出错
+		// 消费底层 Loop run 捕获的异常
 		unsubs.push(
 			eventBus.on("agent:error", (e) => {
 				setLoading(false);
-				setError(e.error.message);
+
+				const isAborted = e.error.message.toLowerCase().includes("abort");
+				if (!isAborted) setError(e.error.message);
+
 				const idx = currentIdxRef.current;
 				setTurns((prev) =>
 					updateCurrent(prev, idx, (t) => ({
 						...t,
-						status: "error" as const,
+						status: isAborted ? ("aborted" as const) : ("error" as const),
 					})),
 				);
+				// 重置 turns 下标
 				currentIdxRef.current = -1;
 			}),
 		);
@@ -307,13 +316,17 @@ export function useAgent(
 		return () => unsubs.forEach((fn) => fn());
 	}, [eventBus]);
 
+	// #endregion
+
+	// #region 两个 Callback
 	const abortRef = useRef<AbortController | null>(null);
 
 	const submit = useCallback(
 		(text: string) => {
 			if (!text.trim()) return;
+			currentIdxRef.current = conversationTurns.length; // 注意 turns 数组不能被清空，ChatArea 组件会渲染所有的 turns，从而确保终端的历史条目信息都可见
+
 			setError(null);
-			currentIdxRef.current = turns.length;
 			setTurns((prev) => [
 				...prev,
 				{
@@ -330,19 +343,23 @@ export function useAgent(
 			const controller = new AbortController();
 			abortRef.current = controller;
 
-			agent.prompt(text, controller.signal).then((result) => {
-				// 如果 loop 返回了 error 但没走 catch（比如 turn_end 里的 error 事件）
-				if (result.error && !controller.signal.aborted) {
-					setError(result.error.message);
-				}
-			}).catch((err) => {
-				if (controller.signal.aborted) return; // 用户主动打断，不算错误
-				setError(`fatal: ${err instanceof Error ? err.message : String(err)}`);
-				setLoading(false);
-				currentIdxRef.current = -1;
-			});
+			agent
+				.prompt(text, controller.signal)
+				.then((result) => {
+					// 如果 loop 返回了 error 但没走 catch（比如 turn_end 里的 error 事件）
+					if (result.error && !controller.signal.aborted) {
+						setError(result.error.message);
+					}
+				})
+				.catch((err) => {
+					setError(
+						`fatal: ${err instanceof Error ? err.message : String(err)}`,
+					);
+					setLoading(false);
+					currentIdxRef.current = -1;
+				});
 		},
-		[agent, turns.length],
+		[agent, conversationTurns.length],
 	);
 
 	/** 打断当前 LLM 调用 */
@@ -355,14 +372,12 @@ export function useAgent(
 			setTurns((prev) =>
 				updateCurrent(prev, idx, (t) => ({
 					...t,
-					status: "error" as const,
+					status: "aborted" as const,
 				})),
 			);
 			currentIdxRef.current = -1;
 		}
 	}, []);
 
-	return { turns, loading, error, submit, abort };
+	return { conversationTurns, loading, error, submit, abort };
 }
-
-// #endregion

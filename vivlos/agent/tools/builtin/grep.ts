@@ -22,7 +22,9 @@ interface GrepDetails {
 }
 
 // ── 工厂 ──
-export function createGrepTool(cwd: string): AgentTool<typeof Params, GrepDetails> {
+export function createGrepTool(
+	cwd: string,
+): AgentTool<typeof Params, GrepDetails> {
 	return {
 		name: "grep",
 		description: "在文件中搜索匹配指定正则表达式的内容。",
@@ -73,7 +75,8 @@ export function createGrepTool(cwd: string): AgentTool<typeof Params, GrepDetail
 
 				let text = results.join("\n") || "(no matches)";
 				if (text.length > MAX_CHARS) {
-					text = text.slice(0, MAX_CHARS) +
+					text =
+						text.slice(0, MAX_CHARS) +
 						`\n...[truncated ${text.length - MAX_CHARS} chars]`;
 				}
 

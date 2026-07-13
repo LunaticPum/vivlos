@@ -20,10 +20,10 @@ const C = {
 	error: "#f38ba8",
 } as const;
 
-export interface SlashBarProps {
+export interface InfoBarProps {
 	loading: boolean;
 	detailExpanded: boolean;
-	hasCompletedTurn: boolean;
+	hasCompletedConversation: boolean;
 }
 
 /** 纯文本 spinner */
@@ -77,11 +77,11 @@ function buildHints(
 	return "● Tip 输入消息开始对话  使用 /help 查看所有命令";
 }
 
-export function SlashBar({
+export function InfoBar({
 	loading,
 	detailExpanded,
-	hasCompletedTurn,
-}: SlashBarProps) {
+	hasCompletedConversation,
+}: InfoBarProps) {
 	const [showHints, setShowHints] = useState(false);
 	const spin = useTextSpinner(loading);
 
@@ -100,16 +100,20 @@ export function SlashBar({
 					<text fg={C.bright}> 打断</text>
 				</box>
 			) : showHints ? (
-				<text fg={C.muted}>{buildHints(detailExpanded, hasCompletedTurn)}</text>
+				<text fg={C.muted}>
+					{buildHints(detailExpanded, hasCompletedConversation)}
+				</text>
 			) : (
 				<box flexDirection="row">
-					{buildShortcuts(detailExpanded, hasCompletedTurn).map((item, i) => (
-						<box key={item.key} flexDirection="row">
-							{i > 0 && <text fg={C.muted}> </text>}
-							<text fg={item.color}>{item.key} </text>
-							<text fg={C.muted}>{item.label}</text>
-						</box>
-					))}
+					{buildShortcuts(detailExpanded, hasCompletedConversation).map(
+						(item, i) => (
+							<box key={item.key} flexDirection="row">
+								{i > 0 && <text fg={C.muted}> </text>}
+								<text fg={item.color}>{item.key} </text>
+								<text fg={C.muted}>{item.label}</text>
+							</box>
+						),
+					)}
 				</box>
 			)}
 		</box>

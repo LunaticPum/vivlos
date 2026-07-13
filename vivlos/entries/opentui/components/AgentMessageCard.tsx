@@ -13,7 +13,7 @@ import {
 	type ScrollBoxRenderable,
 	type BorderCharacters,
 } from "@opentui/core";
-import type { AgentTurn, LogEntry } from "../hooks/useAgent";
+import type { ConversationTurn, LogEntry } from "../hooks/useAgent";
 
 // #region 常量
 
@@ -27,16 +27,17 @@ const syntaxStyle = SyntaxStyle.create();
 
 /** 颜色常量 */
 const C = {
-	borderOuter: "#74c7ec",
+	borderOuter: "#89dceb",
 	borderInner: "#94e2d5",
 	text: "#cdd6f4",
 	subtext: "#bac2de",
-	thinking: "#f5c2e7",
+	thinking: "#eba0ac",
 	tool: "#eba0ac",
 	toolName: "#fab387",
 	done: "#a6e3a1",
 	bright: "#f5c2e7",
 	dim: "#eba0ac",
+	abort: "#f38ba8",
 } as const;
 
 /** 子文本左竖线边框字符 */
@@ -59,12 +60,12 @@ const textBlock: BorderCharacters = {
 // #region Agent 消息卡片
 
 export interface AgentMessageCardProps {
-	turn: AgentTurn;
+	conversationTurn: ConversationTurn;
 	detailExpanded: boolean;
 }
 
 /** 推理框计时器 */
-function useReasoningDuration(status: AgentTurn["status"]): number {
+function useReasoningDuration(status: ConversationTurn["status"]): number {
 	const [seconds, setSeconds] = useState(0);
 	const startRef = useRef(0);
 	const finalRef = useRef(0);
@@ -101,18 +102,18 @@ function useBreathingText(
 }
 
 export function AgentMessageCard({
-	turn,
+	conversationTurn,
 	detailExpanded,
 }: AgentMessageCardProps) {
-	const duration = useReasoningDuration(turn.status);
-	const isRunning = turn.status === "running";
+	const duration = useReasoningDuration(conversationTurn.status);
+	const isRunning = conversationTurn.status === "running";
 	const isExpanded = !isRunning && detailExpanded;
 	const bottomTitle = isRunning
-		? ` Turn ${turn.turnCount} · ${duration}s `
-		: ` ${turn.turnCount} Turns · ${turn.toolCount} Tools · ${duration}s `;
+		? ` Turn ${conversationTurn.turnCount} · ${duration}s `
+		: ` ${conversationTurn.turnCount} Turns · ${conversationTurn.toolCount} Tools · ${duration}s `;
 	const breathing = useBreathingText(
 		"少女祈祷中...",
-		isRunning && !turn.finalText,
+		isRunning && !conversationTurn.finalText,
 	);
 
 	return (
@@ -125,7 +126,7 @@ export function AgentMessageCard({
 			marginBottom={1}
 			flexDirection="column"
 		>
-			{turn.log.length > 0 && (
+			{conversationTurn.log.length > 0 && (
 				<box
 					borderStyle="single"
 					borderColor={C.borderInner}
@@ -137,28 +138,31 @@ export function AgentMessageCard({
 					marginBottom={1}
 				>
 					{isExpanded ? (
-						<ExpandedLog log={turn.log} />
+						<ExpandedLog log={conversationTurn.log} />
 					) : (
-						<CompactLog log={turn.log} active={isRunning} />
+						<CompactLog log={conversationTurn.log} active={isRunning} />
 					)}
 				</box>
 			)}
-			{turn.finalText ? (
+			{conversationTurn.finalText ? (
 				<markdown
-					content={turn.finalText}
+					content={conversationTurn.finalText}
 					syntaxStyle={syntaxStyle}
 					streaming={isRunning}
 					conceal={!isRunning}
 					fg={C.text}
+					paddingX={1}
 				/>
 			) : isRunning ? (
-				<box flexDirection="row">
+				<box flexDirection="row" paddingX={1}>
 					{breathing.map((item, i) => (
 						<text key={i} fg={item.color}>
 							{item.char}
 						</text>
 					))}
 				</box>
+			) : conversationTurn.status === "aborted" ? (
+				<text fg={C.abort}> 该次对话被打断</text>
 			) : null}
 		</box>
 	);
@@ -318,7 +322,7 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 				.sort((a, b) => a - b)
 				.map((turnIdx) => (
 					<box key={turnIdx} flexDirection="column">
-						<text fg={C.borderInner}>{`───── Turn ${turnIdx} ─────`}</text>
+						<text fg={C.borderInner}>{`───── Turn ${turnIdx + 1} ─────`}</text>
 						{groups.get(turnIdx)!.flatMap((entry) => {
 							const [main, ...sub] = entryToLines(entry, "✓");
 							return [

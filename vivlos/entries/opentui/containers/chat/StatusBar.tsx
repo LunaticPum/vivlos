@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { t, fg } from "@opentui/core";
+import type { ConversationTurn } from "../../hooks/useAgent";
 
 const C = {
 	model: "#74c7ec",
@@ -16,6 +17,7 @@ const C = {
 	usage: "#a6da95",
 	clock: "#fab387",
 	error: "#f38ba8",
+	warning: "#f9e2af",
 	divider: "#cba6f7",
 	bg: "#232634",
 } as const;
@@ -27,6 +29,8 @@ export interface StatusBarProps {
 	loading?: boolean;
 	/** 错误信息 */
 	error?: string | null;
+	/** 当前 turn 状态，用于区分 aborted/error */
+	turnStatus?: ConversationTurn["status"];
 }
 
 /** 会话计时器 */
@@ -55,13 +59,25 @@ function useContextBar() {
 	return { bar, percent };
 }
 
-export function StatusBar({ modelLabel, error = null }: StatusBarProps) {
+export function StatusBar({
+	modelLabel,
+	error = null,
+	turnStatus,
+}: StatusBarProps) {
 	const duration = useSessionDuration();
 	const { bar, percent } = useContextBar();
 
 	const sep = " │ ";
 
-	const content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${error ? fg(C.divider)(sep) : ""}${error ? fg(C.error)(`✗ ${error}`) : ""} `;
+	// 错误/中断显示：aborted 用 ! 前缀，error 用 ✗ 前缀
+	let content: ReturnType<typeof t>;
+	if (turnStatus === "aborted") {
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.warning)("⚠️ 请求已中断")} `;
+	} else if (error) {
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.error)(`✗ ${error}`)} `;
+	} else {
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)} `;
+	}
 
 	return (
 		<box height={1} width="100%" flexDirection="row" alignItems="center">

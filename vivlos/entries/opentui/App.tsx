@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { ChatArea } from "./containers/chat/ChatArea";
 import { StatusBar } from "./containers/chat/StatusBar";
 import { InputBar } from "./containers/chat/InputBar";
-import { SlashBar } from "./containers/chat/InfoBar";
+import { InfoBar } from "./containers/chat/InfoBar";
 import { useAgent } from "./hooks/useAgent";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
@@ -17,26 +17,31 @@ export function App({
 	agent: VivlosAgent;
 	eventBus: EventBus;
 }) {
-	const { turns, loading, error, submit, abort } = useAgent(agent, eventBus);
+	const { conversationTurns, loading, error, submit, abort } = useAgent(
+		agent,
+		eventBus,
+	);
+
 	const [detailExpanded, setDetailExpanded] = useState(false);
 
-	const hasCompletedTurn = turns.some((t) => t.status === "complete");
+	const hasCompletedConversation = conversationTurns.some(
+		(t) => t.status === "complete",
+	);
 
-	// Ctrl+C: loading 时打断 LLM，idle 时退出程序
-	useKeyboard((key) => {
-		if (key.ctrl && key.name === "c") {
-			if (loading) {
-				abort();
-			} else {
-				process.emit("SIGINT");
-			}
-		}
-	});
+	// TODO: 双重 Ctrl+C 确认退出机制（idle 时第一次提示，第二次才 emit SIGINT）
 
 	return (
 		<box flexDirection="column" width="100%" height="100%">
-			<ChatArea turns={turns} detailExpanded={detailExpanded} />
-			<StatusBar modelLabel={modelLabel} loading={loading} error={error} />
+			<ChatArea
+				conversationTurns={conversationTurns}
+				detailExpanded={detailExpanded}
+			/>
+			<StatusBar
+				modelLabel={modelLabel}
+				loading={loading}
+				error={error}
+				turnStatus={conversationTurns.length > 0 ? conversationTurns[conversationTurns.length - 1]!.status : undefined}
+			/>
 			<InputBar
 				onSubmit={(text) => {
 					if (text === "/detail") {
@@ -45,12 +50,15 @@ export function App({
 					}
 					submit(text);
 				}}
+				onEsc={() => {
+					if (loading) abort();
+				}}
 			/>
-			<SlashBar
+			<InfoBar
 				// loading={true}
 				loading={loading}
 				detailExpanded={detailExpanded}
-				hasCompletedTurn={hasCompletedTurn}
+				hasCompletedConversation={hasCompletedConversation}
 			/>
 		</box>
 	);

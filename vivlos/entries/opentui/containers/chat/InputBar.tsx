@@ -44,9 +44,10 @@ const MAX_HISTORY = 6;
 
 export interface InputBarProps {
 	onSubmit: (text: string) => void;
+	onEsc?: () => void;
 }
 
-export function InputBar({ onSubmit }: InputBarProps) {
+export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 	const [contentLines, setContentLines] = useState(1);
 
 	// ── 历史消息状态 ──
@@ -113,7 +114,7 @@ export function InputBar({ onSubmit }: InputBarProps) {
 		}
 	}, []);
 
-	// ── 全局键盘：截获 textarea 冒泡出来的 Up/Down ──
+	// ── 全局键盘：截获 textarea 冒泡出来的 Up/Down/Esc ──
 	useKeyboard((key) => {
 		if (key.name === "up") {
 			if (cursorLineRef.current === 0) {
@@ -123,6 +124,8 @@ export function InputBar({ onSubmit }: InputBarProps) {
 			if (cursorLineRef.current === lineCountRef.current - 1) {
 				switchHistory("down");
 			}
+		} else if (key.ctrl && key.name === "c" && onEsc) {
+			onEsc();
 		}
 	});
 
