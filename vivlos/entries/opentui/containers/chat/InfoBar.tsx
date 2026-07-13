@@ -2,8 +2,9 @@
  * InfoBar - 底部上下文感知状态栏
  *
  * 三态切换：
- *   shortcuts（默认 idle） → Tab 键切换 → hints（提示）
- *   shortcuts / hints      → agent 运行中 → running（动画，优先级最高）
+ *   shortcuts（默认 idle）: 左侧 Tab 提示  右侧 Ctrl+H 指令集
+ *   hints（Tab 切换）: 操作提示文本
+ *   running（agent 运行中）: spinner + 打断提示，优先级最高
  */
 
 import { useState, useEffect } from "react";
@@ -40,41 +41,16 @@ function useTextSpinner(active: boolean): string {
 	return SPINNER.frames[frame]!;
 }
 
-interface Shortcut {
-	key: string;
-	label: string;
-	color: string;
-}
-
-function buildShortcuts(
-	detailExpanded: boolean,
-	hasCompletedTurn: boolean,
-): Shortcut[] {
-	const items: Shortcut[] = [
-		{ key: "Tab", label: "提示", color: C.muted },
-		{ key: "?", label: "帮助", color: C.muted },
-		{ key: "q", label: "退出", color: C.muted },
-	];
-	if (hasCompletedTurn) {
-		items.unshift({
-			key: "/detail",
-			label: detailExpanded ? "收起推理" : "展开推理",
-			color: C.accent,
-		});
-	}
-	return items;
-}
-
 function buildHints(
 	detailExpanded: boolean,
 	hasCompletedTurn: boolean,
 ): string {
 	if (hasCompletedTurn) {
 		return detailExpanded
-			? "● Tip 使用 /detail 收起推理细节  使用 ? 查看所有命令"
-			: "● Tip 使用 /detail 展开推理细节  使用 ? 查看所有命令";
+			? "● Tip 使用 /detail 收起推理细节  使用 Ctrl+O 查看所有命令"
+			: "● Tip 使用 /detail 展开推理细节  使用 Ctrl+O 查看所有命令";
 	}
-	return "● Tip 输入消息开始对话  使用 /help 查看所有命令";
+	return "● Tip 输入消息开始对话  使用 Ctrl+O 查看所有命令";
 }
 
 export function InfoBar({
@@ -96,24 +72,20 @@ export function InfoBar({
 			{loading ? (
 				<box flexDirection="row">
 					<text fg={C.accent}>{spin} </text>
-					<text fg={C.muted}>esc</text>
-					<text fg={C.bright}> 打断</text>
+					<text fg={C.bright}>Ctrl+C </text>
+					<text fg={C.muted}>打断</text>
 				</box>
 			) : showHints ? (
 				<text fg={C.muted}>
 					{buildHints(detailExpanded, hasCompletedConversation)}
 				</text>
 			) : (
-				<box flexDirection="row">
-					{buildShortcuts(detailExpanded, hasCompletedConversation).map(
-						(item, i) => (
-							<box key={item.key} flexDirection="row">
-								{i > 0 && <text fg={C.muted}> </text>}
-								<text fg={item.color}>{item.key} </text>
-								<text fg={C.muted}>{item.label}</text>
-							</box>
-						),
-					)}
+				<box flexDirection="row" width="100%">
+					<text fg={C.bright}>{"Tab "}</text>
+					<text fg={C.muted}>{"提示"}</text>
+					<box flexGrow={1} />
+					<text fg={C.bright}>{"Ctrl+O "}</text>
+					<text fg={C.muted}>{"指令集"}</text>
 				</box>
 			)}
 		</box>

@@ -9,8 +9,14 @@ import { getColors } from "../../designs/colors";
 import { UserMessageCard } from "../../components/UserMessageCard";
 import { AgentMessageCard } from "../../components/AgentMessageCard";
 import type { ConversationTurn } from "../../hooks/useAgent";
+import type { ScrollAcceleration } from "@opentui/core";
 
 const colors = getColors();
+
+const FAST_SCROLL: ScrollAcceleration = {
+	tick: () => 3,
+	reset: () => {},
+};
 
 export interface ChatAreaProps {
 	conversationTurns: ConversationTurn[];
@@ -20,26 +26,38 @@ export interface ChatAreaProps {
 
 export function ChatArea({ conversationTurns, detailExpanded }: ChatAreaProps) {
 	return (
-		<scrollbox
-			flexGrow={1}
-			width="100%"
-			padding={1}
-			stickyScroll={true}
-			stickyStart="bottom"
-		>
-			{conversationTurns.length === 0 ? (
-				<text fg={colors.text.muted}>输入消息开始对话...</text>
-			) : (
-				conversationTurns.map((convTurn, i) => (
-					<box key={i} flexDirection="column" marginBottom={2}>
-						<UserMessageCard text={convTurn.userInput} />
-						<AgentMessageCard
-							conversationTurn={convTurn}
-							detailExpanded={detailExpanded}
-						/>
+		<box flexGrow={1} overflow="hidden">
+			<scrollbox
+				height="100%"
+				width="100%"
+				padding={1}
+				stickyScroll={true}
+				stickyStart="bottom"
+				scrollAcceleration={FAST_SCROLL}
+				verticalScrollbarOptions={{ visible: false }}
+			>
+				{conversationTurns.length === 0 ? (
+					<box paddingX={1}>
+						<text fg={colors.text.muted}>输入消息开始对话...</text>
 					</box>
-				))
-			)}
-		</scrollbox>
+				) : (
+					conversationTurns.map((convTurn, i) => (
+						<box
+							key={i}
+							flexDirection="column"
+							marginBottom={1}
+							paddingX={1}
+							gap={1}
+						>
+							<UserMessageCard text={convTurn.userInput} />
+							<AgentMessageCard
+								conversationTurn={convTurn}
+								detailExpanded={detailExpanded}
+							/>
+						</box>
+					))
+				)}
+			</scrollbox>
+		</box>
 	);
 }

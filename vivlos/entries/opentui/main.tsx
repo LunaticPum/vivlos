@@ -88,7 +88,7 @@ async function main(): Promise<void> {
 	const modelLabel = `${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`;
 	const renderer = await createCliRenderer({ exitOnCtrlC: false });
 	createRoot(renderer).render(
-		<App modelLabel={modelLabel} agent={agent} eventBus={eventBus} />,
+		<App modelLabel={modelLabel} agent={agent} eventBus={eventBus} llm={llm} />,
 	);
 }
 

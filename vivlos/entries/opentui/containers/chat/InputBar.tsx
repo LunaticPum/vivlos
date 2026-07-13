@@ -8,6 +8,9 @@
  *   - 光标在第一行按 Up 切上一条历史
  *   - 光标在最后一行按 Down 切回下一条（最终回到草稿）
  *   - 草稿实时同步，包括空状态
+ * - 弹窗激活时 blur textarea，让导航键冒泡到弹窗组件
+ * - Ctrl+L / Ctrl+P / Ctrl+O 快捷键打开对应弹窗
+ * - slash 命令补全：输入 / 开头时实时提示已注册指令，Tab 补全
  */
 
 import { useState, useRef, useCallback } from "react";
@@ -18,11 +21,14 @@ import type {
 	ContentChangeEvent,
 } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
+import type { TUICommandRegistry } from "../../commands/registry";
 
 const C = {
 	border: "#cba6f7",
 	text: "#cdd6f4",
 	subtext: "#a6adc8",
+	suggestionBg: "#1e1e2e",
+	hint: "#6c7086",
 } as const;
 
 const inputBorder: BorderCharacters = {
@@ -43,12 +49,33 @@ const MAX_LINES = 4;
 const MAX_HISTORY = 6;
 
 export interface InputBarProps {
+	/** 提交文本（非指令时触发） */
 	onSubmit: (text: string) => void;
+	/** Ctrl+C 打断 */
 	onEsc?: () => void;
+	/** 弹窗是否激活（激活时 blur textarea + 跳过历史导航） */
+	popupActive: boolean;
+	/** Ctrl+L: 打开模型选择弹窗 */
+	onOpenModels: () => void;
+	/** Ctrl+P: 打开供应商选择弹窗 */
+	onOpenProviders: () => void;
+	/** Ctrl+O: 打开帮助弹窗 */
+	onShowHelp: () => void;
+	/** 命令注册表（用于 slash 补全） */
+	registry: TUICommandRegistry;
 }
 
-export function InputBar({ onSubmit, onEsc }: InputBarProps) {
+export function InputBar({
+	onSubmit,
+	onEsc,
+	popupActive,
+	onOpenModels,
+	onOpenProviders,
+	onShowHelp,
+	registry,
+}: InputBarProps) {
 	const [contentLines, setContentLines] = useState(1);
+	const [inputText, setInputText] = useState("");
 
 	// ── 历史消息状态 ──
 	// history[0] = 最新，history[5] = 最旧；historyIdx = -1 表示草稿
@@ -63,6 +90,15 @@ export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 	// ── textarea 实例 ──
 	const textareaRef = useRef<TextareaRenderable>(null);
 
+	// ── slash 命令补全：输入 / 开头时过滤已注册指令 ──
+	const slashSuggestions = (() => {
+		if (!inputText.startsWith("/") || popupActive) return [];
+		const query = inputText.slice(1).toLowerCase();
+		return registry
+			.list()
+			.filter((cmd) => cmd.name.startsWith(query));
+	})();
+
 	// ── 内容变化：实时同步草稿 + 更新行数 ──
 	const handleContentChange = useCallback((_event: ContentChangeEvent) => {
 		const ta = textareaRef.current;
@@ -70,6 +106,7 @@ export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 		const lines = ta.lineCount;
 		lineCountRef.current = lines;
 		setContentLines(Math.min(lines, MAX_LINES));
+		setInputText(ta.plainText);
 
 		// 草稿模式下实时同步（包括空状态）
 		if (historyIdxRef.current === -1) {
@@ -114,9 +151,34 @@ export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 		}
 	}, []);
 
-	// ── 全局键盘：截获 textarea 冒泡出来的 Up/Down/Esc ──
+	// ── Tab 补全：取第一个匹配指令填入 textarea ──
+	const tabComplete = useCallback(() => {
+		if (slashSuggestions.length === 0) return;
+		const ta = textareaRef.current;
+		if (!ta) return;
+		const completed = `/${slashSuggestions[0]!.name}`;
+		ta.setText(completed);
+		lineCountRef.current = 1;
+		ta.setCursor(0, completed.length);
+		ta.gotoLineTextEnd();
+		setInputText(completed);
+		draftRef.current = completed;
+	}, [slashSuggestions]);
+
+	// ── 全局键盘：截获 textarea 冒泡出来的按键 ──
 	useKeyboard((key) => {
-		if (key.name === "up") {
+		// 弹窗激活时，跳过历史导航和打断，让弹窗组件接管
+		if (popupActive) return;
+
+		if (key.name === "tab" && slashSuggestions.length > 0) {
+			tabComplete();
+		} else if (key.ctrl && key.name === "l") {
+			onOpenModels();
+		} else if (key.ctrl && key.name === "p") {
+			onOpenProviders();
+		} else if (key.ctrl && key.name === "o") {
+			onShowHelp();
+		} else if (key.name === "up") {
 			if (cursorLineRef.current === 0) {
 				switchHistory("up");
 			}
@@ -148,6 +210,7 @@ export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 		draftRef.current = "";
 		ta.clear();
 		setContentLines(1);
+		setInputText("");
 		lineCountRef.current = 1;
 
 		onSubmit(text);
@@ -157,33 +220,70 @@ export function InputBar({ onSubmit, onEsc }: InputBarProps) {
 	const boxHeight = Math.min(contentLines + 2, MAX_LINES + 2);
 
 	return (
-		<box
-			height={boxHeight}
-			width="100%"
-			border={["top", "bottom", "left"]}
-			customBorderChars={inputBorder}
-			borderColor={C.border}
-			flexDirection="row"
-			paddingX={1}
-		>
-			<textarea
-				ref={textareaRef}
-				focused={true}
-				flexGrow={1}
-				placeholder="输入消息... (Ctrl+Enter 换行)"
-				placeholderColor={C.subtext}
-				textColor={C.text}
-				wrapMode="none"
-				keyBindings={[
-					{ name: "return", ctrl: true, action: "newline" },
-					{ name: "return", action: "submit" },
-					{ name: "kpenter", ctrl: true, action: "newline" },
-					{ name: "kpenter", action: "submit" },
-				]}
-				onContentChange={handleContentChange}
-				onCursorChange={handleCursorChange}
-				onSubmit={handleSubmit}
-			/>
-		</box>
+		<>
+			{/* slash 命令补全提示框 */}
+			{slashSuggestions.length > 0 && (
+				<box
+					position="absolute"
+					bottom={boxHeight + 1}
+					left={2}
+					width="40%"
+					zIndex={50}
+					border={true}
+					borderStyle="rounded"
+					borderColor={C.border}
+					backgroundColor={C.suggestionBg}
+					paddingX={1}
+					paddingY={1}
+					flexDirection="column"
+				>
+					{slashSuggestions.map((cmd, i) => (
+						<box key={cmd.name} flexDirection="row">
+							<text fg={i === 0 ? C.border : C.text}>
+								{i === 0 ? "▶ " : "  "}
+							</text>
+							<text fg={i === 0 ? C.border : C.text}>
+								{`/${cmd.name}`}
+							</text>
+							<text fg={C.subtext}>
+								{`  ${cmd.description}`}
+							</text>
+						</box>
+					))}
+					<box height={1} />
+					<box flexDirection="row" justifyContent="center" width="100%">
+						<text fg={C.hint}>{"Tab 补全"}</text>
+					</box>
+				</box>
+			)}
+			<box
+				height={boxHeight}
+				width="100%"
+				border={["top", "bottom", "left"]}
+				customBorderChars={inputBorder}
+				borderColor={C.border}
+				flexDirection="row"
+				paddingX={1}
+			>
+				<textarea
+					ref={textareaRef}
+					focused={!popupActive}
+					flexGrow={1}
+					placeholder="输入消息... (Ctrl+Enter 换行)"
+					placeholderColor={C.subtext}
+					textColor={C.text}
+					wrapMode="none"
+					keyBindings={[
+						{ name: "return", ctrl: true, action: "newline" },
+						{ name: "return", action: "submit" },
+						{ name: "kpenter", ctrl: true, action: "newline" },
+						{ name: "kpenter", action: "submit" },
+					]}
+					onContentChange={handleContentChange}
+					onCursorChange={handleCursorChange}
+					onSubmit={handleSubmit}
+				/>
+			</box>
+		</>
 	);
 }

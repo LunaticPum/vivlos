@@ -2,25 +2,20 @@
  * AgentMessageCard - Agent 消息卡片
  *
  * 推理过程两状态：
- *   compact  -> scrollbox height=min(n,8) sticky bottom，running 时 spinner 转，complete 时 ✓
+ *   compact  -> overflow=hidden height=min(n,15)，条目自底向上撑开，
+ *              running 时 spinner 转，complete 时 ✓
  *   expanded -> 完整展示所有内容，无高度限制
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import spinners from "cli-spinners";
-import {
-	SyntaxStyle,
-	type ScrollBoxRenderable,
-	type BorderCharacters,
-} from "@opentui/core";
+import { SyntaxStyle, type BorderCharacters } from "@opentui/core";
 import type { ConversationTurn, LogEntry } from "../hooks/useAgent";
 
 // #region 常量
 
-const SCROLL_HEIGHT = 8;
 const SPINNER = spinners.dots7;
 const SPINNER_INTERVAL = 80;
-const BREATHING_INTERVAL = 110;
 
 /** 全局 SyntaxStyle 实例，markdown 渲染用 */
 const syntaxStyle = SyntaxStyle.create();
@@ -83,24 +78,6 @@ function useReasoningDuration(status: ConversationTurn["status"]): number {
 	return status === "running" ? seconds : finalRef.current || seconds;
 }
 
-/** 呼吸动画："少女祈祷中..." 逐字符高亮 */
-function useBreathingText(
-	text: string,
-	active: boolean,
-): { char: string; color: string }[] {
-	const [tick, setTick] = useState(0);
-	useEffect(() => {
-		if (!active) return;
-		const timer = setInterval(() => setTick((t) => t + 1), BREATHING_INTERVAL);
-		return () => clearInterval(timer);
-	}, [active]);
-	const idx = tick % text.length;
-	return [...text].map((char, i) => ({
-		char,
-		color: i === idx ? C.bright : C.dim,
-	}));
-}
-
 export function AgentMessageCard({
 	conversationTurn,
 	detailExpanded,
@@ -108,42 +85,38 @@ export function AgentMessageCard({
 	const duration = useReasoningDuration(conversationTurn.status);
 	const isRunning = conversationTurn.status === "running";
 	const isExpanded = !isRunning && detailExpanded;
-	const bottomTitle = isRunning
-		? ` Turn ${conversationTurn.turnCount} · ${duration}s `
-		: ` ${conversationTurn.turnCount} Turns · ${conversationTurn.toolCount} Tools · ${duration}s `;
-	const breathing = useBreathingText(
-		"少女祈祷中...",
-		isRunning && !conversationTurn.finalText,
+	const [expandedThinkings, setExpandedThinkings] = useState<Set<number>>(
+		new Set(),
 	);
 
+	const toggleThinking = useCallback((index: number) => {
+		setExpandedThinkings((prev) => {
+			const next = new Set(prev);
+			if (next.has(index)) next.delete(index);
+			else next.add(index);
+			return next;
+		});
+	}, []);
+	const bottomTitle = `${conversationTurn.turnCount} Turns · ${conversationTurn.toolCount} Tools · ${duration}s`;
+
 	return (
-		<box
-			borderStyle="double"
-			borderColor={C.borderOuter}
-			title=" Vivlos "
-			titleAlignment="left"
-			padding={1}
-			marginBottom={1}
-			flexDirection="column"
-		>
+		<box paddingX={3} gap={1}>
 			{conversationTurn.log.length > 0 && (
-				<box
-					borderStyle="single"
-					borderColor={C.borderInner}
-					title=" 推理过程 "
-					titleAlignment="left"
-					bottomTitle={bottomTitle}
-					bottomTitleAlignment="right"
-					paddingX={1}
-					marginBottom={1}
-				>
+				<box>
 					{isExpanded ? (
-						<ExpandedLog log={conversationTurn.log} />
+						<ExpandedLog log={conversationTurn.log} bottomTitle={bottomTitle} />
 					) : (
-						<CompactLog log={conversationTurn.log} active={isRunning} />
+						<CompactLog
+							log={conversationTurn.log}
+							active={isRunning}
+							expandedThinkings={expandedThinkings}
+							onToggleThinking={toggleThinking}
+							detailExpanded={detailExpanded}
+						/>
 					)}
 				</box>
 			)}
+
 			{conversationTurn.finalText ? (
 				<markdown
 					content={conversationTurn.finalText}
@@ -151,19 +124,11 @@ export function AgentMessageCard({
 					streaming={isRunning}
 					conceal={!isRunning}
 					fg={C.text}
-					paddingX={1}
 				/>
-			) : isRunning ? (
-				<box flexDirection="row" paddingX={1}>
-					{breathing.map((item, i) => (
-						<text key={i} fg={item.color}>
-							{item.char}
-						</text>
-					))}
-				</box>
 			) : conversationTurn.status === "aborted" ? (
-				<text fg={C.abort}> 该次对话被打断</text>
+				<text fg={C.abort}>该次对话被打断</text>
 			) : null}
+
 		</box>
 	);
 }
@@ -183,11 +148,6 @@ interface RenderLine {
 }
 type LogLines = [RenderLine, ...RenderLine[]];
 
-/** 估算 markdown 文本渲染行数，用于 scrollbox 高度自适应 */
-function estimateHeight(text: string): number {
-	return text.split("\n").length;
-}
-
 /**
  * 将一条 LogEntry 转为渲染项。
  * 返回 [主行, ...子文本行]。主行是 "✓ Thinking..." / "✓ Calling xxx"，
@@ -195,12 +155,20 @@ function estimateHeight(text: string): number {
  */
 function entryToLines(entry: LogEntry, spin: string): LogLines {
 	if (entry.kind === "thinking") {
+		const durMs = entry.done
+			? entry.durationMs ?? 0
+			: Date.now() - entry.createdAt;
+		const durStr =
+			durMs > 0 ? ` ${(durMs / 1000).toFixed(1)}s` : "";
 		const main: RenderLine = {
 			segments: [
 				{
-					text: `${entry.done ? "✓ Thinking" : spin + " Thinking..."}`,
+					text: `${entry.done ? "✓ Thought" : spin + " Thinking..."}`,
 					color: entry.done ? C.done : C.thinking,
 				},
+				...(durStr
+					? [{ text: durStr, color: C.toolName }]
+					: []),
 			],
 		};
 		if (!entry.text) return [main];
@@ -259,58 +227,59 @@ function renderSub(sub: RenderLine[], key: React.Key) {
 	);
 }
 
-/** compact 视图：scrollbox 最多 8 行，高度自适应 1~8 */
-function CompactLog({ log, active }: { log: LogEntry[]; active: boolean }) {
+/** compact 视图：scrollbox 最多 15 行，高度自适应 1~8 */
+function CompactLog({
+	log,
+	active,
+	expandedThinkings,
+	onToggleThinking,
+	detailExpanded,
+}: {
+	log: LogEntry[];
+	active: boolean;
+	expandedThinkings: Set<number>;
+	onToggleThinking: (index: number) => void;
+	detailExpanded: boolean;
+}) {
 	const spin = useSpinnerFrame(active);
 	const entries = log.map((entry) => entryToLines(entry, active ? spin : "✓"));
-	const height = Math.min(
-		entries.reduce((sum, [, ...sub]) => {
-			let h = 1;
-			for (const line of sub)
-				h += line.markdown ? estimateHeight(line.segments[0].text) : 1;
-			return sum + h;
-		}, 0),
-		SCROLL_HEIGHT,
-	);
-	const scrollRef = useRef<ScrollBoxRenderable>(null);
-
-	useEffect(() => {
-		const sb = scrollRef.current as any;
-		if (!sb) return;
-		const original = sb.onMouseEvent.bind(sb);
-		sb.onMouseEvent = (event: any) => {
-			original(event);
-			if (event.type === "scroll") event.stopPropagation?.();
-		};
-	}, []);
 
 	return (
-		<box overflow="hidden" height={height}>
-			<scrollbox
-				ref={scrollRef}
-				height={height}
-				stickyScroll
-				stickyStart="bottom"
-			>
-				{entries.map(([main, ...sub], i) => (
+		<box flexDirection="column">
+			{entries.map(([main, ...sub], i) => {
+				const isThinking = log[i].kind === "thinking";
+				const prevIsThinking = i > 0 && log[i - 1].kind === "thinking";
+				const isTool = log[i].kind === "tool";
+				const needSpacer = prevIsThinking && isTool;
+				const isExpanded = detailExpanded || expandedThinkings.has(i);
+				const hasSub = sub.length > 0 && sub[0].segments[0].text;
+				const shouldShowSub = isThinking ? isExpanded && hasSub : hasSub;
+
+				return (
 					<box key={i} flexDirection="column">
-						<box flexDirection="row">
+						{needSpacer && <box height={1} />}
+						<box
+							flexDirection="row"
+							onMouseDown={
+								isThinking && hasSub ? () => onToggleThinking(i) : undefined
+							}
+						>
 							{main.segments.map((seg, j) => (
 								<text key={j} fg={seg.color}>
 									{seg.text}
 								</text>
 							))}
 						</box>
-						{renderSub(sub, `sub-${i}`)}
+						{shouldShowSub && renderSub(sub, `sub-${i}`)}
 					</box>
-				))}
-			</scrollbox>
+				);
+			})}
 		</box>
 	);
 }
 
 /** expanded 视图：完整展示，按 turn 分组 + 分隔线 */
-function ExpandedLog({ log }: { log: LogEntry[] }) {
+function ExpandedLog({ log, bottomTitle }: { log: LogEntry[]; bottomTitle: string }) {
 	const groups = new Map<number, LogEntry[]>();
 	for (const entry of log) {
 		const idx = entry.turnIndex;
@@ -338,6 +307,7 @@ function ExpandedLog({ log }: { log: LogEntry[] }) {
 						})}
 					</box>
 				))}
+			<text fg={C.borderInner}>{`───── ${bottomTitle} ─────`}</text>
 		</box>
 	);
 }

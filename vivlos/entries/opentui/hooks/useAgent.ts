@@ -14,7 +14,7 @@ import type { VivlosAgent } from "@vivlos/agent/types.ts";
  * 推理过程日志条目（thinking / tool），按事件顺序追加
  */
 export type LogEntry =
-	| { kind: "thinking"; text: string; done: boolean; turnIndex: number }
+	| { kind: "thinking"; text: string; done: boolean; turnIndex: number; createdAt: number; durationMs?: number }
 	| {
 			kind: "tool";
 			callId: string;
@@ -22,6 +22,7 @@ export type LogEntry =
 			result: string;
 			done: boolean;
 			turnIndex: number;
+			createdAt: number;
 	  };
 
 /**
@@ -164,6 +165,7 @@ export function useAgent(
 								text: "",
 								done: false,
 								turnIndex: t.turnCount,
+								createdAt: Date.now(),
 							},
 						],
 					})),
@@ -187,6 +189,7 @@ export function useAgent(
 								result: "",
 								done: false,
 								turnIndex: t.turnCount,
+								createdAt: Date.now(),
 							},
 						],
 					})),
@@ -252,6 +255,7 @@ export function useAgent(
 						log: updateLastThinking(t.log, (entry) => ({
 							...entry,
 							done: true,
+							durationMs: Date.now() - entry.createdAt,
 						})),
 					})),
 				);
@@ -268,6 +272,7 @@ export function useAgent(
 						log: updateLastThinking(t.log, (entry) => ({
 							...entry,
 							done: true,
+							durationMs: Date.now() - entry.createdAt,
 						})),
 					})),
 				);

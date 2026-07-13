@@ -1,29 +1,15 @@
 /**
  * UserMessageCard - 用户消息卡片
  *
- * 样式：╭── You ──╮ 圆角边框 + 文本内容
+ * 外框仅负责左边框 + 标题，内框负责背景填充，
+ * 通过 marginLeft 在左边框左边界与背景左边界之间制造间隙。
  */
-
-import { BorderCharacters } from "@opentui/core";
 
 const C = {
 	border: "#cba6f7",
-	bg: "#313244",
+	bg: "#1e1e2e",
+	text: "#cdd6f4",
 };
-
-// const cardBorder: BorderCharacters = {
-// 	topLeft: "─",
-// 	topRight: "─",
-// 	bottomLeft: "─",
-// 	bottomRight: "─",
-// 	horizontal: "─",
-// 	vertical: " ",
-// 	topT: "",
-// 	bottomT: "",
-// 	leftT: "─",
-// 	rightT: "─",
-// 	cross: "─",
-// };
 
 export interface UserMessageCardProps {
 	text: string;
@@ -31,21 +17,10 @@ export interface UserMessageCardProps {
 
 export function UserMessageCard({ text }: UserMessageCardProps) {
 	return (
-		<box
-			borderStyle="heavy"
-			// customBorderChars={cardBorder}
-			border={["left"]}
-			borderColor={C.border}
-			title=" You "
-			titleAlignment="left"
-			paddingX={1}
-			paddingY={1}
-			paddingLeft={0}
-			marginBottom={1}
-			backgroundColor={C.bg}
-			shouldFill={true}
-		>
-			<text fg={"#cdd6f4"}>{" " + text}</text>
+		<box border={["left"]} borderStyle="heavy" borderColor={C.border}>
+			<box backgroundColor={C.bg} marginLeft={0} paddingX={2} paddingY={1}>
+				<text fg={C.text}>{text}</text>
+			</box>
 		</box>
 	);
 }
