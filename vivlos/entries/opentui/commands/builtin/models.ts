@@ -6,11 +6,12 @@
  */
 
 import type { TUICommand } from "../types.ts";
+import { KEYBINDS, formatKeybind } from "../../keybinds";
 
 export const modelsCommand: TUICommand = {
 	name: "models",
-	description: "切换模型",
-	shortcut: "Ctrl+L",
+	description: KEYBINDS.openModels.description,
+	shortcut: formatKeybind(KEYBINDS.openModels),
 	execute: (ctx) => {
 		ctx.openModels();
 	},

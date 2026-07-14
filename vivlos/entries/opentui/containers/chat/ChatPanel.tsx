@@ -217,9 +217,18 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 						if (loading) abort();
 					}}
 					popupActive={popupState !== "none" || showHelp}
-					onOpenModels={() => setPopupState("models")}
-					onOpenProviders={() => setPopupState("providers")}
-					onShowHelp={() => setShowHelp(true)}
+					onOpenModels={() => {
+						setShowHelp(false);
+						setPopupState((prev) => (prev === "models" ? "none" : "models"));
+					}}
+					onOpenProviders={() => {
+						setShowHelp(false);
+						setPopupState((prev) => (prev === "providers" ? "none" : "providers"));
+					}}
+					onShowHelp={() => {
+						setPopupState("none");
+						setShowHelp((prev) => !prev);
+					}}
 					registry={registry}
 				/>
 				<InfoBar

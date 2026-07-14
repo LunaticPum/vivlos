@@ -6,11 +6,12 @@
  */
 
 import type { TUICommand } from "../types.ts";
+import { KEYBINDS, formatKeybind } from "../../keybinds";
 
 export const providersCommand: TUICommand = {
 	name: "providers",
-	description: "切换供应商",
-	shortcut: "Ctrl+P",
+	description: KEYBINDS.openProviders.description,
+	shortcut: formatKeybind(KEYBINDS.openProviders),
 	execute: (ctx) => {
 		ctx.openProviders();
 	},

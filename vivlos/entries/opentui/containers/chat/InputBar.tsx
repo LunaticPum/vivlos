@@ -13,7 +13,7 @@
  * - slash 命令补全：输入 / 开头时实时提示已注册指令，Tab 补全
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type {
 	BorderCharacters,
 	TextareaRenderable,
@@ -22,6 +22,7 @@ import type {
 } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import type { TUICommandRegistry } from "../../commands/registry";
+import { KEYBINDS, matchesKeybind } from "../../keybinds";
 
 const C = {
 	border: "#cba6f7",
@@ -76,6 +77,7 @@ export function InputBar({
 }: InputBarProps) {
 	const [contentLines, setContentLines] = useState(1);
 	const [inputText, setInputText] = useState("");
+	const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
 
 	// ── 历史消息状态 ──
 	// history[0] = 最新，history[5] = 最旧；historyIdx = -1 表示草稿
@@ -94,10 +96,15 @@ export function InputBar({
 	const slashSuggestions = (() => {
 		if (!inputText.startsWith("/") || popupActive) return [];
 		const query = inputText.slice(1).toLowerCase();
-		return registry
-			.list()
-			.filter((cmd) => cmd.name.startsWith(query));
+		// 输入恰好等于完整指令时不显示提示，让 Enter 走提交
+		if (registry.get(query)) return [];
+		return registry.list().filter((cmd) => cmd.name.startsWith(query));
 	})();
+
+	// 输入变化时重置选中项
+	useEffect(() => {
+		setSelectedSuggestionIdx(0);
+	}, [inputText]);
 
 	// ── 内容变化：实时同步草稿 + 更新行数 ──
 	const handleContentChange = useCallback((_event: ContentChangeEvent) => {
@@ -151,34 +158,62 @@ export function InputBar({
 		}
 	}, []);
 
-	// ── Tab 补全：取第一个匹配指令填入 textarea ──
-	const tabComplete = useCallback(() => {
+	// ── Enter 补全：用选中项填入 textarea ──
+	const enterComplete = useCallback(() => {
 		if (slashSuggestions.length === 0) return;
 		const ta = textareaRef.current;
 		if (!ta) return;
-		const completed = `/${slashSuggestions[0]!.name}`;
+		const cmd = slashSuggestions[selectedSuggestionIdx] ?? slashSuggestions[0]!;
+		const completed = `/${cmd.name}`;
 		ta.setText(completed);
 		lineCountRef.current = 1;
 		ta.setCursor(0, completed.length);
 		ta.gotoLineTextEnd();
 		setInputText(completed);
 		draftRef.current = completed;
-	}, [slashSuggestions]);
+	}, [slashSuggestions, selectedSuggestionIdx]);
 
 	// ── 全局键盘：截获 textarea 冒泡出来的按键 ──
 	useKeyboard((key) => {
-		// 弹窗激活时，跳过历史导航和打断，让弹窗组件接管
+		// 快捷键始终生效，不受 popupActive 影响
+		if (matchesKeybind(key, KEYBINDS.openModels)) {
+			onOpenModels();
+			return;
+		}
+		if (matchesKeybind(key, KEYBINDS.openProviders)) {
+			onOpenProviders();
+			return;
+		}
+		if (matchesKeybind(key, KEYBINDS.openHelp)) {
+			onShowHelp();
+			return;
+		}
+
+		// 弹窗激活时，跳过后续按键，让弹窗组件接管
 		if (popupActive) return;
 
-		if (key.name === "tab" && slashSuggestions.length > 0) {
-			tabComplete();
-		} else if (key.ctrl && key.name === "l") {
-			onOpenModels();
-		} else if (key.ctrl && key.name === "p") {
-			onOpenProviders();
-		} else if (key.ctrl && key.name === "o") {
-			onShowHelp();
-		} else if (key.name === "up") {
+		// 补全提示可见时，拦截 Up/Down/Enter，preventDefault 防止 textarea 吞键
+		if (slashSuggestions.length > 0) {
+			if (key.name === "up") {
+				key.preventDefault();
+				setSelectedSuggestionIdx((i) => Math.max(0, i - 1));
+				return;
+			}
+			if (key.name === "down") {
+				key.preventDefault();
+				setSelectedSuggestionIdx((i) =>
+					Math.min(slashSuggestions.length - 1, i + 1),
+				);
+				return;
+			}
+			if (key.name === "return") {
+				key.preventDefault();
+				enterComplete();
+				return;
+			}
+		}
+
+		if (key.name === "up") {
 			if (cursorLineRef.current === 0) {
 				switchHistory("up");
 			}
@@ -221,39 +256,30 @@ export function InputBar({
 
 	return (
 		<>
-			{/* slash 命令补全提示框 */}
+			{/* slash 命令补全提示框 -- 无边框，像输入框向上延伸 */}
 			{slashSuggestions.length > 0 && (
 				<box
 					position="absolute"
 					bottom={boxHeight + 1}
 					left={2}
-					width="40%"
+					right={2}
 					zIndex={50}
-					border={true}
-					borderStyle="rounded"
-					borderColor={C.border}
 					backgroundColor={C.suggestionBg}
 					paddingX={1}
-					paddingY={1}
 					flexDirection="column"
 				>
 					{slashSuggestions.map((cmd, i) => (
 						<box key={cmd.name} flexDirection="row">
-							<text fg={i === 0 ? C.border : C.text}>
-								{i === 0 ? "▶ " : "  "}
-							</text>
-							<text fg={i === 0 ? C.border : C.text}>
-								{`/${cmd.name}`}
-							</text>
-							<text fg={C.subtext}>
-								{`  ${cmd.description}`}
+							<box width={14}>
+								<text fg={i === selectedSuggestionIdx ? C.border : C.text}>
+									{` /${cmd.name}`}
+								</text>
+							</box>
+							<text fg={i === selectedSuggestionIdx ? C.border : C.subtext}>
+								{cmd.description}
 							</text>
 						</box>
 					))}
-					<box height={1} />
-					<box flexDirection="row" justifyContent="center" width="100%">
-						<text fg={C.hint}>{"Tab 补全"}</text>
-					</box>
 				</box>
 			)}
 			<box
