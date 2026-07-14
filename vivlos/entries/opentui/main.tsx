@@ -2,6 +2,7 @@
  * OpenTUI 入口
  *
  * 装配逻辑复刻 vivlos/main.ts，TUI 渲染层改用 OpenTUI。
+ * SQLite 持久化：LLMConfig、API Key 凭证、自定义 provider 配置。
  */
 
 import "dotenv/config";
@@ -15,6 +16,11 @@ import {
 	initLogger,
 } from "@vivlos/infra/logger/index.ts";
 import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
+import {
+	createSqliteConfigRepository,
+	createLLMConfigRepository,
+	createSqliteCredentialStore,
+} from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 
 // -- 上游业务 --
@@ -30,8 +36,6 @@ import { App } from "./App";
 
 async function main(): Promise<void> {
 	// ── 装配 infra ──
-	const llmConfig = loadLLMConfigFromEnv();
-	const llm = createLLM(llmConfig);
 	const eventBus = createEventBus();
 	initLogger(eventBus);
 
@@ -39,6 +43,30 @@ async function main(): Promise<void> {
 		process.env.VIVLOS_DB_PATH ?? resolve(process.cwd(), "vivlos.db");
 	const logDir =
 		process.env.VIVLOS_LOG_DIR ?? resolve(homedir(), ".vivlos", "logs");
+
+	// ── SQLite 持久化层 ──
+	const configRepo = createSqliteConfigRepository(dbPath);
+	const llmConfigRepo = createLLMConfigRepository(configRepo);
+	const credentialStore = createSqliteCredentialStore(configRepo);
+
+	// LLM 配置：SQLite 优先，env 兜底
+	const envConfig = loadLLMConfigFromEnv();
+	const llmConfig = llmConfigRepo.loadConfig() ?? envConfig;
+	if (!llmConfigRepo.loadConfig()) {
+		llmConfigRepo.saveConfig(llmConfig); // 首次启动写入 SQLite
+	}
+
+	const llm = createLLM(llmConfig, credentialStore);
+
+	// 恢复自定义 provider
+	for (const id of llmConfigRepo.listCustomProviders()) {
+		const config = llmConfigRepo.loadCustomProvider(id);
+		if (config) llm.addCustomProvider(config);
+	}
+
+	// 确保默认 provider/model 出现在 Recent 列表中
+	llmConfigRepo.addRecentProvider(llmConfig.defaultProvider);
+	llmConfigRepo.addRecentModel(llmConfig.defaultModelId);
 
 	// ── 装配 agent ──
 	const model = llm.getModel(
@@ -88,7 +116,13 @@ async function main(): Promise<void> {
 	const modelLabel = `${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`;
 	const renderer = await createCliRenderer({ exitOnCtrlC: false });
 	createRoot(renderer).render(
-		<App modelLabel={modelLabel} agent={agent} eventBus={eventBus} llm={llm} />,
+		<App
+			modelLabel={modelLabel}
+			agent={agent}
+			eventBus={eventBus}
+			llm={llm}
+			llmConfigRepo={llmConfigRepo}
+		/>,
 	);
 }
 

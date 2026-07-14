@@ -6,8 +6,11 @@ import type {
 	AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { createProvider, InMemoryCredentialStore } from "@earendil-works/pi-ai";
-import type { ApiKeyCredential } from "@earendil-works/pi-ai";
+import {
+	createProvider,
+	InMemoryCredentialStore,
+} from "@earendil-works/pi-ai";
+import type { ApiKeyCredential, CredentialStore } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
@@ -27,7 +30,7 @@ export type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
  */
 export function createLLM(
 	config: LLMConfig,
-	credentialStore?: InMemoryCredentialStore,
+	credentialStore?: CredentialStore,
 ): LLMClient {
 	const store = credentialStore ?? new InMemoryCredentialStore();
 	const models: MutableModels = builtinModels({ credentials: store });

@@ -33,17 +33,19 @@ import type { CommandContext } from "../../commands/types";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
+import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
 
 export interface ChatProps {
 	modelLabel: string;
 	agent: VivlosAgent;
 	eventBus: EventBus;
 	llm: LLMClient;
+	llmConfigRepo: LLMConfigRepository;
 }
 
 type PopupState = "none" | "models" | "providers" | "apikey" | "custom";
 
-export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
+export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatProps) {
 	const { conversationTurns, loading, error, submit, abort } = useAgent(
 		agent,
 		eventBus,
@@ -176,10 +178,19 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				setConnectionStatus({ state: "idle" });
 				setPopupState("models");
 			}, 3000);
+
+			// ── SQLite 持久化 ──
+			llmConfigRepo.saveConfig({
+				defaultProvider: providerId,
+				defaultModelId: model.id,
+			});
+			llmConfigRepo.addRecentProvider(providerId);
+			llmConfigRepo.addRecentModel(model.id);
 		} catch (err) {
-			// 连接失败：如果是自定义 provider，从列表中移除
+			// 连接失败：如果是自定义 provider，从内存列表和 SQLite 中移除
 			if (providerId.startsWith("[custom] ")) {
 				llm.removeProvider(providerId);
+				llmConfigRepo.removeCustomProvider(providerId);
 			}
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			setConnectionStatus({
@@ -208,6 +219,7 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 		apiKey: string;
 	}) => {
 		const providerId = llm.addCustomProvider(config);
+		llmConfigRepo.saveCustomProvider(providerId, config);
 		await llm.setCredential(providerId, config.apiKey);
 		await verifyAndSwitch(providerId);
 	};
@@ -218,6 +230,13 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 		llm.setDefault(provider, modelId);
 		setCurrentLabel(`${provider}/${modelId}`);
 		setPopupState("none");
+
+		// ── SQLite 持久化 ──
+		llmConfigRepo.saveConfig({
+			defaultProvider: provider,
+			defaultModelId: modelId,
+		});
+		llmConfigRepo.addRecentModel(modelId);
 	};
 
 	return (
@@ -285,7 +304,14 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				>
 					<SelectionPopup
 						title="Models"
-						items={llm.listModels(llm.getDefaultProvider()).map((m) => m.id)}
+						recentItems={llmConfigRepo
+							.loadRecentModels()
+							.filter((id) =>
+								llm.listModels(llm.getDefaultProvider()).some((m) => m.id === id),
+							)}
+						allItems={llm
+							.listModels(llm.getDefaultProvider())
+							.map((m) => m.id)}
 						currentItemId={llm.getDefaultModelId()}
 						onSelect={handleModelSelect}
 						onClose={() => setPopupState("none")}
@@ -306,7 +332,10 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				>
 					<SelectionPopup
 						title="Providers"
-						items={[...llm.listProviders(), "Custom"]}
+						recentItems={llmConfigRepo
+							.loadRecentProviders()
+							.filter((id) => llm.listProviders().includes(id))}
+						allItems={["Custom", ...llm.listProviders()]}
 						currentItemId={llm.getDefaultProvider()}
 						onSelect={handleProviderSelect}
 						onClose={() => setPopupState("none")}

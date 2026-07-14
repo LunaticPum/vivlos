@@ -2,9 +2,9 @@
  * SelectionPopup - 列表选择弹窗
  *
  * models / providers 选择共用此组件。
- * 键盘导航：↑↓ 移动、Enter 确认、Esc 退出。
- * models 弹窗额外支持 Ctrl+P 跳转到 providers 弹窗。
- * 选项超出时用 scrollbox（隐藏滚动条），自动滚动到选中项。
+ * 标题行（Recent/All）和空行间隔作为不可选项嵌入列表，
+ * 全部在一个 scrollbox 内，简洁可靠。
+ * 键盘导航：↑↓ 仅在有选项之间移动，跳过标题/空行。
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -17,49 +17,78 @@ const C = {
 	selected: "#cba6f7",
 	normal: "#cdd6f4",
 	current: "#a6e3a1",
+	header: "#cba6f7",
 	hint: "#6c7086",
 } as const;
 
 export interface SelectionPopupProps {
-	/** 弹窗标题 */
 	title: string;
-	/** 可选项列表 */
-	items: string[];
-	/** 当前已选中项的 id（显示 ✓ 标记） */
+	recentItems: string[];
+	allItems: string[];
 	currentItemId: string;
-	/** 选中某项时触发 */
 	onSelect: (id: string) => void;
-	/** 关闭弹窗 */
 	onClose: () => void;
-	/** 跳转到 providers 弹窗（仅 models 弹窗传入） */
 	onSwitchToProviders?: () => void;
 }
 
+type Entry =
+	| { kind: "header"; label: string }
+	| { kind: "spacer" }
+	| { kind: "item"; id: string };
+
 export function SelectionPopup({
 	title,
-	items,
+	recentItems,
+	allItems,
 	currentItemId,
 	onSelect,
 	onClose,
 	onSwitchToProviders,
 }: SelectionPopupProps) {
-	const [selectedIdx, setSelectedIdx] = useState(() =>
-		Math.max(0, items.indexOf(currentItemId)),
-	);
+	// 全部放入一个数组，渲染为一个滚动列表
+	const entries: Entry[] = [];
+	if (recentItems.length > 0) {
+		entries.push({ kind: "header", label: "  Recent" });
+		for (const id of recentItems) entries.push({ kind: "item", id });
+		entries.push({ kind: "spacer" });
+	}
+	entries.push({ kind: "header", label: "  All" });
+	for (const id of allItems) entries.push({ kind: "item", id });
+
+	const [selectedIdx, setSelectedIdx] = useState(() => {
+		const idx = entries.findIndex(
+			(e) => e.kind === "item" && e.id === currentItemId,
+		);
+		return idx >= 0 ? idx : entries.findIndex((e) => e.kind === "item");
+	});
+
 	const scrollRef = useRef<ScrollBoxRenderable>(null);
 
-	// 选中项变化时自动滚动到可见区域
 	useEffect(() => {
-		scrollRef.current?.scrollChildIntoView(`item-${selectedIdx}`);
-	}, [selectedIdx]);
+		// 滚到选中项的上一个非选项条目（header/空行），确保标题可见
+		let target = selectedIdx;
+		if (target > 0 && entries[target - 1]!.kind !== "item") {
+			target = target - 1;
+		}
+		scrollRef.current?.scrollChildIntoView(`item-${target}`);
+	}, [selectedIdx, entries]);
 
 	useKeyboard((key) => {
 		if (key.name === "up") {
-			setSelectedIdx((i) => Math.max(0, i - 1));
+			setSelectedIdx((i) => {
+				for (let j = i - 1; j >= 0; j--)
+					if (entries[j]!.kind === "item") return j;
+				return i;
+			});
 		} else if (key.name === "down") {
-			setSelectedIdx((i) => Math.min(items.length - 1, i + 1));
+			setSelectedIdx((i) => {
+				for (let j = i + 1; j < entries.length; j++)
+					if (entries[j]!.kind === "item") return j;
+				return i;
+			});
 		} else if (key.name === "return") {
-			onSelect(items[selectedIdx]!);
+			const e = entries[selectedIdx];
+			if (e?.kind === "item") onSelect(e.id);
 		} else if (key.name === "escape") {
 			onClose();
 		} else if (key.ctrl && key.name === "p" && onSwitchToProviders) {
@@ -69,37 +98,52 @@ export function SelectionPopup({
 
 	return (
 		<box
-			width="35%"
+			width="40%"
 			height="45%"
+			overflow="hidden"
 			border={true}
 			borderStyle="rounded"
 			borderColor={C.border}
 			title={` ${title} `}
-			titleAlignment="center"
+			titleAlignment="left"
 			paddingX={1}
-			paddingY={1}
 			backgroundColor={C.bg}
 			flexDirection="column"
+			alignItems="center"
+			paddingTop={1}
+			paddingBottom={0}
+			gap={1}
 		>
-			{/* 列表区 -- scrollbox 隐藏滚动条，flexGrow 撑满 */}
-			<scrollbox
-				ref={scrollRef}
-				flexGrow={1}
-				overflow="hidden"
-				verticalScrollbarOptions={{ visible: false }}
-				justifyContent="center"
-			>
-				{items.map((item, i) => (
-					<box key={item} id={`item-${i}`} flexDirection="row">
-						<text fg={i === selectedIdx ? C.selected : C.normal}>
-							{i === selectedIdx ? "▶ " : "  "}
-							{item}
-						</text>
-						{item === currentItemId && <text fg={C.current}> ✓</text>}
-					</box>
-				))}
-			</scrollbox>
-			{/* 底部提示 -- 贴着边框 */}
+			<box flexGrow={1} overflow="hidden">
+				<scrollbox
+					ref={scrollRef}
+					height="100%"
+					verticalScrollbarOptions={{ visible: false }}
+				>
+					{entries.map((e, i) => {
+						if (e.kind === "header") {
+							return (
+								<text key={`h-${i}`} id={`item-${i}`} fg={C.header}>
+									{e.label}
+								</text>
+							);
+						}
+						if (e.kind === "spacer") {
+							return <box key={`s-${i}`} id={`item-${i}`} height={1} />;
+						}
+						return (
+							<box key={e.id} id={`item-${i}`} flexDirection="row">
+								<text fg={i === selectedIdx ? C.selected : C.normal}>
+									{i === selectedIdx ? "▶ " : "  "}
+									{e.id}
+								</text>
+								{e.id === currentItemId && <text fg={C.current}> ✓</text>}
+							</box>
+						);
+					})}
+				</scrollbox>
+			</box>
+
 			<box flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"↑↓ 选择  Enter 确认  Esc 退出"}</text>
 			</box>

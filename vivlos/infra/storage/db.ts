@@ -1,10 +1,16 @@
 import { Database, type Database as DatabaseType } from "bun:sqlite";
+import { initSessionSchema } from "./repo/session-repo.ts";
+import { initMemorySchema } from "./repo/memory-repo.ts";
+import { initConfigSchema } from "./repo/config-repo.ts";
 
 const instances = new Map<string, DatabaseType>();
 
 /**
  * 获取 SQLite 连接（按 dbPath 键控，同一 path 只打开一次）。
- * 使用 bun:sqlite 替代 better-sqlite3（bun 原生支持）。
+ * 使用 bun:sqlite（Bun 运行时内置，底层为 SQLite C 引擎）。
+ *
+ * 各业务模块的表结构由对应 repo 文件的 initXxxSchema(db) 负责，
+ * db.ts 只管连接管理 + PRAGMA 设置。
  */
 export function getDb(dbPath: string): DatabaseType {
   const existing = instances.get(dbPath);
@@ -14,40 +20,10 @@ export function getDb(dbPath: string): DatabaseType {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
 
-  // ── schema ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      timestamp INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messages_session
-      ON messages(session_id, id);
-
-    CREATE TABLE IF NOT EXISTS agent_memories (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_profile (
-      id TEXT PRIMARY KEY DEFAULT 'profile',
-      content TEXT NOT NULL DEFAULT '',
-      updated_at INTEGER NOT NULL DEFAULT 0
-    );
-
-    INSERT OR IGNORE INTO user_profile (id, content, updated_at)
-      VALUES ('profile', '', 0);
-  `);
+  // ── 各业务模块自管 schema ──
+  initSessionSchema(db);
+  initMemorySchema(db);
+  initConfigSchema(db);
 
   instances.set(dbPath, db);
   return db;

@@ -41,10 +41,12 @@ export function ApiKeyPopup({ provider, onSubmit, onClose }: ApiKeyPopupProps) {
 			title=" API Key Required "
 			titleAlignment="center"
 			paddingX={1}
-			paddingY={1}
 			backgroundColor={C.bg}
 			flexDirection="column"
 			alignItems="center"
+			paddingTop={1}
+			paddingBottom={0}
+			gap={1}
 		>
 			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
 			<box flexDirection="column" flexGrow={1}>

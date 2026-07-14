@@ -103,12 +103,14 @@ export function CustomProviderPopup({
 			borderStyle="rounded"
 			borderColor={C.border}
 			title=" Custom Provider "
-			titleAlignment="left"
+			titleAlignment="center"
 			paddingX={1}
-			paddingY={1}
 			backgroundColor={C.bg}
 			flexDirection="column"
 			alignItems="center"
+			paddingTop={1}
+			paddingBottom={0}
+			gap={1}
 		>
 			{/* 内容区 */}
 			<box flexDirection="column" flexGrow={1} width="100%">
@@ -144,7 +146,9 @@ export function CustomProviderPopup({
 				<box flexDirection="row" marginTop={1}>
 					<text fg={C.label}>{"URL:   "}</text>
 					<input
-						ref={(el) => { inputRefs.current[0] = el; }}
+						ref={(el) => {
+							inputRefs.current[0] = el;
+						}}
 						focused={focusIdx === 0}
 						flexGrow={1}
 						selectable={false}
@@ -160,7 +164,9 @@ export function CustomProviderPopup({
 				<box flexDirection="row" marginTop={1}>
 					<text fg={C.label}>{"Model: "}</text>
 					<input
-						ref={(el) => { inputRefs.current[1] = el; }}
+						ref={(el) => {
+							inputRefs.current[1] = el;
+						}}
 						focused={focusIdx === 1}
 						flexGrow={1}
 						selectable={false}
@@ -176,7 +182,9 @@ export function CustomProviderPopup({
 				<box flexDirection="row" marginTop={1}>
 					<text fg={C.label}>{"Key:   "}</text>
 					<input
-						ref={(el) => { inputRefs.current[2] = el; }}
+						ref={(el) => {
+							inputRefs.current[2] = el;
+						}}
 						focused={focusIdx === 2}
 						flexGrow={1}
 						selectable={false}

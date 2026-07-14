@@ -1,5 +1,30 @@
+import type { Database } from "bun:sqlite";
 import { getDb } from "../db.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
+
+/**
+ * Memory 模块表结构定义。
+ * 由 db.ts 的 getDb() 调用，各模块自管 schema。
+ */
+export function initMemorySchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_memories (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id TEXT PRIMARY KEY DEFAULT 'profile',
+      content TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0
+    );
+
+    INSERT OR IGNORE INTO user_profile (id, content, updated_at)
+      VALUES ('profile', '', 0);
+  `);
+}
 
 /** memory 条目的存储格式（infra 层定义，agent 层 re-export） */
 export interface MemoryEntry {

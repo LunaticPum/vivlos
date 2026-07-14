@@ -1,9 +1,34 @@
 import type { Message } from "@earendil-works/pi-ai";
+import type { Database } from "bun:sqlite";
 import { getDb } from "../db.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
 
 /**
- * Session 仓储接口——infra 层的 CRUD 原语。
+ * Session 模块表结构定义。
+ * 由 db.ts 的 getDb() 调用，各模块自管 schema。
+ */
+export function initSessionSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      timestamp INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_session
+      ON messages(session_id, id);
+  `);
+}
+
+/**
+ * Session 仓储接口--infra 层的 CRUD 原语。
  *
  * infra 不知道 SessionManager（agent 层业务接口），
  * 只提供消息的增删查清。agent 层的 manager 委托此接口实现 SessionManager。
