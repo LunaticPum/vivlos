@@ -6,9 +6,10 @@
  * - useAgent 状态（对话轮次、loading、error）
  * - /detail 展开切换
  * - slash 命令系统（registry + checkCommand）
- * - provider/model 弹窗（models / providers / apikey）
+ * - provider/model 弹窗（models / providers / apikey / custom）
  * - API Key 连接验证（connecting -> success/failed）
- * - 帮助弹窗（Ctrl+H）
+ * - 自定义 provider 配置（CustomProviderPopup）
+ * - 帮助弹窗（Ctrl+O）
  * - 未知指令错误（commandError，3s 自动消失）
  */
 
@@ -20,8 +21,12 @@ import { InfoBar } from "./InfoBar";
 import { SelectionPopup } from "../../components/popups/SelectionPopup";
 import { ApiKeyPopup } from "../../components/popups/ApiKeyPopup";
 import { HelpPopup } from "../../components/popups/HelpPopup";
+import { CustomProviderPopup } from "../../components/popups/CustomProviderPopup";
 import { useAgent } from "../../hooks/useAgent";
-import { createTUICommandRegistry, type TUICommandRegistry } from "../../commands/registry";
+import {
+	createTUICommandRegistry,
+	type TUICommandRegistry,
+} from "../../commands/registry";
 import { registerBuiltinCommands } from "../../commands/builtin";
 import { checkCommand } from "../../commands/check";
 import type { CommandContext } from "../../commands/types";
@@ -36,7 +41,7 @@ export interface ChatProps {
 	llm: LLMClient;
 }
 
-type PopupState = "none" | "models" | "providers" | "apikey";
+type PopupState = "none" | "models" | "providers" | "apikey" | "custom";
 
 export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 	const { conversationTurns, loading, error, submit, abort } = useAgent(
@@ -50,9 +55,9 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 	const [currentLabel, setCurrentLabel] = useState(modelLabel);
 	const [pendingProvider, setPendingProvider] = useState<string | null>(null);
 	const [commandError, setCommandError] = useState<string | null>(null);
-	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
-		{ state: "idle" },
-	);
+	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
+		state: "idle",
+	});
 	const [connected, setConnected] = useState(false);
 
 	// ── 启动时检查默认 provider 是否已配置 API key ──
@@ -116,6 +121,11 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 
 	// ── provider 选择 ──
 	const handleProviderSelect = async (providerId: string) => {
+		// Custom 选项 -> 打开自定义 provider 表单
+		if (providerId === "Custom") {
+			setPopupState("custom");
+			return;
+		}
 		// 没切换 provider，直接关闭
 		if (providerId === llm.getDefaultProvider()) {
 			setPopupState("none");
@@ -146,7 +156,7 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 			const stream = llm.stream(
 				model,
 				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
-				{ signal: AbortSignal.timeout(3000) },
+				{ signal: AbortSignal.timeout(15000) },
 			);
 			for await (const event of stream) {
 				if (event.type === "error") {
@@ -166,8 +176,17 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				setConnectionStatus({ state: "idle" });
 				setPopupState("models");
 			}, 3000);
-		} catch {
-			setConnectionStatus({ state: "failed", provider: providerId });
+		} catch (err) {
+			// 连接失败：如果是自定义 provider，从列表中移除
+			if (providerId.startsWith("[custom] ")) {
+				llm.removeProvider(providerId);
+			}
+			const errorMsg = err instanceof Error ? err.message : String(err);
+			setConnectionStatus({
+				state: "failed",
+				provider: providerId,
+				error: errorMsg,
+			});
 			setTimeout(() => setConnectionStatus({ state: "idle" }), 3000);
 		}
 	};
@@ -179,6 +198,18 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 		const provider = pendingProvider;
 		setPendingProvider(null);
 		await verifyAndSwitch(provider);
+	};
+
+	// ── 自定义 provider 提交 -- 注册 + 连接验证 ──
+	const handleCustomProviderSubmit = async (config: {
+		baseUrl: string;
+		apiStandard: "openai" | "anthropic";
+		modelId: string;
+		apiKey: string;
+	}) => {
+		const providerId = llm.addCustomProvider(config);
+		await llm.setCredential(providerId, config.apiKey);
+		await verifyAndSwitch(providerId);
 	};
 
 	// ── model 选择 ──
@@ -223,7 +254,9 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 					}}
 					onOpenProviders={() => {
 						setShowHelp(false);
-						setPopupState((prev) => (prev === "providers" ? "none" : "providers"));
+						setPopupState((prev) =>
+							prev === "providers" ? "none" : "providers",
+						);
 					}}
 					onShowHelp={() => {
 						setPopupState("none");
@@ -240,7 +273,16 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 
 			{/* ── 弹窗层（全屏 overlay 居中）── */}
 			{popupState === "models" && (
-				<box position="absolute" top={0} left={0} width="100%" height="100%" justifyContent="center" alignItems="center" zIndex={100}>
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
 					<SelectionPopup
 						title="Models"
 						items={llm.listModels(llm.getDefaultProvider()).map((m) => m.id)}
@@ -252,10 +294,19 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				</box>
 			)}
 			{popupState === "providers" && (
-				<box position="absolute" top={0} left={0} width="100%" height="100%" justifyContent="center" alignItems="center" zIndex={100}>
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
 					<SelectionPopup
 						title="Providers"
-						items={llm.listProviders()}
+						items={[...llm.listProviders(), "Custom"]}
 						currentItemId={llm.getDefaultProvider()}
 						onSelect={handleProviderSelect}
 						onClose={() => setPopupState("none")}
@@ -263,7 +314,16 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 				</box>
 			)}
 			{popupState === "apikey" && pendingProvider && (
-				<box position="absolute" top={0} left={0} width="100%" height="100%" justifyContent="center" alignItems="center" zIndex={100}>
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
 					<ApiKeyPopup
 						provider={pendingProvider}
 						onSubmit={handleApiKeySubmit}
@@ -274,8 +334,34 @@ export function Chat({ modelLabel, agent, eventBus, llm }: ChatProps) {
 					/>
 				</box>
 			)}
+			{popupState === "custom" && (
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
+					<CustomProviderPopup
+						onSubmit={handleCustomProviderSubmit}
+						onClose={() => setPopupState("providers")}
+					/>
+				</box>
+			)}
 			{showHelp && (
-				<box position="absolute" top={0} left={0} width="100%" height="100%" justifyContent="center" alignItems="center" zIndex={100}>
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
 					<HelpPopup
 						commands={registry.list()}
 						onClose={() => setShowHelp(false)}

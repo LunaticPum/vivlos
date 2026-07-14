@@ -37,7 +37,7 @@ export type ConnectionStatus =
 	| { state: "idle" }
 	| { state: "connecting"; provider: string }
 	| { state: "success"; provider: string }
-	| { state: "failed"; provider: string };
+	| { state: "failed"; provider: string; error?: string };
 
 export interface StatusBarProps {
 	/** 模型标签，如 "deepseek/deepseek-v4-pro" */
@@ -118,7 +118,8 @@ export function StatusBar({
 	} else if (connectionStatus.state === "success") {
 		content = t` ${fg(C.success)(`✓ ${connectionStatus.provider} connect success`)} `;
 	} else if (connectionStatus.state === "failed") {
-		content = t` ${fg(C.error)(`✗ ${connectionStatus.provider} connect failed`)} `;
+		const detail = connectionStatus.error ? `: ${connectionStatus.error}` : "";
+		content = t` ${fg(C.error)(`✗ ${connectionStatus.provider} connect failed${detail}`)} `;
 	} else if (commandError) {
 		content = t` ${fg(C.error)(`✗ ${commandError}`)} `;
 	} else if (!connected) {

@@ -6,11 +6,13 @@ import type {
 	AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { createProvider, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import type { ApiKeyCredential } from "@earendil-works/pi-ai";
-import type { LLMClient, LLMConfig } from "./types.ts";
+import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
+import type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
 
-export type { LLMClient, LLMConfig } from "./types.ts";
+export type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
 
 /**
  * 创建 LLM 客户端。
@@ -61,10 +63,14 @@ export function createLLM(
 		// ── 凭证管理 ──
 
 		async setCredential(provider, apiKey) {
-			await store.modify(provider, async () => ({
-				type: "api_key",
-				key: apiKey,
-			} satisfies ApiKeyCredential));
+			await store.modify(
+				provider,
+				async () =>
+					({
+						type: "api_key",
+						key: apiKey,
+					}) satisfies ApiKeyCredential,
+			);
 		},
 
 		async hasCredential(provider) {
@@ -86,6 +92,71 @@ export function createLLM(
 			defaultProvider = provider;
 			defaultModelId = modelId;
 		},
+
+		// ── 自定义 provider ──
+
+		addCustomProvider(config: CustomProviderConfig): string {
+			// 从 baseUrl 提取域名作为 provider 标识
+			let domain: string;
+			try {
+				domain = new URL(config.baseUrl).hostname;
+			} catch {
+				domain = config.baseUrl;
+			}
+			const providerId = `[custom] ${domain}`;
+
+			// 根据 API 标准选择 api 类型和 wrapper
+			const apiType =
+				config.apiStandard === "anthropic"
+					? "anthropic-messages"
+					: "openai-completions";
+			const apiWrapper =
+				config.apiStandard === "anthropic"
+					? anthropicMessagesApi()
+					: openAICompletionsApi();
+
+			// 手动构建 Model 对象
+			const model: Model<Api> = {
+				id: config.modelId,
+				name: config.modelId,
+				api: apiType as Api,
+				provider: providerId,
+				baseUrl: config.baseUrl,
+				reasoning: false,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 32000,
+			};
+
+			// 创建并注册 provider
+			const provider = createProvider({
+				id: providerId,
+				name: providerId,
+				baseUrl: config.baseUrl,
+				auth: {
+					apiKey: {
+						name: `${domain} API Key`,
+						resolve: async ({ credential }) => {
+							if (credential?.type === "api_key" && credential.key) {
+								return { auth: { apiKey: credential.key } };
+							}
+							return undefined;
+						},
+					},
+				},
+				models: [model],
+				api: apiWrapper,
+			});
+
+			models.setProvider(provider);
+
+			return providerId;
+		},
+
+		removeProvider(id: string): void {
+			models.deleteProvider(id);
+		},
 	};
 }
 
@@ -97,8 +168,7 @@ export function createLLM(
  *   VIVLOS_DEFAULT_MODEL     — 默认 modelId（默认 "deepseek-v4-flash"）
  */
 export function loadLLMConfigFromEnv(): LLMConfig {
-	const defaultProvider =
-		process.env.VIVLOS_DEFAULT_PROVIDER ?? "deepseek";
+	const defaultProvider = process.env.VIVLOS_DEFAULT_PROVIDER ?? "deepseek";
 	const defaultModelId =
 		process.env.VIVLOS_DEFAULT_MODEL ?? "deepseek-v4-flash";
 

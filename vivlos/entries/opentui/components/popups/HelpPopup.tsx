@@ -38,42 +38,36 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 
 	return (
 		<box
+			width="35%"
+			height="45%"
 			border={true}
 			borderStyle="rounded"
 			borderColor={C.border}
 			title=" 指令集 "
-			titleAlignment="left"
+			titleAlignment="center"
 			paddingX={1}
 			paddingY={1}
 			backgroundColor={C.bg}
 			flexDirection="column"
 			alignItems="center"
 		>
-			{/* 表头 */}
-			<box flexDirection="row">
-				<box width={COL_CMD}>
-					<text fg={C.header}>{"指令"}</text>
-				</box>
-				<box width={COL_DESC}>
-					<text fg={C.header}>{"描述"}</text>
-				</box>
-				<text fg={C.header}>{"快捷键"}</text>
-			</box>
-			{/* 指令列表 */}
-			<box flexDirection="column" marginTop={1}>
-				{commands.map((cmd) => (
-					<box key={cmd.name} flexDirection="row">
-						<box width={COL_CMD}>
-							<text fg={C.command}>{`/${cmd.name}`}</text>
+			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
+			<box flexDirection="column" flexGrow={1}>
+				<box flexDirection="column" marginTop={1}>
+					{commands.map((cmd) => (
+						<box key={cmd.name} flexDirection="row">
+							<box width={COL_CMD}>
+								<text fg={C.command}>{`/${cmd.name}`}</text>
+							</box>
+							<box width={COL_DESC}>
+								<text fg={C.desc}>{cmd.description}</text>
+							</box>
+							{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
 						</box>
-						<box width={COL_DESC}>
-							<text fg={C.desc}>{cmd.description}</text>
-						</box>
-						{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
-					</box>
-				))}
+					))}
+				</box>
 			</box>
-			<box height={1} />
+			{/* 底部提示 -- 贴着边框 */}
 			<box flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"Esc 退出"}</text>
 			</box>

@@ -50,6 +50,31 @@ export interface LLMClient {
 
 	/** 设置默认 provider + modelId（/model 选择后调用） */
 	setDefault(provider: string, modelId: string): void;
+
+	// ── 自定义 provider ──
+
+	/**
+	 * 注册一个自定义 OpenAI/Anthropic 兼容的 provider。
+	 * 内部通过 createProvider + setProvider 注册到 models 集合，
+	 * 并通过 setCredential 注入 API key。
+	 * 返回 providerId（格式为 `[custom] ${domain}`）。
+	 */
+	addCustomProvider(config: CustomProviderConfig): string;
+
+	/** 移除已注册的 provider（用于连接验证失败时清理自定义 provider） */
+	removeProvider(id: string): void;
+}
+
+/** 自定义 provider 配置 */
+export interface CustomProviderConfig {
+	/** API 端点，如 "https://api.example.com/v1" */
+	baseUrl: string;
+	/** API 标准："openai" 或 "anthropic" */
+	apiStandard: "openai" | "anthropic";
+	/** 模型 ID，如 "gpt-4o" */
+	modelId: string;
+	/** API Key */
+	apiKey: string;
 }
 
 /**

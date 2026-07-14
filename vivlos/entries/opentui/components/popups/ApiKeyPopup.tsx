@@ -33,30 +33,36 @@ export function ApiKeyPopup({ provider, onSubmit, onClose }: ApiKeyPopupProps) {
 
 	return (
 		<box
+			width="35%"
+			height="20%"
 			border={true}
 			borderStyle="rounded"
 			borderColor={C.border}
 			title=" API Key Required "
-			titleAlignment="left"
+			titleAlignment="center"
 			paddingX={1}
 			paddingY={1}
 			backgroundColor={C.bg}
 			flexDirection="column"
+			alignItems="center"
 		>
-			<text fg={C.text}>{`Provider "${provider}" 需要配置 API Key`}</text>
-			<box marginTop={1}>
-				<input
-					focused={true}
-					placeholder="输入 API Key..."
-					placeholderColor={C.hint}
-					textColor={C.text}
-					onInput={setKey}
-					onSubmit={() => {
-						if (key.trim()) onSubmit(key.trim());
-					}}
-				/>
+			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
+			<box flexDirection="column" flexGrow={1}>
+				<text fg={C.text}>{`Provider "${provider}" 需要配置 API Key`}</text>
+				<box marginTop={1}>
+					<input
+						focused={true}
+						placeholder="输入 API Key..."
+						placeholderColor={C.hint}
+						textColor={C.text}
+						onInput={setKey}
+						onSubmit={() => {
+							if (key.trim()) onSubmit(key.trim());
+						}}
+					/>
+				</box>
 			</box>
-			<box height={1} />
+			{/* 底部提示 -- 贴着边框 */}
 			<box flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"Enter 确认  Esc 返回"}</text>
 			</box>
