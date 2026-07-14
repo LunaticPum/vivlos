@@ -1,6 +1,8 @@
 /**
  * vivlos 事件类型。
  */
+import type { Usage } from "@earendil-works/pi-ai";
+
 export type VivlosEvent =
 	// ———— agent 生命周期 ————
 	| { readonly type: "agent:start"; readonly sessionId: string }
@@ -53,6 +55,7 @@ export type VivlosEvent =
 			readonly sessionId: string;
 			readonly content: string;
 			readonly thinkingContent: string;
+			readonly usage?: Usage;
 	  }
 	// ———— 工具调用生命周期 ————
 	| {

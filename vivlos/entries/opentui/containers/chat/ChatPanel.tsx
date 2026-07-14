@@ -116,10 +116,11 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 		(t) => t.status === "complete",
 	);
 
-	const lastStatus =
+	const lastTurn =
 		conversationTurns.length > 0
-			? conversationTurns[conversationTurns.length - 1]!.status
+			? conversationTurns[conversationTurns.length - 1]
 			: undefined;
+	const lastStatus = lastTurn?.status;
 
 	// ── provider 选择 ──
 	const handleProviderSelect = async (providerId: string) => {
@@ -140,8 +141,28 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 			setPopupState("apikey");
 			return;
 		}
-		// 有 key，验证连接
-		await verifyAndSwitch(providerId);
+		// 已有凭证 = 之前连接成功过，直接切换，不做验证
+		const models = llm.listModels(providerId);
+		// 优先用上次使用的 model，没有则弹窗让用户选
+		const recentModels = llmConfigRepo.loadRecentModels();
+		const lastUsedId = recentModels.find((id) =>
+			models.some((m) => m.id === id),
+		);
+		if (!lastUsedId) {
+			// 没有上次使用记录，先切 provider 再弹 models
+			llm.setDefault(providerId, models[0]?.id ?? "");
+			setCurrentLabel(`${providerId}/${models[0]?.id ?? ""}`);
+			llmConfigRepo.saveConfig({ defaultProvider: providerId, defaultModelId: models[0]?.id ?? "" });
+			llmConfigRepo.addRecentProvider(providerId);
+			setPopupState("models");
+			return;
+		}
+		llm.setDefault(providerId, lastUsedId);
+		setCurrentLabel(`${providerId}/${lastUsedId}`);
+		llmConfigRepo.saveConfig({ defaultProvider: providerId, defaultModelId: lastUsedId });
+		llmConfigRepo.addRecentProvider(providerId);
+		llmConfigRepo.addRecentModel(lastUsedId);
+		setPopupState("none");
 	};
 
 	// ── API Key 连接验证 + 切换（3s 超时）──
@@ -176,7 +197,7 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 			setConnectionStatus({ state: "success", provider: providerId });
 			setTimeout(() => {
 				setConnectionStatus({ state: "idle" });
-				setPopupState("models");
+				setPopupState("none");
 			}, 3000);
 
 			// ── SQLite 持久化 ──
@@ -260,6 +281,8 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 					commandError={commandError}
 					connectionStatus={connectionStatus}
 					connected={connected}
+					usage={lastTurn?.usage}
+					contextWindow={llm.getModel(llm.getDefaultProvider(), llm.getDefaultModelId())?.contextWindow}
 				/>
 				<InputBar
 					onSubmit={handleSubmit}

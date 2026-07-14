@@ -59,14 +59,16 @@ export function mapAgentEvent(
 					error: new Error(msg.errorMessage ?? `LLM ${msg.stopReason}`),
 				});
 			}
-			const text = extractText(msg);
-			const thinking = extractThinking(msg);
-			events.push({
-				type: "agent:message_complete",
-				sessionId,
-				content: text,
-				thinkingContent: thinking,
-			});
+		const text = extractText(msg);
+		const thinking = extractThinking(msg);
+		const usage = msg.role === "assistant" ? msg.usage : undefined;
+		events.push({
+			type: "agent:message_complete",
+			sessionId,
+			content: text,
+			thinkingContent: thinking,
+			usage,
+		});
 			return events;
 		}
 		case "message_start":

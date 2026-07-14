@@ -143,7 +143,7 @@ export function CustomProviderPopup({
 				</box>
 
 				{/* Base URL */}
-				<box flexDirection="row" marginTop={1}>
+			<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
 					<text fg={C.label}>{"URL:   "}</text>
 					<input
 						ref={(el) => {
@@ -161,7 +161,7 @@ export function CustomProviderPopup({
 				</box>
 
 				{/* Model ID */}
-				<box flexDirection="row" marginTop={1}>
+				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
 					<text fg={C.label}>{"Model: "}</text>
 					<input
 						ref={(el) => {
@@ -179,7 +179,7 @@ export function CustomProviderPopup({
 				</box>
 
 				{/* API Key */}
-				<box flexDirection="row" marginTop={1}>
+				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
 					<text fg={C.label}>{"Key:   "}</text>
 					<input
 						ref={(el) => {

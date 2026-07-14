@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { Usage } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 
@@ -30,11 +31,13 @@ export type LogEntry =
  */
 export interface ConversationTurn {
 	userInput: string;
-	log: LogEntry[]; // 推理过程：thinking / tool 按顺序排列
-	finalText: string; // agent 最终回复
+	log: LogEntry[];
+	finalText: string;
 	status: "running" | "complete" | "error" | "aborted";
-	turnCount: number; // ReAct turn 计数，即 ReAct Loop 循环次数
-	toolCount: number; // 工具调用次数
+	turnCount: number;
+	toolCount: number;
+	/** 最近一次 assistant 消息的 token 用量 */
+	usage?: Usage;
 }
 
 /**
@@ -277,9 +280,22 @@ export function useAgent(
 					})),
 				);
 			}),
-		);
+	);
 
-		// agent 完成 -> 写入最终回复
+	// turn 结束 -> 存储 token 用量
+	unsubs.push(
+		eventBus.on("agent:message_complete", (e) => {
+			if (!e.usage) return;
+			setTurns((prev) =>
+				updateCurrent(prev, currentIdxRef.current, (t) => ({
+					...t,
+					usage: e.usage,
+				})),
+			);
+		}),
+	);
+
+	// agent 完成 -> 写入最终回复
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
 				setLoading(false);

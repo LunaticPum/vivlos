@@ -2,20 +2,19 @@
  * StatusBar - 状态栏分区
  *
  * 仿 Hermes 风格，一行四段：
- *   provider/model │ k/1M │ 上下文进度条 ..% │ 会话用时
+ *   provider/model │ input/output tokens │ 上下文进度条 ..% │ 会话用时
  *
  * 额外状态（优先级从高到低）：
  *   1. connectionStatus -- 连接验证中/成功/失败
  *   2. commandError -- 未知指令错误（3s 自动消失）
  *   3. error / aborted -- agent 错误
  *   4. 正常四段显示
- *
- * 上下文计算暂为占位，后续接入 token 统计。
  */
 
 import { useState, useEffect } from "react";
 import spinners from "cli-spinners";
 import { t, fg } from "@opentui/core";
+import type { Usage } from "@earendil-works/pi-ai";
 import type { ConversationTurn } from "../../hooks/useAgent";
 
 const SPINNER = spinners.line;
@@ -54,6 +53,10 @@ export interface StatusBarProps {
 	connectionStatus?: ConnectionStatus;
 	/** 是否已连接 provider（false 时显示未连接提示） */
 	connected?: boolean;
+	/** 最近一次 assistant 消息的 token 用量 */
+	usage?: Usage;
+	/** 模型上下文窗口大小 */
+	contextWindow?: number;
 }
 
 /** 会话计时器 */
@@ -72,14 +75,36 @@ function useSessionDuration(): string {
 	return `${mm}m${ss.toString().padStart(2, "0")}s`;
 }
 
-/** 上下文进度条占位 */
-// TODO: 后续接入真实 token 统计
-function useContextBar() {
-	const percent = 0;
+/** 格式化 token 数量为简洁字符串 */
+function formatTokens(n: number): string {
+	if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
+	if (n >= 1_000) return `${Math.floor(n / 1_000)}k`;
+	return `${n}`;
+}
+
+/** 上下文进度条计算 */
+function useContextBar(
+	usage: Usage | undefined,
+	contextWindow: number | undefined,
+) {
+	const windowLabel = formatTokens(contextWindow ?? 0);
+	if (!usage || !contextWindow || contextWindow === 0) {
+		return {
+			bar: "░".repeat(8),
+			percent: 0,
+			tokenLabel: `0/${windowLabel}`,
+			barColor: C.usage,
+		};
+	}
+	const used = usage.totalTokens;
+	const percent = Math.round((used / contextWindow) * 100);
 	const barWidth = 8;
 	const filled = Math.round((percent / 100) * barWidth);
 	const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
-	return { bar, percent };
+	const tokenLabel = `${formatTokens(used)} / ${windowLabel}`;
+	// 进度条颜色：<50% 绿，50-70% 黄，>70% 红
+	const barColor = percent > 70 ? C.error : percent > 50 ? C.warning : C.usage;
+	return { bar, percent, tokenLabel, barColor };
 }
 
 /** connecting 状态下的 spinner 帧 */
@@ -103,9 +128,14 @@ export function StatusBar({
 	commandError = null,
 	connectionStatus = { state: "idle" },
 	connected = true,
+	usage,
+	contextWindow,
 }: StatusBarProps) {
 	const duration = useSessionDuration();
-	const { bar, percent } = useContextBar();
+	const { bar, percent, tokenLabel, barColor } = useContextBar(
+		usage,
+		contextWindow,
+	);
 	const spin = useSpinner(connectionStatus.state === "connecting");
 
 	const sep = " │ ";
@@ -125,11 +155,11 @@ export function StatusBar({
 	} else if (!connected) {
 		content = t` ${fg(C.warning)("未连接 LLM，输入 /providers 或 Ctrl+P 连接...")} `;
 	} else if (turnStatus === "aborted") {
-		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.warning)("⚠️ 请求已中断")} `;
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.warning)("⚠️ 请求已中断")} `;
 	} else if (error) {
-		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.error)(`✗ ${error}`)} `;
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.error)(`✗ ${error}`)} `;
 	} else {
-		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)("0k/1M")}${fg(C.divider)(sep)}${fg(C.usage)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)} `;
+		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)} `;
 	}
 
 	return (
