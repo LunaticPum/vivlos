@@ -117,6 +117,9 @@ export function AgentMessageCard({
 				</box>
 			)}
 
+			{conversationTurn.status === "aborted" && (
+				<text fg={C.abort}>该次对话被打断</text>
+			)}
 			{conversationTurn.finalText ? (
 				<markdown
 					content={conversationTurn.finalText}
@@ -125,8 +128,6 @@ export function AgentMessageCard({
 					conceal={!isRunning}
 					fg={C.text}
 				/>
-			) : conversationTurn.status === "aborted" ? (
-				<text fg={C.abort}>该次对话被打断</text>
 			) : null}
 
 		</box>

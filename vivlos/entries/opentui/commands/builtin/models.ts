@@ -6,7 +6,7 @@
  */
 
 import type { TUICommand } from "../types.ts";
-import { KEYBINDS, formatKeybind } from "../../keybinds";
+import { KEYBINDS, formatKeybind } from "../../keybinds.ts";
 
 export const modelsCommand: TUICommand = {
 	name: "models",

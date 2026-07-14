@@ -44,7 +44,7 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 			borderStyle="rounded"
 			borderColor={C.border}
 			title=" 指令集 "
-			titleAlignment="center"
+			titleAlignment="left"
 			paddingX={1}
 			backgroundColor={C.bg}
 			flexDirection="column"

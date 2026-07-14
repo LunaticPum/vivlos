@@ -98,7 +98,7 @@ export function SelectionPopup({
 
 	return (
 		<box
-			width="40%"
+			width="35%"
 			height="45%"
 			overflow="hidden"
 			border={true}

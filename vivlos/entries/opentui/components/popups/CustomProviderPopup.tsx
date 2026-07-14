@@ -97,7 +97,7 @@ export function CustomProviderPopup({
 
 	return (
 		<box
-			width="40%"
+			width="35%"
 			height="45%"
 			border={true}
 			borderStyle="rounded"

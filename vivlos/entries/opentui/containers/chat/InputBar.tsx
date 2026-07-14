@@ -90,7 +90,23 @@ export function InputBar({
 	const lineCountRef = useRef(1);
 
 	// ── textarea 实例 ──
-	const textareaRef = useRef<TextareaRenderable>(null);
+  const textareaRef = useRef<TextareaRenderable>(null);
+
+  // ── 失焦自动抢回：除弹窗激活外，始终聚焦 textarea ──
+  const popupActiveRef = useRef(popupActive);
+  popupActiveRef.current = popupActive;
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const handler = () => {
+      if (!popupActiveRef.current) ta.focus();
+    };
+    ta.on("blurred", handler);
+    return () => {
+      ta.off("blurred", handler);
+    };
+  }, []);
 
 	// ── slash 命令补全：输入 / 开头时过滤已注册指令 ──
 	const slashSuggestions = (() => {
