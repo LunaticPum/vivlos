@@ -175,7 +175,7 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 			const model = models[0];
 			if (!model) throw new Error("no models available");
 
-			// 最小请求测试连接：等到收到实际文本或错误事件，3s 超时
+			// 连接验证：发送最小请求测试 API 可达性，15s 超时
 			const stream = llm.stream(
 				model,
 				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
@@ -195,6 +195,7 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 			setCurrentLabel(`${providerId}/${model.id}`);
 			setConnected(true);
 			setConnectionStatus({ state: "success", provider: providerId });
+			// 成功提示显示 3s 后恢复 idle 并关闭弹窗
 			setTimeout(() => {
 				setConnectionStatus({ state: "idle" });
 				setPopupState("none");
@@ -219,6 +220,7 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 				provider: providerId,
 				error: errorMsg,
 			});
+			// 失败提示显示 3s 后恢复 idle
 			setTimeout(() => setConnectionStatus({ state: "idle" }), 3000);
 		}
 	};
