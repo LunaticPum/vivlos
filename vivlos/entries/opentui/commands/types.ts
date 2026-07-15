@@ -15,6 +15,8 @@ export interface CommandContext {
 	toggleDetail: () => void;
 	/** 打开帮助弹窗（Ctrl+H） */
 	showHelp: () => void;
+	/** 清空当前会话 */
+	clearConversation: () => void;
 }
 
 /** TUI Slash 命令 */

@@ -23,6 +23,14 @@ interface SkillToolDetails {
 	layer: "content" | "reference";
 }
 
+/** skill 工具创建结果 */
+export interface SkillToolHandle {
+	/** AgentTool 实例 */
+	tool: AgentTool<typeof Params, SkillToolDetails>;
+	/** 重置已加载 skill 状态（会话清理时调用） */
+	reset: () => void;
+}
+
 /**
  * 创建 skill 工具。
  *
@@ -35,14 +43,16 @@ interface SkillToolDetails {
  * 工具内部用 Set 跟踪已加载正文的 skill。
  *
  * 工具自包含文件读取，不依赖 read 工具。
+ *
+ * @returns { tool, reset } -- tool 注册到 agent，reset 在会话清理时调用
  */
 export function createSkillTool(
 	skillRegistry: SkillRegistry,
-): AgentTool<typeof Params, SkillToolDetails> {
+): SkillToolHandle {
 	/** 已加载正文的 skill 名称集合 */
 	const loadedSkills = new Set<string>();
 
-	return {
+	const tool: AgentTool<typeof Params, SkillToolDetails> = {
 		name: "skill",
 		description:
 			"激活 skill 获取完整指引。使用方式：第一步 skill({ name }) 加载 SKILL.md 正文和 references 列表；第二步 skill({ name, reference }) 加载指定 reference 文件。必须先加载正文才能加载 reference。",
@@ -154,6 +164,11 @@ export function createSkillTool(
 				throw new ToolError(cause.message, "skill", cause);
 			}
 		},
+	};
+
+	return {
+		tool,
+		reset: () => loadedSkills.clear(),
 	};
 }
 

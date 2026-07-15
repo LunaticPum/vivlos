@@ -52,7 +52,7 @@ export function Chat({
 	llm,
 	llmConfigRepo,
 }: ChatProps) {
-	const { conversationTurns, loading, error, submit, abort } = useAgent(
+	const { conversationTurns, loading, error, submit, abort, clearConversation } = useAgent(
 		agent,
 		eventBus,
 	);
@@ -93,8 +93,9 @@ export function Chat({
 			openProviders: () => setPopupState("providers"),
 			toggleDetail: () => setDetailExpanded((v) => !v),
 			showHelp: () => setShowHelp(true),
+			clearConversation,
 		}),
-		[],
+		[clearConversation],
 	);
 
 	// ── 未知指令错误（3s 自动消失）──

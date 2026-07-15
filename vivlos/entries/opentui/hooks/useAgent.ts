@@ -49,6 +49,7 @@ export interface UseAgentResult {
 	error: string | null; // 错误信息
 	submit: (text: string) => void;
 	abort: () => void; // 打断当前 LLM 调用
+	clearConversation: () => void; // 清空当前会话
 }
 
 // #endregion
@@ -399,5 +400,14 @@ export function useAgent(
 		}
 	}, []);
 
-	return { conversationTurns, loading, error, submit, abort };
+	/** 清空当前会话 */
+	const clearConversation = useCallback(() => {
+		agent.reset();
+		setTurns([]);
+		setError(null);
+		setLoading(false);
+		currentIdxRef.current = -1;
+	}, [agent]);
+
+	return { conversationTurns, loading, error, submit, abort, clearConversation };
 }

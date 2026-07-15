@@ -34,8 +34,10 @@ export interface CreateAgentParams {
 	readonly sessionManager?: SessionManager;
 	/** 可选 loop 控制 hook（steering / follow-up 等，后续扩展用） */
 	readonly hooks?: LoopHooks;
-	/** 工具列表——传入 AgentContext.tools，由 pi agentLoop 调度 tool calling */
+	/** 工具列表--传入 AgentContext.tools，由 pi agentLoop 调度 tool calling */
 	readonly tools?: AgentTool<any, any>[];
+	/** 工具状态重置函数（/clear 时调用，清理 skill loadedSkills 等） */
+	readonly toolsReset?: () => void;
 
 	/** agent loop 最大轮次（默认 10） */
 	readonly maxTurns?: number;
@@ -88,6 +90,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		},
 		reset() {
 			sessionManager.reset();
+			params.toolsReset?.();
 		},
 	};
 }

@@ -9,15 +9,24 @@ import { createFindTool } from "./find.ts";
 import { createSkillTool } from "./skill.ts";
 import type { SkillRegistry } from "@vivlos/agent/skills/index.ts";
 
+/** 内置工具创建结果 */
+export interface BuiltinToolsHandle {
+	/** 工具列表，传给 createAgent */
+	tools: AgentTool<any, any>[];
+	/** 重置所有有状态的工具（如 skill 的 loadedSkills），会话清理时调用 */
+	reset: () => void;
+}
+
 /**
- * 返回内置工具列表。
+ * 创建内置工具列表。
  *
  * skillRegistry 可选 -- 传入时注册 skill 工具，不传时跳过。
+ * 返回 { tools, reset } -- reset 在会话清理（/clear）时调用。
  */
 export function createBuiltinTools(
 	cwd: string,
 	skillRegistry?: SkillRegistry,
-): AgentTool<any, any>[] {
+): BuiltinToolsHandle {
 	const registry = createToolRegistry();
 	registry.register(createReadTool(cwd));
 	registry.register(createWriteTool(cwd));
@@ -25,10 +34,19 @@ export function createBuiltinTools(
 	registry.register(createLsTool(cwd));
 	registry.register(createGrepTool(cwd));
 	registry.register(createFindTool(cwd));
+
+	const resets: (() => void)[] = [];
+
 	if (skillRegistry) {
-		registry.register(createSkillTool(skillRegistry));
+		const { tool, reset } = createSkillTool(skillRegistry);
+		registry.register(tool);
+		resets.push(reset);
 	}
-	return [...registry.list()];
+
+	return {
+		tools: [...registry.list()],
+		reset: () => resets.forEach((fn) => fn()),
+	};
 }
 
 export { createReadTool } from "./read-file.ts";

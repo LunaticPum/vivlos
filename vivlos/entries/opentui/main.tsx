@@ -96,7 +96,7 @@ async function main(): Promise<void> {
 	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
 	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
 
-	const tools = createBuiltinTools(process.cwd(), skillRegistry);
+	const { tools, reset: toolsReset } = createBuiltinTools(process.cwd(), skillRegistry);
 	const sessionManager = createSessionManager({ persistent: true, dbPath });
 	const memoryManager = createMemoryManager(dbPath);
 
@@ -118,6 +118,7 @@ async function main(): Promise<void> {
 		model,
 		maxTurns: 10,
 		tools,
+		toolsReset,
 		memoryManager,
 		sessionManager,
 		promptBuilder,
