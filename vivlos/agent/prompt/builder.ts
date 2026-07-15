@@ -28,17 +28,18 @@ export function createPromptBuilder(
 
 	return {
 		/**
-		 *   1. identity    — "你是 vivlos，..."
-		 *   2. environment — "当前时间 / OS / 工作目录"
-		 *   3. memory      — Hermes 风格 ═══ MEMORY ═══ 块（可选）
-		 *   4. rules       — 行为约束
-		 *   5. skills      — 可用的 skills 列表（可选）
+		 * 段落顺序（参照 pi-agent-core）：
+		 *   1. identity    - "你是 vivlos，..."
+		 *   2. environment - "运行环境 / 工作目录 / 可用工具"
+		 *   3. skills      - 可用 skills 列表（XML 格式，可选）
+		 *   4. memory      - 记忆块（可选，后续引入 MemoryManager）
+		 *   5. rules       - 行为约束
 		 */
 		build() {
 			const sections: string[] = [parts.identity, parts.environment];
+			if (skillsText) sections.push(skillsText);
 			if (memoryText) sections.push(memoryText);
 			sections.push(parts.rules);
-			if (skillsText) sections.push(skillsText);
 			return sections.join("\n\n---\n\n");
 		},
 		setMemory(text: string) {

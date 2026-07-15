@@ -2,7 +2,12 @@ import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
-import type { SkillMetadata, SkillEntry, SkillRegistry } from "./types.ts";
+import type {
+	SkillMetadata,
+	SkillEntry,
+	SkillRegistry,
+	SkillSource,
+} from "./types.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
 
 // ── Frontmatter 解析 ──
@@ -71,6 +76,8 @@ export function parseSkillFile(raw: string): {
 /**
  * 将解析出的 raw metadata 校验并转为 SkillMetadata。
  * name 和 description 必填，缺失则返回 null。
+ *
+ * allowed-tools 支持 string（单个）和 list（多个）两种格式。
  */
 function validateMetadata(raw: Record<string, unknown>): SkillMetadata | null {
 	const name = raw["name"];
@@ -80,15 +87,23 @@ function validateMetadata(raw: Record<string, unknown>): SkillMetadata | null {
 	if (typeof description !== "string" || description.trim() === "") return null;
 
 	const version = raw["version"];
-	const tools = raw["tools"];
+	const allowedToolsRaw = raw["allowed-tools"];
+
+	let allowedTools: string[] | undefined;
+	if (typeof allowedToolsRaw === "string") {
+		allowedTools = [allowedToolsRaw];
+	} else if (Array.isArray(allowedToolsRaw)) {
+		allowedTools = allowedToolsRaw.filter(
+			(t): t is string => typeof t === "string",
+		);
+		if (allowedTools.length === 0) allowedTools = undefined;
+	}
 
 	return {
 		name: name.trim(),
 		description: description.trim(),
 		version: typeof version === "string" ? version : undefined,
-		tools: Array.isArray(tools)
-			? tools.filter((t): t is string => typeof t === "string")
-			: undefined,
+		allowedTools,
 	};
 }
 
@@ -127,67 +142,73 @@ export function createSkillRegistry(): SkillRegistry {
 /**
  * 扫描目录下的所有 skill 子目录，解析 SKILL.md frontmatter，注册到 registry。
  *
- * 约定：每个 skill 是 dir 下的一个子目录，子目录内含 SKILL.md。
+ * 递归扫描：如果子目录没有 SKILL.md，继续往下一层找。
+ * 支持两种目录结构：
  * ```
- *   builtin/
+ *   builtin/                    # 自研 skill（扁平）
  *     ai-daily/
  *       SKILL.md
- *       references/
- *       scripts/
+ *
+ *   extension/                  # 第三方 skill（带 vendor 层）
+ *     tavily/
+ *       tavily-search/
+ *         SKILL.md
  * ```
  *
  * 解析失败的 skill 会被跳过并 log warn，不会中断扫描。
  *
- * @param dir 要扫描的目录（如 builtin/）
+ * @param dir 要扫描的目录
+ * @param source 来源标记（builtin / extension）
  * @param registry 可选，不传则创建新 registry
  * @returns registry
  */
 export function scanSkillsDir(
 	dir: string,
+	source: SkillSource = "builtin",
 	registry?: SkillRegistry,
 ): SkillRegistry {
 	const reg = registry ?? createSkillRegistry();
-	const absDir = resolve(dir);
+	scanRecursive(resolve(dir), source, reg);
+	return reg;
+}
 
+function scanRecursive(
+	absDir: string,
+	source: SkillSource,
+	reg: SkillRegistry,
+): void {
 	let names: string[];
 	try {
 		names = readdirSync(absDir);
-	} catch (err) {
-		log(
-			"warn",
-			`scanSkillsDir: 无法读取目录 ${absDir}: ${err instanceof Error ? err.message : String(err)}`,
-		);
-		return reg;
+	} catch {
+		return;
 	}
 
 	for (const name of names) {
-		// ———— 查找 SKILL.md 路径 ————
-		const skillDir = join(absDir, name);
+		const itemPath = join(absDir, name);
 
 		let stat;
 		try {
-			stat = statSync(skillDir);
+			stat = statSync(itemPath);
 		} catch {
 			continue;
 		}
 		if (!stat.isDirectory()) continue;
 
-		const skillFile = join(skillDir, "SKILL.md");
-		if (!existsSync(skillFile)) continue;
+		const skillFile = join(itemPath, "SKILL.md");
+		if (!existsSync(skillFile)) {
+			scanRecursive(itemPath, source, reg);
+			continue;
+		}
 
-		// ———— SKILL.md 注册准备 ————
 		try {
-			// 1. 读取
 			const raw = readFileSync(skillFile, "utf-8");
-
-			// 2. 解析
 			const parsed = parseSkillFile(raw);
 			if (!parsed) {
 				log("warn", `scanSkillsDir: ${skillFile} frontmatter 解析失败，跳过`);
 				continue;
 			}
 
-			// 3. 校验
 			const metadata = validateMetadata(parsed.metadata);
 			if (!metadata) {
 				log(
@@ -197,8 +218,7 @@ export function scanSkillsDir(
 				continue;
 			}
 
-			// 4. 注册
-			reg.register({ metadata, dir: skillDir, filePath: skillFile });
+			reg.register({ metadata, dir: itemPath, filePath: skillFile, source });
 		} catch (err) {
 			log(
 				"warn",
@@ -206,6 +226,4 @@ export function scanSkillsDir(
 			);
 		}
 	}
-
-	return reg;
 }

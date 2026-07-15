@@ -97,6 +97,22 @@ npm test             # vitest --run 全量测试
 npx tsc --noEmit     # 类型检查
 ```
 
+## 环境依赖
+
+### 必需
+
+- [Bun](https://bun.sh/) 运行时
+- `.env` 文件（参照 `.env.example`）：至少配置一个 LLM provider 的 API key
+
+### 可选
+
+- **tvly CLI**（Tavily）-- web 搜索/提取/爬取/研究 skill 依赖
+  ```bash
+  curl -fsSL https://cli.tavily.com/install.sh | bash
+  tvly login --api-key tvly-YOUR_KEY   # 或在 .env 设 TAVILY_API_KEY
+  ```
+  获取 key：[tavily.com](https://tavily.com)
+
 - 每个 package 有 `test/` 目录，测试文件命名 `*.test.ts`
 - LLM 相关测试用 mock fixture，不打真实 API
 - 待引入 `vitest-workspace` 统一管理多包测试

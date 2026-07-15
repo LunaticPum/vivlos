@@ -20,7 +20,7 @@ import type {
 	CursorChangeEvent,
 	ContentChangeEvent,
 } from "@opentui/core";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import type { TUICommandRegistry } from "../../commands/registry";
 import { KEYBINDS, matchesKeybind } from "../../keybinds";
 
@@ -75,6 +75,7 @@ export function InputBar({
 	onShowHelp,
 	registry,
 }: InputBarProps) {
+	const renderer = useRenderer();
 	const [contentLines, setContentLines] = useState(1);
 	const [inputText, setInputText] = useState("");
 	const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
@@ -237,8 +238,17 @@ export function InputBar({
 			if (cursorLineRef.current === lineCountRef.current - 1) {
 				switchHistory("down");
 			}
-		} else if (key.ctrl && key.name === "c" && onEsc) {
-			onEsc();
+		} else if (key.ctrl && key.name === "c") {
+			// 有选区时复制到剪贴板，无选区时打断
+			if (renderer.hasSelection) {
+				const text = renderer.getSelection()?.getSelectedText();
+				if (text) {
+					renderer.copyToClipboardOSC52(text);
+					renderer.clearSelection();
+				}
+			} else {
+				onEsc?.();
+			}
 		}
 	});
 

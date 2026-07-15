@@ -26,12 +26,27 @@ function spawnAsync(
 	signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
-		const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
-		const shellArgs = process.platform === "win32" ? ["/c", command] : ["-c", command];
+		const isWin = process.platform === "win32";
+		const shell = isWin ? "cmd.exe" : "/bin/sh";
+
+		// Windows: 先切 UTF-8 code page，避免 GBK 编码问题
+		const fullCommand = isWin
+			? `chcp 65001 >nul 2>nul && ${command}`
+			: command;
+
+		const shellArgs = isWin ? ["/c", fullCommand] : ["-c", command];
+
+		// 强制子进程使用 UTF-8，修复 Python CLI（如 tvly）在中文 Windows 下的编码崩溃
+		const env = {
+			...process.env,
+			PYTHONUTF8: "1",
+			PYTHONIOENCODING: "utf-8",
+		};
 
 		const child = spawn(shell, shellArgs, {
 			cwd,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: ["pipe", "pipe", "pipe"],
+			env,
 		});
 
 		let stdout = "";

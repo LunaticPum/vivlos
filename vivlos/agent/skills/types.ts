@@ -18,8 +18,12 @@
  * Skill 专属工具（scripts/）在 skill 激活时注册为 AgentTool，
  * 未激活时不注册，以节省 system prompt 中的 tool description token。
  *
- * 通用工具（如 web-search）放在 tools/builtin/，始终注册。
+ * 通用工具（如 read/write/bash）放在 tools/builtin/，始终注册。
+ * skill 可通过 allowed-tools 声明工具权限白名单，激活时限制可用工具范围。
  */
+
+/** Skill 来源类型 */
+export type SkillSource = "builtin" | "extension";
 
 // ── 元数据 ──
 
@@ -35,8 +39,9 @@
  * name: ai-daily
  * description: "生成 AI 领域日报..."
  * version: "1.0.0"
- * tools:
- *   - fetch-markdown
+ * allowed-tools:
+ *   - Bash(tvly *)
+ *   - Read
  * ---
  * ```
  */
@@ -51,11 +56,15 @@ export interface SkillMetadata {
 	/** 可选版本号 */
 	readonly version?: string;
 	/**
-	 * skill 专属工具声明。
-	 * 值为 scripts/ 下的文件名（不含 .ts 扩展名）。
-	 * skill 激活时动态注册为 AgentTool，未激活时不注册。
+	 * 工具权限白名单。
+	 * 仅在 skill 激活时生效，限制可用工具范围。
+	 * 格式：`ToolName` 或 `ToolName(pattern)`。
+	 * - `Bash(tvly *)` -- bash 工具，仅允许 tvly 开头的命令
+	 * - `Bash` -- bash 工具，无限制
+	 * - `Read` -- read 工具
+	 * 不声明时表示不限制（所有已注册工具可用）。
 	 */
-	readonly tools?: readonly string[];
+	readonly allowedTools?: readonly string[];
 }
 
 // ── 完整 Skill ──
@@ -92,13 +101,15 @@ export interface SkillEntry {
 	readonly dir: string;
 	/** SKILL.md 文件的绝对路径 */
 	readonly filePath: string;
+	/** 来源：builtin（自研）或 extension（第三方拉取） */
+	readonly source: SkillSource;
 }
 
 /**
  * Skill 注册表 -- 启动时扫描 + 注册，运行时查询。
  *
  * 职责：
- * - 启动时扫描 builtin/ 目录，解析每个 SKILL.md 的 frontmatter
+ * - 启动时扫描 builtin/ + extension/ 目录，解析每个 SKILL.md 的 frontmatter
  * - 存储 metadata + 路径信息（不加载正文）
  * - 提供 listMetadata() 供 prompt builder 注入 system prompt
  * - 提供 get() 供 SkillLoader 查找路径后按需加载

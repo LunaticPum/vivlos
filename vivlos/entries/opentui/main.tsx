@@ -6,6 +6,7 @@
  */
 
 import "dotenv/config";
+import { resolve } from "node:path";
 
 // -- 基础设施 --
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
@@ -23,10 +24,14 @@ import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
 import { ensureVivlosDir, getDbPath, getLogDir } from "@vivlos/infra/paths.ts";
 
 // -- 上游业务 --
-import { createAgent } from "@vivlos/agent/index.ts";
+import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
 import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
+import {
+	scanSkillsDir,
+	formatSkillsForPrompt,
+} from "@vivlos/agent/skills/index.ts";
 
 // -- OpenTUI 渲染 --
 import { createCliRenderer } from "@opentui/core";
@@ -83,6 +88,17 @@ async function main(): Promise<void> {
 	const sessionManager = createSessionManager({ persistent: true, dbPath });
 	const memoryManager = createMemoryManager(dbPath);
 
+	// ── 扫描 skills（builtin + extension）──
+	const skillsDir = resolve(process.cwd(), "vivlos/agent/skills");
+	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
+	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
+
+	const promptBuilder = createPromptBuilder();
+	const skillsText = formatSkillsForPrompt(skillRegistry.list());
+	if (skillsText) {
+		promptBuilder.setSkills(skillsText);
+	}
+
 	const writer = createMarkdownLogWriter(eventBus, {
 		logDir,
 		sessionId: sessionManager.id,
@@ -97,6 +113,7 @@ async function main(): Promise<void> {
 		tools,
 		memoryManager,
 		sessionManager,
+		promptBuilder,
 		thinkingLevel: "medium",
 	});
 
