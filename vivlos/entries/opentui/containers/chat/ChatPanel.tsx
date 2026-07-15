@@ -45,7 +45,13 @@ export interface ChatProps {
 
 type PopupState = "none" | "models" | "providers" | "apikey" | "custom";
 
-export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatProps) {
+export function Chat({
+	modelLabel,
+	agent,
+	eventBus,
+	llm,
+	llmConfigRepo,
+}: ChatProps) {
 	const { conversationTurns, loading, error, submit, abort } = useAgent(
 		agent,
 		eventBus,
@@ -116,6 +122,10 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 		(t) => t.status === "complete",
 	);
 
+	// 取最后一个有 usage 的 ConversationTurn（新 turn 开始时仍显示上一轮对话的上下文大小）
+	const lastTurnWithUsage = [...conversationTurns]
+		.reverse()
+		.find((t) => t.usage);
 	const lastTurn =
 		conversationTurns.length > 0
 			? conversationTurns[conversationTurns.length - 1]
@@ -152,14 +162,20 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 			// 没有上次使用记录，先切 provider 再弹 models
 			llm.setDefault(providerId, models[0]?.id ?? "");
 			setCurrentLabel(`${providerId}/${models[0]?.id ?? ""}`);
-			llmConfigRepo.saveConfig({ defaultProvider: providerId, defaultModelId: models[0]?.id ?? "" });
+			llmConfigRepo.saveConfig({
+				defaultProvider: providerId,
+				defaultModelId: models[0]?.id ?? "",
+			});
 			llmConfigRepo.addRecentProvider(providerId);
 			setPopupState("models");
 			return;
 		}
 		llm.setDefault(providerId, lastUsedId);
 		setCurrentLabel(`${providerId}/${lastUsedId}`);
-		llmConfigRepo.saveConfig({ defaultProvider: providerId, defaultModelId: lastUsedId });
+		llmConfigRepo.saveConfig({
+			defaultProvider: providerId,
+			defaultModelId: lastUsedId,
+		});
 		llmConfigRepo.addRecentProvider(providerId);
 		llmConfigRepo.addRecentModel(lastUsedId);
 		setPopupState("none");
@@ -283,8 +299,11 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 					commandError={commandError}
 					connectionStatus={connectionStatus}
 					connected={connected}
-					usage={lastTurn?.usage}
-					contextWindow={llm.getModel(llm.getDefaultProvider(), llm.getDefaultModelId())?.contextWindow}
+					usage={lastTurnWithUsage?.usage}
+					contextWindow={
+						llm.getModel(llm.getDefaultProvider(), llm.getDefaultModelId())
+							?.contextWindow
+					}
 				/>
 				<InputBar
 					onSubmit={handleSubmit}
@@ -332,11 +351,11 @@ export function Chat({ modelLabel, agent, eventBus, llm, llmConfigRepo }: ChatPr
 						recentItems={llmConfigRepo
 							.loadRecentModels()
 							.filter((id) =>
-								llm.listModels(llm.getDefaultProvider()).some((m) => m.id === id),
+								llm
+									.listModels(llm.getDefaultProvider())
+									.some((m) => m.id === id),
 							)}
-						allItems={llm
-							.listModels(llm.getDefaultProvider())
-							.map((m) => m.id)}
+						allItems={llm.listModels(llm.getDefaultProvider()).map((m) => m.id)}
 						currentItemId={llm.getDefaultModelId()}
 						onSelect={handleModelSelect}
 						onClose={() => setPopupState("none")}

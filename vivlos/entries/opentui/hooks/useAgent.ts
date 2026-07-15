@@ -143,6 +143,8 @@ export function useAgent(
 
 	// ref 保存当前对话轮次在 conversation turns 数组里的索引
 	const currentIdxRef = useRef(-1);
+	// 暂存 loop turn 的 usage，conversationTurn 结束时才提交
+	const latestUsageRef = useRef<Usage | undefined>(undefined);
 	useEffect(() => {
 		const unsubs: (() => void)[] = [];
 
@@ -282,35 +284,32 @@ export function useAgent(
 			}),
 	);
 
-	// turn 结束 -> 存储 token 用量
+	// loop turn 结束 -> 暂存 usage 到 ref，不触发重渲染
 	unsubs.push(
 		eventBus.on("agent:message_complete", (e) => {
-			if (!e.usage) return;
-			setTurns((prev) =>
-				updateCurrent(prev, currentIdxRef.current, (t) => ({
-					...t,
-					usage: e.usage,
-				})),
-			);
+			if (e.usage) latestUsageRef.current = e.usage;
 		}),
 	);
 
-	// agent 完成 -> 写入最终回复
+	// conversationTurn 结束 -> 提交最终 usage + 写入最终回复
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
 				setLoading(false);
 
-				// setTurns 异步执行，先捕获 idx 避免重置 -1 后找不到目标 turn
+				// setTurns 异步执行，先捕获 idx 和 usage 避免重置后找不到
 				const idx = currentIdxRef.current;
+				const finalUsage = latestUsageRef.current;
 				setTurns((prev) =>
 					updateCurrent(prev, idx, (t) => ({
 						...t,
 						status: "complete" as const,
 						finalText: e.finalMessage || t.finalText,
+						usage: finalUsage,
 					})),
 				);
-				// 重置 turns 下标
+				// 重置
 				currentIdxRef.current = -1;
+				latestUsageRef.current = undefined;
 			}),
 		);
 

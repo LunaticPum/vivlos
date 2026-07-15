@@ -78,7 +78,8 @@ function useSessionDuration(): string {
 /** 格式化 token 数量为简洁字符串 */
 function formatTokens(n: number): string {
 	if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
-	if (n >= 1_000) return `${Math.floor(n / 1_000)}k`;
+	if (n >= 10_000) return `${Math.floor(n / 1_000)}k`;
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
 	return `${n}`;
 }
 
@@ -96,12 +97,12 @@ function useContextBar(
 			barColor: C.usage,
 		};
 	}
-	const used = usage.totalTokens;
+	const used = usage.input;
 	const percent = Math.round((used / contextWindow) * 100);
 	const barWidth = 8;
 	const filled = Math.round((percent / 100) * barWidth);
 	const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
-	const tokenLabel = `${formatTokens(used)} / ${windowLabel}`;
+	const tokenLabel = `${formatTokens(used)}/${windowLabel}`;
 	// 进度条颜色：<50% 绿，50-70% 黄，>70% 红
 	const barColor = percent > 70 ? C.error : percent > 50 ? C.warning : C.usage;
 	return { bar, percent, tokenLabel, barColor };
