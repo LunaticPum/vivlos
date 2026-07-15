@@ -75,9 +75,8 @@ export function parseSkillFile(raw: string): {
 
 /**
  * 将解析出的 raw metadata 校验并转为 SkillMetadata。
+ * 只提取 name + description，其他字段忽略。
  * name 和 description 必填，缺失则返回 null。
- *
- * allowed-tools 支持 string（单个）和 list（多个）两种格式。
  */
 function validateMetadata(raw: Record<string, unknown>): SkillMetadata | null {
 	const name = raw["name"];
@@ -86,24 +85,9 @@ function validateMetadata(raw: Record<string, unknown>): SkillMetadata | null {
 	if (typeof name !== "string" || name.trim() === "") return null;
 	if (typeof description !== "string" || description.trim() === "") return null;
 
-	const version = raw["version"];
-	const allowedToolsRaw = raw["allowed-tools"];
-
-	let allowedTools: string[] | undefined;
-	if (typeof allowedToolsRaw === "string") {
-		allowedTools = [allowedToolsRaw];
-	} else if (Array.isArray(allowedToolsRaw)) {
-		allowedTools = allowedToolsRaw.filter(
-			(t): t is string => typeof t === "string",
-		);
-		if (allowedTools.length === 0) allowedTools = undefined;
-	}
-
 	return {
 		name: name.trim(),
 		description: description.trim(),
-		version: typeof version === "string" ? version : undefined,
-		allowedTools,
 	};
 }
 

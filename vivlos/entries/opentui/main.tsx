@@ -21,7 +21,8 @@ import {
 	createSqliteCredentialStore,
 } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
-import { ensureVivlosDir, getDbPath, getLogDir } from "@vivlos/infra/paths.ts";
+import { ensureVivlosDir, getDbPath, getLogDir, ensureTempDir, cleanTempDir, ensureConfigDir } from "@vivlos/infra/paths.ts";
+import { ensureAllConfigs } from "@vivlos/infra/config/index.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
@@ -44,6 +45,10 @@ async function main(): Promise<void> {
 	initLogger(eventBus);
 
 	ensureVivlosDir();
+	cleanTempDir();
+	ensureTempDir();
+	ensureConfigDir();
+	ensureAllConfigs();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
 	const logDir = process.env.VIVLOS_LOG_DIR ?? getLogDir();
 
@@ -84,14 +89,14 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
-	const tools = createBuiltinTools(process.cwd());
-	const sessionManager = createSessionManager({ persistent: true, dbPath });
-	const memoryManager = createMemoryManager(dbPath);
-
 	// ── 扫描 skills（builtin + extension）──
 	const skillsDir = resolve(process.cwd(), "vivlos/agent/skills");
 	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
 	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
+
+	const tools = createBuiltinTools(process.cwd(), skillRegistry);
+	const sessionManager = createSessionManager({ persistent: true, dbPath });
+	const memoryManager = createMemoryManager(dbPath);
 
 	const promptBuilder = createPromptBuilder();
 	const skillsText = formatSkillsForPrompt(skillRegistry.list());

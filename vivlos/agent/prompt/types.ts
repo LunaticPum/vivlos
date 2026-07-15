@@ -1,6 +1,5 @@
 export interface PromptParts {
 	readonly identity: string;
-	readonly environment: string;
 	readonly rules: string;
 	readonly memory?: string;
 	readonly skills?: string;
@@ -8,8 +7,7 @@ export interface PromptParts {
 
 export interface PromptBuilderOptions {
 	readonly identity?: string;
-	readonly environment?: string;
-	readonly rules?: string[];
+	readonly rules?: string;
 }
 
 export interface PromptBuilder {

@@ -1,9 +1,11 @@
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { ToolError } from "@vivlos/shared/errors.ts";
+import { getTempDir } from "@vivlos/infra/paths.ts";
+import { loadBashPermissions, checkBashPermission } from "../permit/index.ts";
 
-// ── Schema ──（参照 pi coding-agent bashSchema）
 const Params = Type.Object({
 	command: Type.String({ description: "要执行的 shell 命令" }),
 	timeout: Type.Optional(
@@ -13,12 +15,55 @@ const Params = Type.Object({
 
 type Params = Static<typeof Params>;
 
-const MAX_CHARS = 256 * 1024; // 256K 字符截断
+const MAX_CHARS = 256 * 1024;
 
 /**
- * 用 spawn 异步执行命令，收集 stdout/stderr，timeout 后 SIGTERM。
- * 替代 execSync 避免阻塞事件循环，支持 pi 的并行工具调度。
+ * 查找可用的 bash 路径。
+ *
+ * Windows 上优先用 Git Bash（原生 UTF-8 + 标准引号规则），
+ * 避免 cmd.exe 的编码和参数解析问题。
+ * 参照 pi-agent-core NodeExecutionEnv 的 shell 查找逻辑。
  */
+function findBash(): string {
+	if (process.platform !== "win32") return "/bin/bash";
+
+	const candidates = [
+		"C:\\Program Files\\Git\\bin\\bash.exe",
+		"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+	];
+	for (const c of candidates) {
+		if (existsSync(c)) return c;
+	}
+	return "bash";
+}
+
+/**
+ * Windows 下用 taskkill 杀进程树（SIGTERM 在 Windows 上不可靠）。
+ */
+function killProcessTree(pid: number): void {
+	if (process.platform === "win32") {
+		try {
+			spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
+				stdio: "ignore",
+				detached: true,
+				windowsHide: true,
+			});
+		} catch {
+			/* ignore */
+		}
+		return;
+	}
+	try {
+		process.kill(-pid, "SIGTERM");
+	} catch {
+		try {
+			process.kill(pid, "SIGTERM");
+		} catch {
+			/* already dead */
+		}
+	}
+}
+
 function spawnAsync(
 	command: string,
 	cwd: string,
@@ -26,48 +71,44 @@ function spawnAsync(
 	signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
-		const isWin = process.platform === "win32";
-		const shell = isWin ? "cmd.exe" : "/bin/sh";
+		const shell = findBash();
 
-		// Windows: 先切 UTF-8 code page，避免 GBK 编码问题
-		const fullCommand = isWin
-			? `chcp 65001 >nul 2>nul && ${command}`
-			: command;
-
-		const shellArgs = isWin ? ["/c", fullCommand] : ["-c", command];
-
-		// 强制子进程使用 UTF-8，修复 Python CLI（如 tvly）在中文 Windows 下的编码崩溃
 		const env = {
 			...process.env,
 			PYTHONUTF8: "1",
 			PYTHONIOENCODING: "utf-8",
+			TMPDIR: getTempDir(),
 		};
 
-		const child = spawn(shell, shellArgs, {
+		const child = spawn(shell, ["-c", command], {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
 			env,
+			windowsHide: true,
 		});
+
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
 
 		let stdout = "";
 		let stderr = "";
 
-		child.stdout.on("data", (chunk: Buffer) => {
-			stdout += chunk.toString("utf-8");
+		child.stdout.on("data", (chunk: string) => {
+			stdout += chunk;
 		});
 
-		child.stderr.on("data", (chunk: Buffer) => {
-			stderr += chunk.toString("utf-8");
+		child.stderr.on("data", (chunk: string) => {
+			stderr += chunk;
 		});
 
 		const timer = setTimeout(() => {
-			child.kill("SIGTERM");
+			if (child.pid) killProcessTree(child.pid);
 			reject(new Error(`command timed out after ${timeoutMs}ms`));
 		}, timeoutMs);
 
 		if (signal) {
 			const onAbort = () => {
-				child.kill("SIGTERM");
+				if (child.pid) killProcessTree(child.pid);
 				clearTimeout(timer);
 				reject(new Error("aborted"));
 			};
@@ -86,11 +127,12 @@ function spawnAsync(
 	});
 }
 
-// ── 工厂 ──
 export function createBashTool(cwd: string): AgentTool<typeof Params, { message: string }> {
+	const bashRules = loadBashPermissions();
+
 	return {
 		name: "bash",
-		description: "执行 shell 命令并返回 stdout。timeout 超时后终止命令。输出超过 256K 字符自动截断。",
+		description: "执行 shell 命令并返回 stdout。timeout 超时后终止命令。输出超过 256K 字符自动截断。临时文件请保存到 $TMPDIR 目录（.vivlos/temp/）。",
 		label: "运行命令",
 		parameters: Params,
 		async execute(
@@ -99,6 +141,14 @@ export function createBashTool(cwd: string): AgentTool<typeof Params, { message:
 			signal?: AbortSignal,
 		): Promise<AgentToolResult<{ message: string }>> {
 			try {
+				const perm = checkBashPermission(params.command, bashRules);
+				if (!perm.allowed) {
+					return {
+						content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+						details: { message: `denied: ${params.command.slice(0, 80)}` },
+					};
+				}
+
 				const timeoutMs = (params.timeout ?? 30) * 1000;
 
 				const { stdout, stderr, code } = await spawnAsync(
@@ -109,13 +159,11 @@ export function createBashTool(cwd: string): AgentTool<typeof Params, { message:
 				);
 
 				if (code === null) {
-					// killed by timeout or abort
 					throw new Error("command killed (exit code: null)");
 				}
 
 				const combined = stderr ? `${stdout}\n[stderr]\n${stderr}` : stdout;
 
-				// 截断
 				const text =
 					combined.length > MAX_CHARS
 						? combined.slice(0, MAX_CHARS) +

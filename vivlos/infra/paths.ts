@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, rmSync, readdirSync } from "node:fs";
 
 const VIVLOS_DIR_NAME = ".vivlos";
 
@@ -46,4 +46,36 @@ export function getDbPath(): string {
 /** 获取日志目录路径 */
 export function getLogDir(): string {
 	return resolve(getVivlosDir(), "logs");
+}
+
+/** 获取配置文件目录路径 */
+export function getConfigDir(): string {
+	return resolve(getVivlosDir(), "config");
+}
+
+/** 确保配置文件目录存在 */
+export function ensureConfigDir(): string {
+	return ensureDir(getConfigDir());
+}
+
+/** 获取临时文件目录路径 */
+export function getTempDir(): string {
+	return resolve(getVivlosDir(), "temp");
+}
+
+/** 确保临时文件目录存在 */
+export function ensureTempDir(): string {
+	return ensureDir(getTempDir());
+}
+
+/**
+ * 清空临时文件目录。
+ * 启动时调用，清理上次会话残留的临时文件。
+ */
+export function cleanTempDir(): void {
+	const dir = getTempDir();
+	if (!existsSync(dir)) return;
+	for (const entry of readdirSync(dir)) {
+		rmSync(resolve(dir, entry), { recursive: true, force: true });
+	}
 }

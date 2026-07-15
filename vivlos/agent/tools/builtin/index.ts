@@ -6,14 +6,18 @@ import { createBashTool } from "./bash.ts";
 import { createLsTool } from "./ls.ts";
 import { createGrepTool } from "./grep.ts";
 import { createFindTool } from "./find.ts";
+import { createSkillTool } from "./skill.ts";
+import type { SkillRegistry } from "@vivlos/agent/skills/types.ts";
 
 /**
  * 返回内置工具列表。
  *
- * 内部通过 ToolRegistry 注册，后续运行时可通过 registry
- * 动态增删工具（P7 子 agent 委派场景可能用到）。
+ * skillRegistry 可选 -- 传入时注册 skill 工具，不传时跳过。
  */
-export function createBuiltinTools(cwd: string): AgentTool<any, any>[] {
+export function createBuiltinTools(
+	cwd: string,
+	skillRegistry?: SkillRegistry,
+): AgentTool<any, any>[] {
 	const registry = createToolRegistry();
 	registry.register(createReadTool(cwd));
 	registry.register(createWriteTool(cwd));
@@ -21,6 +25,9 @@ export function createBuiltinTools(cwd: string): AgentTool<any, any>[] {
 	registry.register(createLsTool(cwd));
 	registry.register(createGrepTool(cwd));
 	registry.register(createFindTool(cwd));
+	if (skillRegistry) {
+		registry.register(createSkillTool(skillRegistry));
+	}
 	return [...registry.list()];
 }
 
@@ -30,3 +37,4 @@ export { createBashTool } from "./bash.ts";
 export { createLsTool } from "./ls.ts";
 export { createGrepTool } from "./grep.ts";
 export { createFindTool } from "./find.ts";
+export { createSkillTool } from "./skill.ts";
