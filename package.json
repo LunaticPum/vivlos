@@ -22,7 +22,8 @@
 		"dotenv": "^16.5.0",
 		"openai": "^6.10.0",
 		"opentui-spinner": "^0.0.7",
-		"react": "^19.2.7"
+		"react": "^19.2.7",
+		"yaml": "^2.9.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.10.0",

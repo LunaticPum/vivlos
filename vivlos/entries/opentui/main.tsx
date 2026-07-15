@@ -6,8 +6,6 @@
  */
 
 import "dotenv/config";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
 
 // -- 基础设施 --
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
@@ -22,6 +20,7 @@ import {
 	createSqliteCredentialStore,
 } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
+import { ensureVivlosDir, getDbPath, getLogDir } from "@vivlos/infra/paths.ts";
 
 // -- 上游业务 --
 import { createAgent } from "@vivlos/agent/index.ts";
@@ -39,10 +38,9 @@ async function main(): Promise<void> {
 	const eventBus = createEventBus();
 	initLogger(eventBus);
 
-	const dbPath =
-		process.env.VIVLOS_DB_PATH ?? resolve(process.cwd(), "vivlos.db");
-	const logDir =
-		process.env.VIVLOS_LOG_DIR ?? resolve(homedir(), ".vivlos", "logs");
+	ensureVivlosDir();
+	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
+	const logDir = process.env.VIVLOS_LOG_DIR ?? getLogDir();
 
 	// ── SQLite 持久化层 ──
 	const configRepo = createSqliteConfigRepository(dbPath);
@@ -85,11 +83,11 @@ async function main(): Promise<void> {
 	const sessionManager = createSessionManager({ persistent: true, dbPath });
 	const memoryManager = createMemoryManager(dbPath);
 
-	const logger = createMarkdownLogWriter(eventBus, {
+	const writer = createMarkdownLogWriter(eventBus, {
 		logDir,
 		sessionId: sessionManager.id,
 	});
-	logger.start();
+	writer.start();
 
 	const agent = createAgent({
 		llm,
@@ -105,7 +103,7 @@ async function main(): Promise<void> {
 	// ── 退出清理 ──
 	const cleanup = () => {
 		process.stdout.write("\x1b[2J\x1b[H");
-		logger.stop();
+		writer.stop();
 		closeDb();
 		process.exit(0);
 	};

@@ -25,3 +25,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# vivlos runtime data (.vivlos/ in cwd)
+.vivlos/
