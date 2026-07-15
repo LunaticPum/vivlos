@@ -7,7 +7,7 @@ import { createLsTool } from "./ls.ts";
 import { createGrepTool } from "./grep.ts";
 import { createFindTool } from "./find.ts";
 import { createSkillTool } from "./skill.ts";
-import type { SkillRegistry } from "@vivlos/agent/skills/types.ts";
+import type { SkillRegistry } from "@vivlos/agent/skills/index.ts";
 
 /**
  * 返回内置工具列表。

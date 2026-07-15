@@ -2,8 +2,8 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { SkillRegistry } from "@vivlos/agent/skills/types.ts";
-import { parseSkillFile } from "@vivlos/agent/skills/registry.ts";
+import type { SkillRegistry } from "@vivlos/agent/skills/index.ts";
+import { parseSkillFile } from "@vivlos/agent/skills/index.ts";
 import { ToolError } from "@vivlos/shared/errors.ts";
 
 const Params = Type.Object({

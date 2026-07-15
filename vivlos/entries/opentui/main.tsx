@@ -6,7 +6,8 @@
  */
 
 import "dotenv/config";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // -- 基础设施 --
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
@@ -90,7 +91,8 @@ async function main(): Promise<void> {
 	}
 
 	// ── 扫描 skills（builtin + extension）──
-	const skillsDir = resolve(process.cwd(), "vivlos/agent/skills");
+	const __dirname = dirname(fileURLToPath(import.meta.url));
+	const skillsDir = resolve(__dirname, "../../agent/skills");
 	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
 	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
 

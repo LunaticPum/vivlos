@@ -9,15 +9,15 @@ import type { SkillEntry } from "./types.ts";
  * 采用 XML 格式（参照 pi-agent-core / agentskills.io 规范），
  * 包含 name + description + location（文件路径）。
  *
- * LLM 看到匹配的 skill 时，用 read 工具读取 location 指向的 SKILL.md 文件，
- * 获取完整的执行流程 SOP。
+ * LLM 看到匹配的 skill 时，调用 skill({ name }) 工具加载完整 SKILL.md 正文，
+ * 获取执行流程 SOP。
  */
 export function formatSkillsForPrompt(skills: readonly SkillEntry[]): string {
 	if (skills.length === 0) return "";
 
 	const lines = [
 		"The following skills provide specialized instructions for specific tasks.",
-		"Read the full skill file (use the read tool) when the task matches its description.",
+		"Use the skill tool (skill({ name })) to load the full skill content when the task matches its description.",
 		"When a skill file references a relative path, resolve it against the skill directory.",
 		"",
 		"<available_skills>",
