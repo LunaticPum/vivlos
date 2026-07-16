@@ -67,15 +67,19 @@ async function main(): Promise<void> {
 
 	const llm = createLLM(llmConfig, credentialStore);
 
-	// 恢复自定义 provider
+	// 恢复自定义 provider + 凭证（每个 model config 单独恢复，addCustomProvider 自动合并同域名）
 	for (const id of llmConfigRepo.listCustomProviders()) {
 		const config = llmConfigRepo.loadCustomProvider(id);
-		if (config) llm.addCustomProvider(config);
+		if (config) {
+			llm.addCustomProvider(config);
+			const domain = id.split("/")[0];
+			await llm.setCredential(domain, config.apiKey);
+		}
 	}
 
 	// 确保默认 provider/model 出现在 Recent 列表中
 	llmConfigRepo.addRecentProvider(llmConfig.defaultProvider);
-	llmConfigRepo.addRecentModel(llmConfig.defaultModelId);
+	llmConfigRepo.addRecentModel(`${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`);
 
 	// ── 装配 agent ──
 	const model = llm.getModel(
@@ -145,6 +149,7 @@ async function main(): Promise<void> {
 			eventBus={eventBus}
 			llm={llm}
 			llmConfigRepo={llmConfigRepo}
+			onExit={cleanup}
 		/>,
 	);
 }

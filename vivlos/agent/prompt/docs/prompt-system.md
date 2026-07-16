@@ -67,14 +67,14 @@ prompt/
 
 带 `{{placeholder}}` 占位符的模板，builder 在 `build()` 时替换为动态值：
 
-| 占位符 | 值 | 来源 |
-|--------|-----|------|
-| `{{runtime}}` | `Bun 1.2.3` 或 `Node.js v22.19.0` | `process.versions.bun` / `process.version` |
-| `{{os}}` | `win32` / `darwin` / `linux` | `process.platform` |
-| `{{cwd}}` | 工作目录绝对路径 | `process.cwd()` |
-| `{{timezone}}` | IANA 时区 | `Intl.DateTimeFormat().resolvedOptions().timeZone` |
-| `{{time}}` | ISO 8601 时间戳 | `new Date().toISOString()` |
-| `{{language}}` | BCP 47 语言标签 | 固定 `zh-CN` |
+| 占位符         | 值                                | 来源                                               |
+| -------------- | --------------------------------- | -------------------------------------------------- |
+| `{{runtime}}`  | `Bun 1.2.3` 或 `Node.js v22.19.0` | `process.versions.bun` / `process.version`         |
+| `{{os}}`       | `win32` / `darwin` / `linux`      | `process.platform`                                 |
+| `{{cwd}}`      | 工作目录绝对路径                  | `process.cwd()`                                    |
+| `{{timezone}}` | IANA 时区                         | `Intl.DateTimeFormat().resolvedOptions().timeZone` |
+| `{{time}}`     | ISO 8601 时间戳                   | `new Date().toISOString()`                         |
+| `{{language}}` | BCP 47 语言标签                   | 固定 `zh-CN`                                       |
 
 ## builder.ts
 

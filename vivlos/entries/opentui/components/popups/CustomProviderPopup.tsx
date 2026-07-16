@@ -1,12 +1,12 @@
 /**
  * CustomProviderPopup - 自定义 Provider 配置弹窗
  *
- * 用户填写 API 标准(鼠标点击)、Base URL、Model ID、API Key，
- * Enter 提交前校验所有字段非空。
+ * 用户填写 API 标准(鼠标点击)、Base URL、Model ID、API Key、Context Window，
+ * Enter 提交前校验必填字段非空（Ctx 可选）。
  * 提交后由 ChatPanel 走连接验证流程。
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useKeyboard } from "@opentui/react";
 import type { InputRenderable } from "@opentui/core";
 
@@ -21,15 +21,29 @@ const C = {
 	hint: "#6c7086",
 } as const;
 
+/** 解析用户输入的 context window：支持 128k / 1M / 128000 */
+function parseContextWindow(input: string): number | undefined {
+	const m = input
+		.trim()
+		.toLowerCase()
+		.match(/^(\d+(?:\.\d+)?)([km]?)$/);
+	if (!m) return undefined;
+	const n = parseFloat(m[1]);
+	return m[2] === "k"
+		? Math.round(n * 1000)
+		: m[2] === "m"
+			? Math.round(n * 1_000_000)
+			: Math.round(n);
+}
+
 export interface CustomProviderPopupProps {
-	/** 提交自定义 provider 配置 */
 	onSubmit: (config: {
 		baseUrl: string;
 		apiStandard: "openai" | "anthropic";
 		modelId: string;
 		apiKey: string;
+		contextWindow?: number;
 	}) => void;
-	/** 返回 providers 弹窗 */
 	onClose: () => void;
 }
 
@@ -43,13 +57,17 @@ export function CustomProviderPopup({
 	const [baseUrl, setBaseUrl] = useState("");
 	const [modelId, setModelId] = useState("");
 	const [apiKey, setApiKey] = useState("");
-	const [focusIdx, setFocusIdx] = useState(0); // 0=URL, 1=Model, 2=Key
+	const [ctxWindow, setCtxWindow] = useState("");
+	const [focusIdx, setFocusIdx] = useState(0); // 0=URL, 1=Model, 2=Key, 3=Ctx
 	const [showHint, setShowHint] = useState(false);
 
-	// 输入框 refs -- 焦点切换时重置 viewport 到起始位置（尾部截断）
-	const inputRefs = useRef<(InputRenderable | null)[]>([null, null, null]);
+	const inputRefs = useRef<(InputRenderable | null)[]>([
+		null,
+		null,
+		null,
+		null,
+	]);
 
-	/** 重置指定输入框的 viewport 到起始位置（显示头部） */
 	const resetViewport = (idx: number) => {
 		const input = inputRefs.current[idx];
 		if (!input) return;
@@ -58,27 +76,22 @@ export function CustomProviderPopup({
 	};
 
 	useKeyboard((key) => {
-		// Esc 始终可退出
 		if (key.name === "escape") {
 			onClose();
 			return;
 		}
-
-		// ↑↓ 切换输入框焦点 -- 切换前重置当前输入框 viewport
 		if (key.name === "up") {
 			key.preventDefault();
 			resetViewport(focusIdx);
-			setFocusIdx((i) => (i + 2) % 3); // 0->2->1->0
+			setFocusIdx((i) => (i + 3) % 4);
 			return;
 		}
 		if (key.name === "down") {
 			key.preventDefault();
 			resetViewport(focusIdx);
-			setFocusIdx((i) => (i + 1) % 3); // 0->1->2->0
+			setFocusIdx((i) => (i + 1) % 4);
 			return;
 		}
-
-		// Enter 校验 + 提交
 		if (key.name === "return") {
 			key.preventDefault();
 			if (!baseUrl.trim() || !modelId.trim() || !apiKey.trim()) {
@@ -90,6 +103,7 @@ export function CustomProviderPopup({
 				apiStandard,
 				modelId: modelId.trim(),
 				apiKey: apiKey.trim(),
+				contextWindow: parseContextWindow(ctxWindow),
 			});
 			return;
 		}
@@ -97,7 +111,7 @@ export function CustomProviderPopup({
 
 	return (
 		<box
-			width="35%"
+			width="45%"
 			height="45%"
 			border={true}
 			borderStyle="rounded"
@@ -112,11 +126,12 @@ export function CustomProviderPopup({
 			paddingBottom={0}
 			gap={1}
 		>
-			{/* 内容区 */}
-			<box flexDirection="column" flexGrow={1} width="100%">
-				{/* API 标准 -- 鼠标点击选择 */}
+			<box flexDirection="column" flexGrow={1} width="90%">
+				{/* API 标准 */}
 				<box flexDirection="row">
-					<text fg={C.label}>{"API:   "}</text>
+					<text fg={C.label} width={7}>
+						{"API:   "}
+					</text>
 					<box
 						onMouseDown={() => setApiStandard("openai")}
 						backgroundColor={
@@ -143,8 +158,10 @@ export function CustomProviderPopup({
 				</box>
 
 				{/* Base URL */}
-			<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
-					<text fg={C.label}>{"URL:   "}</text>
+				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
+					<text fg={C.label} width={7}>
+						{"URL:   "}
+					</text>
 					<input
 						ref={(el) => {
 							inputRefs.current[0] = el;
@@ -162,7 +179,9 @@ export function CustomProviderPopup({
 
 				{/* Model ID */}
 				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
-					<text fg={C.label}>{"Model: "}</text>
+					<text fg={C.label} width={7}>
+						{"Model: "}
+					</text>
 					<input
 						ref={(el) => {
 							inputRefs.current[1] = el;
@@ -180,7 +199,9 @@ export function CustomProviderPopup({
 
 				{/* API Key */}
 				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
-					<text fg={C.label}>{"Key:   "}</text>
+					<text fg={C.label} width={7}>
+						{"Key:   "}
+					</text>
 					<input
 						ref={(el) => {
 							inputRefs.current[2] = el;
@@ -196,15 +217,33 @@ export function CustomProviderPopup({
 					/>
 				</box>
 
-				{/* 校验提示 */}
+				{/* Context Window（可选） */}
+				<box flexDirection="row" marginTop={1} overflow="hidden" width="100%">
+					<text fg={C.label} width={7}>
+						{"Ctx:   "}
+					</text>
+					<input
+						ref={(el) => {
+							inputRefs.current[3] = el;
+						}}
+						focused={focusIdx === 3}
+						flexGrow={1}
+						selectable={false}
+						wrapMode="none"
+						placeholder="留空则自动检测，可填入如 128k / 1M / 128000"
+						placeholderColor={C.hint}
+						textColor={C.text}
+						onInput={setCtxWindow}
+					/>
+				</box>
+
 				{showHint && (
 					<box marginTop={1}>
-						<text fg={C.border}>{"请完成所有字段"}</text>
+						<text fg={C.border}>{"请完成必填字段（URL / Model / Key）"}</text>
 					</box>
 				)}
 			</box>
 
-			{/* 底部提示 -- 贴着边框 */}
 			<box flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"Enter 确认  Esc 返回"}</text>
 			</box>

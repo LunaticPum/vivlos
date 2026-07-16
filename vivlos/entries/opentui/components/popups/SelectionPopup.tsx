@@ -21,10 +21,16 @@ const C = {
 	hint: "#6c7086",
 } as const;
 
+export interface SelectionItem {
+	id: string;
+	label: string;
+	suffix?: string;
+}
+
 export interface SelectionPopupProps {
 	title: string;
-	recentItems: string[];
-	allItems: string[];
+	recentItems: SelectionItem[];
+	allItems: SelectionItem[];
 	currentItemId: string;
 	onSelect: (id: string) => void;
 	onClose: () => void;
@@ -34,7 +40,7 @@ export interface SelectionPopupProps {
 type Entry =
 	| { kind: "header"; label: string }
 	| { kind: "spacer" }
-	| { kind: "item"; id: string };
+	| { kind: "item"; item: SelectionItem };
 
 export function SelectionPopup({
 	title,
@@ -45,19 +51,18 @@ export function SelectionPopup({
 	onClose,
 	onSwitchToProviders,
 }: SelectionPopupProps) {
-	// 全部放入一个数组，渲染为一个滚动列表
 	const entries: Entry[] = [];
 	if (recentItems.length > 0) {
 		entries.push({ kind: "header", label: "  Recent" });
-		for (const id of recentItems) entries.push({ kind: "item", id });
+		for (const item of recentItems) entries.push({ kind: "item", item });
 		entries.push({ kind: "spacer" });
 	}
-	entries.push({ kind: "header", label: "  All" });
-	for (const id of allItems) entries.push({ kind: "item", id });
+	entries.push({ kind: "header", label: "  Current" });
+	for (const item of allItems) entries.push({ kind: "item", item });
 
 	const [selectedIdx, setSelectedIdx] = useState(() => {
 		const idx = entries.findIndex(
-			(e) => e.kind === "item" && e.id === currentItemId,
+			(e) => e.kind === "item" && e.item.id === currentItemId,
 		);
 		return idx >= 0 ? idx : entries.findIndex((e) => e.kind === "item");
 	});
@@ -65,7 +70,6 @@ export function SelectionPopup({
 	const scrollRef = useRef<ScrollBoxRenderable>(null);
 
 	useEffect(() => {
-		// 滚到选中项的上一个非选项条目（header/空行），确保标题可见
 		let target = selectedIdx;
 		if (target > 0 && entries[target - 1]!.kind !== "item") {
 			target = target - 1;
@@ -75,30 +79,35 @@ export function SelectionPopup({
 
 	useKeyboard((key) => {
 		if (key.name === "up") {
+			key.preventDefault();
 			setSelectedIdx((i) => {
 				for (let j = i - 1; j >= 0; j--)
 					if (entries[j]!.kind === "item") return j;
 				return i;
 			});
 		} else if (key.name === "down") {
+			key.preventDefault();
 			setSelectedIdx((i) => {
 				for (let j = i + 1; j < entries.length; j++)
 					if (entries[j]!.kind === "item") return j;
 				return i;
 			});
 		} else if (key.name === "return") {
+			key.preventDefault();
 			const e = entries[selectedIdx];
-			if (e?.kind === "item") onSelect(e.id);
+			if (e?.kind === "item") onSelect(e.item.id);
 		} else if (key.name === "escape") {
+			key.preventDefault();
 			onClose();
 		} else if (key.ctrl && key.name === "p" && onSwitchToProviders) {
+			key.preventDefault();
 			onSwitchToProviders();
 		}
 	});
 
 	return (
 		<box
-			width="35%"
+			width="40%"
 			height="45%"
 			overflow="hidden"
 			border={true}
@@ -130,13 +139,26 @@ export function SelectionPopup({
 						if (e.kind === "spacer") {
 							return <box key={`s-${i}`} id={`item-${i}`} height={1} />;
 						}
+						const isSel = i === selectedIdx;
+						const isCur = e.item.id === currentItemId;
 						return (
-							<box key={e.id} id={`item-${i}`} flexDirection="row">
-								<text fg={i === selectedIdx ? C.selected : C.normal}>
-									{i === selectedIdx ? "▶ " : "  "}
-									{e.id}
+							<box
+								key={e.item.id}
+								id={`item-${i}`}
+								flexDirection="row"
+								width="100%"
+							>
+								<text fg={isSel ? C.selected : C.normal}>
+									{isSel ? "▶ " : "  "}
+									{e.item.label}
 								</text>
-								{e.id === currentItemId && <text fg={C.current}> ✓</text>}
+								{isCur && <text fg={C.current}> ✓</text>}
+								<box flexGrow={1} />
+								{e.item.suffix && (
+									<text fg={C.hint} width={5}>
+										{e.item.suffix}
+									</text>
+								)}
 							</box>
 						);
 					})}

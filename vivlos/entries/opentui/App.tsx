@@ -14,12 +14,14 @@ export function App({
 	eventBus,
 	llm,
 	llmConfigRepo,
+	onExit,
 }: {
 	modelLabel: string;
 	agent: VivlosAgent;
 	eventBus: EventBus;
 	llm: LLMClient;
 	llmConfigRepo: LLMConfigRepository;
+	onExit: () => void;
 }) {
 	return (
 		<box backgroundColor={C.bg} width={"100%"} height={"100%"}>
@@ -29,6 +31,7 @@ export function App({
 				eventBus={eventBus}
 				llm={llm}
 				llmConfigRepo={llmConfigRepo}
+				onExit={onExit}
 			/>
 		</box>
 	);

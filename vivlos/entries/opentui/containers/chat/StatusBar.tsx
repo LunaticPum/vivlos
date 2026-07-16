@@ -53,6 +53,8 @@ export interface StatusBarProps {
 	connectionStatus?: ConnectionStatus;
 	/** 是否已连接 provider（false 时显示未连接提示） */
 	connected?: boolean;
+	/** 双击 Ctrl+C 退出提示 */
+	exitPending?: boolean;
 	/** 最近一次 assistant 消息的 token 用量 */
 	usage?: Usage;
 	/** 模型上下文窗口大小 */
@@ -97,7 +99,7 @@ function useContextBar(
 			barColor: C.usage,
 		};
 	}
-	const used = usage.input;
+	const used = usage.input + usage.cacheRead + usage.cacheWrite;
 	const percent = Math.round((used / contextWindow) * 100);
 	const barWidth = 8;
 	const filled = Math.round((percent / 100) * barWidth);
@@ -129,6 +131,7 @@ export function StatusBar({
 	commandError = null,
 	connectionStatus = { state: "idle" },
 	connected = true,
+	exitPending = false,
 	usage,
 	contextWindow,
 }: StatusBarProps) {
@@ -144,7 +147,9 @@ export function StatusBar({
 	// ── 构建显示内容（优先级从高到低）──
 	let content: ReturnType<typeof t>;
 
-	if (connectionStatus.state === "connecting") {
+	if (exitPending) {
+		content = t` ${fg(C.warning)("再按一次 Ctrl+C 退出应用")} `;
+	} else if (connectionStatus.state === "connecting") {
 		content = t` ${fg(C.warning)(`${spin} ${connectionStatus.provider} connecting...`)} `;
 	} else if (connectionStatus.state === "success") {
 		content = t` ${fg(C.success)(`✓ ${connectionStatus.provider} connect success`)} `;

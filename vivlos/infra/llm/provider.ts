@@ -99,27 +99,27 @@ export function createLLM(
 		// ── 自定义 provider ──
 
 		addCustomProvider(config: CustomProviderConfig): string {
-			// 从 baseUrl 提取域名作为 provider 标识
 			let domain: string;
 			try {
 				domain = new URL(config.baseUrl).hostname;
 			} catch {
 				domain = config.baseUrl;
 			}
-			const providerId = `[custom] ${domain}`;
+			const providerId = domain;
 
-			// 根据 API 标准选择 api 类型和 wrapper
 			const apiType =
-				config.apiStandard === "anthropic"
-					? "anthropic-messages"
-					: "openai-completions";
+				config.apiStandard === "anthropic" ? "anthropic-messages" : "openai-completions";
 			const apiWrapper =
-				config.apiStandard === "anthropic"
-					? anthropicMessagesApi()
-					: openAICompletionsApi();
+				config.apiStandard === "anthropic" ? anthropicMessagesApi() : openAICompletionsApi();
 
-			// 手动构建 Model 对象
-			const model: Model<Api> = {
+			// contextWindow 优先级：用户指定 > pi-ai 查找 > 128k 默认
+			const contextWindow = config.contextWindow
+				?? models.getProviders().reduce<number | undefined>((found, p) =>
+					found ?? models.getModels(p.id).find((m) => m.id === config.modelId)?.contextWindow,
+					undefined,
+				) ?? 128000;
+
+			const newModel: Model<Api> = {
 				id: config.modelId,
 				name: config.modelId,
 				api: apiType as Api,
@@ -128,11 +128,13 @@ export function createLLM(
 				reasoning: false,
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 128000,
+				contextWindow,
 				maxTokens: 32000,
 			};
 
-			// 创建并注册 provider
+			// 合并：同域名的已有 model 保留，新 model 追加（去重）
+			const existingModels = models.getModels(providerId).filter((m) => m.id !== config.modelId);
+
 			const provider = createProvider({
 				id: providerId,
 				name: providerId,
@@ -148,7 +150,7 @@ export function createLLM(
 						},
 					},
 				},
-				models: [model],
+				models: [...existingModels, newModel],
 				api: apiWrapper,
 			});
 

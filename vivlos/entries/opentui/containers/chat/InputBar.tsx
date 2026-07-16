@@ -52,8 +52,8 @@ const MAX_HISTORY = 6;
 export interface InputBarProps {
 	/** 提交文本（非指令时触发） */
 	onSubmit: (text: string) => void;
-	/** Ctrl+C 打断 */
-	onEsc?: () => void;
+	/** Ctrl+C 打断 / 退出 */
+	onCtrlC?: () => void;
 	/** 弹窗是否激活（激活时 blur textarea + 跳过历史导航） */
 	popupActive: boolean;
 	/** Ctrl+L: 打开模型选择弹窗 */
@@ -68,7 +68,7 @@ export interface InputBarProps {
 
 export function InputBar({
 	onSubmit,
-	onEsc,
+	onCtrlC,
 	popupActive,
 	onOpenModels,
 	onOpenProviders,
@@ -91,23 +91,23 @@ export function InputBar({
 	const lineCountRef = useRef(1);
 
 	// ── textarea 实例 ──
-  const textareaRef = useRef<TextareaRenderable>(null);
+	const textareaRef = useRef<TextareaRenderable>(null);
 
-  // ── 失焦自动抢回：除弹窗激活外，始终聚焦 textarea ──
-  const popupActiveRef = useRef(popupActive);
-  popupActiveRef.current = popupActive;
+	// ── 失焦自动抢回：除弹窗激活外，始终聚焦 textarea ──
+	const popupActiveRef = useRef(popupActive);
+	popupActiveRef.current = popupActive;
 
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const handler = () => {
-      if (!popupActiveRef.current) ta.focus();
-    };
-    ta.on("blurred", handler);
-    return () => {
-      ta.off("blurred", handler);
-    };
-  }, []);
+	useEffect(() => {
+		const ta = textareaRef.current;
+		if (!ta) return;
+		const handler = () => {
+			if (!popupActiveRef.current) ta.focus();
+		};
+		ta.on("blurred", handler);
+		return () => {
+			ta.off("blurred", handler);
+		};
+	}, []);
 
 	// ── slash 命令补全：输入 / 开头时过滤已注册指令 ──
 	const slashSuggestions = (() => {
@@ -239,7 +239,7 @@ export function InputBar({
 				switchHistory("down");
 			}
 		} else if (key.ctrl && key.name === "c") {
-			// 有选区时复制到剪贴板，无选区时打断
+			// 有选区时复制到剪贴板，无选区时触发 CtrlC 回调
 			if (renderer.hasSelection) {
 				const text = renderer.getSelection()?.getSelectedText();
 				if (text) {
@@ -247,7 +247,7 @@ export function InputBar({
 					renderer.clearSelection();
 				}
 			} else {
-				onEsc?.();
+				onCtrlC?.();
 			}
 		}
 	});

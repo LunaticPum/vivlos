@@ -64,17 +64,17 @@ export function createLLMConfigRepository(
       configRepo.set("recent:providers", list);
     },
 
-    // ── Recent models ──
-    loadRecentModels() {
+    // ── Recent models（格式：provider/modelId）──
+    loadRecentModels(): string[] {
       return configRepo.get<string[]>("recent:models") ?? [];
     },
 
-    addRecentModel(id) {
+    addRecentModel(entry: string): void {
       const list = configRepo.get<string[]>("recent:models") ?? [];
-      const idx = list.indexOf(id);
+      const idx = list.indexOf(entry);
       if (idx === 0) return;
       if (idx > 0) list.splice(idx, 1);
-      list.unshift(id);
+      list.unshift(entry);
       if (list.length > MAX_RECENT) list.pop();
       configRepo.set("recent:models", list);
     },
