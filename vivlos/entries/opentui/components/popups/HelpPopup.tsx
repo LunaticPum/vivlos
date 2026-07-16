@@ -20,9 +20,9 @@ const C = {
 } as const;
 
 /** 指令名列宽（含 / 前缀） */
-const COL_CMD = 14;
+const COL_CMD = 13;
 /** 描述列宽 */
-const COL_DESC = 22;
+const COL_DESC = 20;
 
 export interface HelpPopupProps {
 	/** 已注册的指令列表 */
@@ -51,24 +51,23 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 			alignItems="center"
 			paddingTop={1}
 			paddingBottom={0}
-			gap={1}
 		>
 			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
 			<box flexDirection="column" flexGrow={1}>
-				<box flexDirection="column" marginTop={1}>
-					{commands.map((cmd) => (
-						<box key={cmd.name} flexDirection="row">
-							<box width={COL_CMD}>
-								<text fg={C.command}>{`/${cmd.name}`}</text>
-							</box>
-							<box width={COL_DESC}>
-								<text fg={C.desc}>{cmd.description}</text>
-							</box>
-							{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
+				{commands.map((cmd) => (
+					<box key={cmd.name} flexDirection="row">
+						<box width={COL_CMD}>
+							<text fg={C.command}>{`/${cmd.name}`}</text>
 						</box>
-					))}
-				</box>
+						<box width={COL_DESC}>
+							<text fg={C.desc}>{cmd.description}</text>
+						</box>
+						{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
+					</box>
+				))}
 			</box>
+			{/* <box flexDirection="column" flexGrow={1}>
+			</box> */}
 			{/* 底部提示 -- 贴着边框 */}
 			<box flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"Esc 退出"}</text>

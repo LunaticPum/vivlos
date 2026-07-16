@@ -112,12 +112,11 @@ export function SelectionPopup({
 			alignItems="center"
 			paddingTop={1}
 			paddingBottom={0}
-			gap={1}
 		>
 			<box flexGrow={1} overflow="hidden">
 				<scrollbox
 					ref={scrollRef}
-					height="100%"
+					height="90%"
 					verticalScrollbarOptions={{ visible: false }}
 				>
 					{entries.map((e, i) => {
