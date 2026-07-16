@@ -18,7 +18,10 @@ import { ChatArea } from "./ChatArea";
 import { StatusBar, type ConnectionStatus } from "./StatusBar";
 import { InputBar } from "./InputBar";
 import { InfoBar } from "./InfoBar";
-import { SelectionPopup, type SelectionItem } from "../../components/popups/SelectionPopup";
+import {
+	SelectionPopup,
+	type SelectionItem,
+} from "../../components/popups/SelectionPopup";
 import { ApiKeyPopup } from "../../components/popups/ApiKeyPopup";
 import { HelpPopup } from "../../components/popups/HelpPopup";
 import { CustomProviderPopup } from "../../components/popups/CustomProviderPopup";
@@ -88,6 +91,7 @@ export function Chat({
 	});
 	const [connected, setConnected] = useState(false);
 	const [exitPending, setExitPending] = useState(false);
+	const exitPendingRef = useRef(false);
 	const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	/** Ctrl+C：loading 时打断，idle 时双击退出 */
@@ -96,19 +100,20 @@ export function Chat({
 			abort();
 			return;
 		}
-		if (exitPending) {
-			// 第二次 Ctrl+C -> 退出
+		// 用 ref 读状态，避免 useKeyboard 回调用旧闭包
+		if (exitPendingRef.current) {
 			if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
 			onExit();
 			return;
 		}
-		// 第一次 Ctrl+C -> 显示提示
+		exitPendingRef.current = true;
 		setExitPending(true);
 		exitTimerRef.current = setTimeout(() => {
+			exitPendingRef.current = false;
 			setExitPending(false);
 			exitTimerRef.current = null;
 		}, 3000);
-	}, [exitPending, loading, abort, onExit]);
+	}, [loading, abort, onExit]);
 
 	// ── 启动时检查默认 provider 是否已配置 API key ──
 	// 同时检查环境变量和 credential store
@@ -199,7 +204,9 @@ export function Chat({
 		const models = llm.listModels(providerId);
 		// 优先用上次使用的 model（recent 格式为 provider/modelId）
 		const recentModels = llmConfigRepo.loadRecentModels();
-		const lastUsedEntry = recentModels.find((e) => e.startsWith(`${providerId}/`));
+		const lastUsedEntry = recentModels.find((e) =>
+			e.startsWith(`${providerId}/`),
+		);
 		const lastUsedId = lastUsedEntry?.split("/")[1];
 		const hasModel = lastUsedId && models.some((m) => m.id === lastUsedId);
 		if (!hasModel) {
@@ -273,9 +280,9 @@ export function Chat({
 			const customIds = llmConfigRepo.listCustomProviders();
 			if (customIds.some((id) => id.startsWith(`${providerId}/`))) {
 				llm.removeProvider(providerId);
-				customIds.filter((id) => id.startsWith(`${providerId}/`)).forEach((id) =>
-					llmConfigRepo.removeCustomProvider(id),
-				);
+				customIds
+					.filter((id) => id.startsWith(`${providerId}/`))
+					.forEach((id) => llmConfigRepo.removeCustomProvider(id));
 			}
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			setConnectionStatus({
@@ -317,7 +324,10 @@ export function Chat({
 		llm.setDefault(provider, modelId);
 		setCurrentLabel(`${truncate(provider, 15)}/${modelId}`);
 		setPopupState("none");
-		llmConfigRepo.saveConfig({ defaultProvider: provider, defaultModelId: modelId });
+		llmConfigRepo.saveConfig({
+			defaultProvider: provider,
+			defaultModelId: modelId,
+		});
 		llmConfigRepo.addRecentModel(entry);
 	};
 
@@ -394,13 +404,19 @@ export function Chat({
 							.loadRecentModels()
 							.map<SelectionItem>((entry) => {
 								const [p, m] = entry.split("/");
-								return { id: entry, label: `[${truncate(p, 10)}] ${m}`, suffix: fmtCtx(llm.getModel(p, m)?.contextWindow) };
+								return {
+									id: entry,
+									label: `[${truncate(p, 10)}] ${m}`,
+									suffix: fmtCtx(llm.getModel(p, m)?.contextWindow),
+								};
 							})}
-						allItems={llm.listModels(llm.getDefaultProvider()).map<SelectionItem>((m) => ({
-							id: `${llm.getDefaultProvider()}/${m.id}`,
-							label: m.id,
-							suffix: fmtCtx(m.contextWindow),
-						}))}
+						allItems={llm
+							.listModels(llm.getDefaultProvider())
+							.map<SelectionItem>((m) => ({
+								id: `${llm.getDefaultProvider()}/${m.id}`,
+								label: m.id,
+								suffix: fmtCtx(m.contextWindow),
+							}))}
 						currentItemId={`${llm.getDefaultProvider()}/${llm.getDefaultModelId()}`}
 						onSelect={handleModelSelect}
 						onClose={() => setPopupState("none")}
@@ -424,8 +440,10 @@ export function Chat({
 						recentItems={llmConfigRepo
 							.loadRecentProviders()
 							.filter((id) => llm.listProviders().includes(id))
-							.map<SelectionItem>((id) => ({ id, label: truncate(id, 20) }))}
-						allItems={["Custom", ...llm.listProviders()].map<SelectionItem>((id) => ({ id, label: truncate(id, 20) }))}
+							.map<SelectionItem>((id) => ({ id, label: truncate(id, 25) }))}
+						allItems={["Custom", ...llm.listProviders()].map<SelectionItem>(
+							(id) => ({ id, label: truncate(id, 25) }),
+						)}
 						currentItemId={llm.getDefaultProvider()}
 						onSelect={handleProviderSelect}
 						onClose={() => setPopupState("none")}

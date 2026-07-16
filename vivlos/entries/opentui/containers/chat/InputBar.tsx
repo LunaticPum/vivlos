@@ -239,12 +239,15 @@ export function InputBar({
 				switchHistory("down");
 			}
 		} else if (key.ctrl && key.name === "c") {
-			// 有选区时复制到剪贴板，无选区时触发 CtrlC 回调
 			if (renderer.hasSelection) {
 				const text = renderer.getSelection()?.getSelectedText();
 				if (text) {
 					renderer.copyToClipboardOSC52(text);
 					renderer.clearSelection();
+				} else {
+					// 残留零宽选区：清理后走 onCtrlC
+					renderer.clearSelection();
+					onCtrlC?.();
 				}
 			} else {
 				onCtrlC?.();
