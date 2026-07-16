@@ -20,9 +20,9 @@ const C = {
 } as const;
 
 /** 指令名列宽（含 / 前缀） */
-const COL_CMD = 13;
+const COL_CMD = 17;
 /** 描述列宽 */
-const COL_DESC = 20;
+const COL_DESC = 23;
 
 export interface HelpPopupProps {
 	/** 已注册的指令列表 */
@@ -38,7 +38,7 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 
 	return (
 		<box
-			width="35%"
+			width="40%"
 			height="45%"
 			border={true}
 			borderStyle="rounded"
