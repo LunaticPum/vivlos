@@ -1,12 +1,7 @@
-export interface PromptParts {
-	readonly identity: string;
-	readonly rules: string;
-	readonly memory?: string;
-	readonly skills?: string;
-}
-
 export interface PromptBuilderOptions {
+	/** 覆盖默认 identity 模板 */
 	readonly identity?: string;
+	/** 覆盖默认 rules 模板 */
 	readonly rules?: string;
 }
 

@@ -4,35 +4,26 @@ export * from "./registry.ts";
 import type { SkillEntry } from "./types.ts";
 
 /**
- * 将 skill 列表格式化为 system prompt 中的 skills 块。
+ * 将 skill 列表格式化为 <skill> 条目列表（纯数据）。
  *
- * 采用 XML 格式（参照 pi-agent-core / agentskills.io 规范），
- * 包含 name + description + location（文件路径）。
+ * 不含 <available_skills> 包裹标签（由 builder 负责）
+ * 不含指令文本（由 rules.md 负责）
  *
- * LLM 看到匹配的 skill 时，调用 skill({ name }) 工具加载完整 SKILL.md 正文，
- * 获取执行流程 SOP。
+ * 只输出 name + description + location。
  */
 export function formatSkillsForPrompt(skills: readonly SkillEntry[]): string {
 	if (skills.length === 0) return "";
 
-	const lines = [
-		"The following skills provide specialized instructions for specific tasks.",
-		"Use the skill tool (skill({ name })) to load the full skill content when the task matches its description.",
-		"When a skill file references a relative path, resolve it against the skill directory.",
-		"",
-		"<available_skills>",
-	];
-
+	const lines: string[] = [];
 	for (const skill of skills) {
 		const desc = skill.metadata.description.replace(/\n/g, " ").trim();
-		lines.push("  <skill>");
-		lines.push(`    <name>${escapeXml(skill.metadata.name)}</name>`);
-		lines.push(`    <description>${escapeXml(desc)}</description>`);
-		lines.push(`    <location>${escapeXml(skill.filePath)}</location>`);
-		lines.push("  </skill>");
+		lines.push("<skill>");
+		lines.push(`  <name>${escapeXml(skill.metadata.name)}</name>`);
+		lines.push(`  <description>${escapeXml(desc)}</description>`);
+		lines.push(`  <location>${escapeXml(skill.filePath)}</location>`);
+		lines.push("</skill>");
 	}
 
-	lines.push("</available_skills>");
 	return lines.join("\n");
 }
 
