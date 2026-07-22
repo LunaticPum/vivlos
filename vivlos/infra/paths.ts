@@ -58,6 +58,16 @@ export function ensureConfigDir(): string {
 	return ensureDir(getConfigDir());
 }
 
+/** 获取 sessions 目录路径（JSONL 会话文件） */
+export function getSessionsDir(): string {
+	return resolve(getVivlosDir(), "sessions");
+}
+
+/** 确保 sessions 目录存在 */
+export function ensureSessionsDir(): string {
+	return ensureDir(getSessionsDir());
+}
+
 /** 获取临时文件目录路径 */
 export function getTempDir(): string {
 	return resolve(getVivlosDir(), "temp");

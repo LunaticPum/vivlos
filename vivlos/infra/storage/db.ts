@@ -1,5 +1,4 @@
 import { Database, type Database as DatabaseType } from "bun:sqlite";
-import { initSessionSchema } from "./repo/session-repo.ts";
 import { initMemorySchema } from "./repo/memory-repo.ts";
 import { initConfigSchema } from "./repo/config-repo.ts";
 
@@ -21,7 +20,6 @@ export function getDb(dbPath: string): DatabaseType {
   db.run("PRAGMA foreign_keys = ON");
 
   // ── 各业务模块自管 schema ──
-  initSessionSchema(db);
   initMemorySchema(db);
   initConfigSchema(db);
 

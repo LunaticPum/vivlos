@@ -10,6 +10,8 @@ import { providersCommand } from "./providers.ts";
 import { detailCommand } from "./detail.ts";
 import { helpCommand } from "./help.ts";
 import { clearCommand } from "./clear.ts";
+import { sessionsCommand } from "./sessions.ts";
+import { newCommand } from "./new.ts";
 
 export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(modelsCommand);
@@ -17,4 +19,6 @@ export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(detailCommand);
 	registry.register(helpCommand);
 	registry.register(clearCommand);
+	registry.register(sessionsCommand);
+	registry.register(newCommand);
 }

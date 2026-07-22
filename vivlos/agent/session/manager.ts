@@ -1,71 +1,82 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { SessionManager } from "./types.ts";
 import {
-	createSqliteSessionRepository,
-	type SessionRepository,
-} from "@vivlos/infra/storage/index.ts";
-import { shortId } from "@vivlos/shared/utils/id.ts";
-
-export interface CreateSessionOptions {
-	/** true = SQLite 持久化, false = 内存（默认 false） */
-	readonly persistent?: boolean;
-	/** SQLite 路径（persistent=true 时必需） */
-	readonly dbPath?: string;
-	/** session ID（可选，自动生成） */
-	readonly id?: string;
-}
+	createSession,
+	openSession,
+	appendMessage as repoAppend,
+	loadMessages,
+	listSessions,
+	deleteSession,
+	renameSession,
+} from "@vivlos/infra/storage/session/index.ts";
 
 /**
- * 创建 session 的统一入口。
+ * 创建基于 JSONL 文件的 SessionManager。
  *
- * 内部根据 persistent 选择内存实现或 SQLite 实现。
- * SQLite 实现委托 infra 层的 SessionRepository 做 CRUD。
+ * 每个 session = .vivlos/sessions/ 下的一个 .jsonl 文件。
+ * 消息 append-only，切换 session 时重新加载文件。
  */
-export function createSessionManager(
-	options: CreateSessionOptions = {},
-): SessionManager {
-	if (options.persistent) {
-		if (!options.dbPath) {
-			throw new Error("persistent session requires dbPath");
-		}
-		return createPersistentSession(options.dbPath, options.id);
-	}
-	return createInMemorySession(options.id);
-}
-
-// ── 内存实现 ──
-function createInMemorySession(id?: string): SessionManager {
-	let messages: Message[] = [];
-	const sessionId = id ?? shortId();
+export function createSessionManager(): SessionManager {
+	// 启动时：恢复最近活跃的 session，没有则创建新的
+	const sessions = listSessions();
+	let current = sessions.length > 0
+		? { header: openSession(sessions[0]!.filePath).header, filePath: sessions[0]!.filePath }
+		: createSession();
 
 	return {
-		id: sessionId,
-		getMessages() {
-			return messages;
-		},
-		appendMessage(message) {
-			messages = [...messages, message];
-		},
-		reset() {
-			messages = [];
-		},
-	};
-}
+		get id() { return current.header.id; },
+		get filePath() { return current.filePath; },
 
-// ── SQLite 实现 —— 委托 SessionRepository 的 CRUD ──
-function createPersistentSession(dbPath: string, id?: string): SessionManager {
-	const repo: SessionRepository = createSqliteSessionRepository(dbPath, id);
-
-	return {
-		id: repo.sessionId,
 		getMessages() {
-			return repo.getMessages();
+			return loadMessages(current.filePath);
 		},
-		appendMessage(message) {
-			repo.appendMessage(message);
+
+		appendMessage(message: Message) {
+			repoAppend(current.filePath, message);
 		},
+
 		reset() {
-			repo.clearMessages();
+			// 删旧文件，建新 session
+			deleteSession(current.filePath);
+			current = createSession();
+		},
+
+		listSessions() {
+			return listSessions();
+		},
+
+		switchTo(sessionId: string) {
+			const sessions = listSessions();
+			const target = sessions.find((s) => s.id === sessionId);
+			if (!target) throw new Error(`Session not found: ${sessionId}`);
+			const { header } = openSession(target.filePath);
+			current = { header, filePath: target.filePath };
+		},
+
+		createNew(name?: string) {
+			current = createSession(name);
+		},
+
+		deleteSession(sessionId: string) {
+			const sessions = listSessions();
+			const target = sessions.find((s) => s.id === sessionId);
+			if (!target) return;
+			deleteSession(target.filePath);
+			// 如果删的是当前 session，切到最近的或新建
+			if (target.id === current.header.id) {
+				const remaining = listSessions();
+				if (remaining.length > 0) {
+					const { header } = openSession(remaining[0]!.filePath);
+					current = { header, filePath: remaining[0]!.filePath };
+				} else {
+					current = createSession();
+				}
+			}
+		},
+
+		rename(name: string) {
+			renameSession(current.filePath, name);
+			current = { ...current, header: { ...current.header, name } };
 		},
 	};
 }

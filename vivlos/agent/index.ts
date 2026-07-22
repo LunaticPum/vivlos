@@ -92,6 +92,23 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			sessionManager.reset();
 			params.toolsReset?.();
 		},
+		listSessions() {
+			return sessionManager.listSessions();
+		},
+		switchSession(sessionId: string) {
+			sessionManager.switchTo(sessionId);
+			params.toolsReset?.();
+		},
+		createNewSession(name?: string) {
+			sessionManager.createNew(name);
+			params.toolsReset?.();
+		},
+		deleteSession(sessionId: string) {
+			sessionManager.deleteSession(sessionId);
+		},
+		renameSession(name: string) {
+			sessionManager.rename(name);
+		},
 	};
 }
 

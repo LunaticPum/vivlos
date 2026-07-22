@@ -11,12 +11,16 @@ export interface CommandContext {
 	openModels: () => void;
 	/** 打开供应商选择弹窗 */
 	openProviders: () => void;
+	/** 打开会话管理弹窗 */
+	openSessions: () => void;
 	/** 切换推理细节展开/折叠 */
 	toggleDetail: () => void;
 	/** 打开帮助弹窗（Ctrl+H） */
 	showHelp: () => void;
 	/** 清空当前会话 */
 	clearConversation: () => void;
+	/** 新建会话 */
+	newSession: () => void;
 }
 
 /** TUI Slash 命令 */

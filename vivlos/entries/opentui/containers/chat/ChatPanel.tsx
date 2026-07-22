@@ -61,7 +61,7 @@ export interface ChatProps {
 	onExit: () => void;
 }
 
-type PopupState = "none" | "models" | "providers" | "apikey" | "custom";
+type PopupState = "none" | "models" | "providers" | "apikey" | "custom" | "sessions";
 
 export function Chat({
 	modelLabel,
@@ -138,11 +138,19 @@ export function Chat({
 		() => ({
 			openModels: () => setPopupState("models"),
 			openProviders: () => setPopupState("providers"),
+			openSessions: () => setPopupState("sessions"),
 			toggleDetail: () => setDetailExpanded((v) => !v),
 			showHelp: () => setShowHelp(true),
 			clearConversation,
+			newSession: () => {
+				agent.reset();
+				setTurns([]);
+				setError(null);
+				setLoading(false);
+				currentIdxRef.current = -1;
+			},
 		}),
-		[clearConversation],
+		[clearConversation, agent],
 	);
 
 	// ── 未知指令错误（3s 自动消失）──
@@ -447,10 +455,40 @@ export function Chat({
 						currentItemId={llm.getDefaultProvider()}
 						onSelect={handleProviderSelect}
 						onClose={() => setPopupState("none")}
-					/>
-				</box>
-			)}
-			{popupState === "apikey" && pendingProvider && (
+				/>
+			</box>
+		)}
+		{popupState === "sessions" && (
+			<box
+				position="absolute"
+				top={0}
+				left={0}
+				width="100%"
+				height="100%"
+				justifyContent="center"
+				alignItems="center"
+				zIndex={100}
+			>
+				<SelectionPopup
+					title="Sessions"
+					recentItems={[]}
+					allItems={agent.listSessions().map<SelectionItem>((s) => ({
+						id: s.id,
+						label: s.name ?? s.id,
+						suffix: `${s.messageCount}msg`,
+					}))}
+					currentItemId={agent.getMessages().length > 0 ? "" : ""}
+					onSelect={(id) => {
+						agent.switchSession(id);
+						setTurns([]);
+						setError(null);
+						setPopupState("none");
+					}}
+					onClose={() => setPopupState("none")}
+				/>
+			</box>
+		)}
+		{popupState === "apikey" && pendingProvider && (
 				<box
 					position="absolute"
 					top={0}

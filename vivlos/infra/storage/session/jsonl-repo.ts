@@ -1,0 +1,111 @@
+import { readFileSync, writeFileSync, appendFileSync, existsSync, unlinkSync, readdirSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { getSessionsDir } from "../../paths.ts";
+import { shortId } from "@vivlos/shared/utils/id.ts";
+import type { Message } from "@earendil-works/pi-ai";
+import type { SessionHeader, SessionEntry, SessionMeta, MessageEntry } from "./types.ts";
+import { toMessageEntry, toMessage } from "./types.ts";
+
+/**
+ * JSONL Session 仓储。
+ *
+ * 每个 session = .vivlos/sessions/{timestamp}_{id}.jsonl 文件。
+ * 第 1 行 header，后续每行一个 entry（append-only）。
+ */
+
+/** 生成 session 文件名 */
+function sessionFileName(header: SessionHeader): string {
+	const ts = new Date(header.createdAt).toISOString().replace(/[:.]/g, "-");
+	return `${ts}_${header.id}.jsonl`;
+}
+
+/** 创建新 session */
+export function createSession(name?: string | null): { header: SessionHeader; filePath: string } {
+	const id = shortId();
+	const header: SessionHeader = {
+		type: "session",
+		version: 1,
+		id,
+		createdAt: Date.now(),
+		name: name ?? null,
+	};
+	const filePath = resolve(getSessionsDir(), sessionFileName(header));
+	writeFileSync(filePath, `${JSON.stringify(header)}\n`, "utf-8");
+	return { header, filePath };
+}
+
+/** 打开已有 session，返回 header + 所有 entries */
+export function openSession(filePath: string): { header: SessionHeader; entries: SessionEntry[] } {
+	const content = readFileSync(filePath, "utf-8");
+	const lines = content.split("\n").filter((l) => l.trim());
+	if (lines.length === 0) throw new Error(`Empty session file: ${filePath}`);
+
+	const header = JSON.parse(lines[0]!) as SessionHeader;
+	const entries: SessionEntry[] = [];
+	for (let i = 1; i < lines.length; i++) {
+		entries.push(JSON.parse(lines[i]!) as SessionEntry);
+	}
+	return { header, entries };
+}
+
+/** 向 session 追加一条 entry */
+export function appendEntry(filePath: string, entry: SessionEntry): void {
+	appendFileSync(filePath, `${JSON.stringify(entry)}\n`, "utf-8");
+}
+
+/** 读取 session 的所有 Message（过滤 type="message"） */
+export function loadMessages(filePath: string): Message[] {
+	if (!existsSync(filePath)) return [];
+	const content = readFileSync(filePath, "utf-8");
+	const lines = content.split("\n").filter((l) => l.trim());
+	const messages: Message[] = [];
+	for (let i = 1; i < lines.length; i++) {
+		const entry = JSON.parse(lines[i]!) as SessionEntry;
+		if (entry.type === "message") {
+			messages.push(toMessage(entry));
+		}
+	}
+	return messages;
+}
+
+/** 列出所有 session 元信息 */
+export function listSessions(): SessionMeta[] {
+	const dir = getSessionsDir();
+	if (!existsSync(dir)) return [];
+
+	const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+	return files.map((file) => {
+		const filePath = join(dir, file);
+		const { header, entries } = openSession(filePath);
+		const messages = entries.filter((e) => e.type === "message");
+		const lastTs = messages.length > 0
+			? (messages[messages.length - 1] as MessageEntry).timestamp
+			: header.createdAt;
+		return {
+			id: header.id,
+			name: header.name,
+			createdAt: header.createdAt,
+			lastActiveAt: lastTs,
+			messageCount: messages.length,
+			filePath,
+		};
+	}).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+}
+
+/** 删除 session */
+export function deleteSession(filePath: string): void {
+	if (existsSync(filePath)) unlinkSync(filePath);
+}
+
+/** 重命名 session（重写 header 行） */
+export function renameSession(filePath: string, name: string): void {
+	const { header, entries } = openSession(filePath);
+	const newHeader: SessionHeader = { ...header, name };
+	const lines = [JSON.stringify(newHeader), ...entries.map((e) => JSON.stringify(e))];
+	writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
+}
+
+/** 追加 Message（自动转为 entry） */
+export function appendMessage(filePath: string, message: Message): void {
+	appendEntry(filePath, toMessageEntry(message));
+}

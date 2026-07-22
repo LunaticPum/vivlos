@@ -11,10 +11,7 @@ import { fileURLToPath } from "node:url";
 
 // -- 基础设施 --
 import { createLLM, loadLLMConfigFromEnv } from "@vivlos/infra/llm/index.ts";
-import {
-	createMarkdownLogWriter,
-	initLogger,
-} from "@vivlos/infra/logger/index.ts";
+import { initLogger } from "@vivlos/infra/logger/index.ts";
 import { closeAll as closeDb } from "@vivlos/infra/storage/index.ts";
 import {
 	createSqliteConfigRepository,
@@ -22,7 +19,14 @@ import {
 	createSqliteCredentialStore,
 } from "@vivlos/infra/storage/index.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
-import { ensureVivlosDir, getDbPath, getLogDir, ensureTempDir, cleanTempDir, ensureConfigDir } from "@vivlos/infra/paths.ts";
+import {
+	ensureVivlosDir,
+	getDbPath,
+	ensureTempDir,
+	cleanTempDir,
+	ensureConfigDir,
+	ensureSessionsDir,
+} from "@vivlos/infra/paths.ts";
 import { ensureAllConfigs } from "@vivlos/infra/config/index.ts";
 
 // -- 上游业务 --
@@ -50,8 +54,8 @@ async function main(): Promise<void> {
 	ensureTempDir();
 	ensureConfigDir();
 	ensureAllConfigs();
+	ensureSessionsDir();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
-	const logDir = process.env.VIVLOS_LOG_DIR ?? getLogDir();
 
 	// ── SQLite 持久化层 ──
 	const configRepo = createSqliteConfigRepository(dbPath);
@@ -79,7 +83,9 @@ async function main(): Promise<void> {
 
 	// 确保默认 provider/model 出现在 Recent 列表中
 	llmConfigRepo.addRecentProvider(llmConfig.defaultProvider);
-	llmConfigRepo.addRecentModel(`${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`);
+	llmConfigRepo.addRecentModel(
+		`${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`,
+	);
 
 	// ── 装配 agent ──
 	const model = llm.getModel(
@@ -100,8 +106,11 @@ async function main(): Promise<void> {
 	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
 	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
 
-	const { tools, reset: toolsReset } = createBuiltinTools(process.cwd(), skillRegistry);
-	const sessionManager = createSessionManager({ persistent: true, dbPath });
+	const { tools, reset: toolsReset } = createBuiltinTools(
+		process.cwd(),
+		skillRegistry,
+	);
+	const sessionManager = createSessionManager();
 	const memoryManager = createMemoryManager(dbPath);
 
 	const promptBuilder = createPromptBuilder();
@@ -109,12 +118,6 @@ async function main(): Promise<void> {
 	if (skillsText) {
 		promptBuilder.setSkills(skillsText);
 	}
-
-	const writer = createMarkdownLogWriter(eventBus, {
-		logDir,
-		sessionId: sessionManager.id,
-	});
-	writer.start();
 
 	const agent = createAgent({
 		llm,
@@ -132,7 +135,6 @@ async function main(): Promise<void> {
 	// ── 退出清理 ──
 	const cleanup = () => {
 		process.stdout.write("\x1b[2J\x1b[H");
-		writer.stop();
 		closeDb();
 		process.exit(0);
 	};
