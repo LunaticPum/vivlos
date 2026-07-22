@@ -55,6 +55,12 @@ export interface StatusBarProps {
 	connected?: boolean;
 	/** 双击 Ctrl+C 退出提示 */
 	exitPending?: boolean;
+	/** 通知消息（通知总线） */
+	notification?: { message: string; color?: string } | null;
+	/** true=显示会话信息，false=仅通知+错误 */
+	showSession?: boolean;
+	/** 当前会话 ID（截断显示） */
+	sessionId?: string;
 	/** 最近一次 assistant 消息的 token 用量 */
 	usage?: Usage;
 	/** 模型上下文窗口大小 */
@@ -132,6 +138,9 @@ export function StatusBar({
 	connectionStatus = { state: "idle" },
 	connected = true,
 	exitPending = false,
+	notification = null,
+	showSession = true,
+	sessionId,
 	usage,
 	contextWindow,
 }: StatusBarProps) {
@@ -147,7 +156,13 @@ export function StatusBar({
 	// ── 构建显示内容（优先级从高到低）──
 	let content: ReturnType<typeof t>;
 
-	if (exitPending) {
+	// ── 通知颜色映射 ──
+	const notifColors: Record<string, (s: string) => string> = { warning: fg(C.warning), success: fg(C.success), error: fg(C.error) };
+
+	if (notification) {
+		const fn = notification.color ? (notifColors[notification.color] ?? fg(C.warning)) : fg(C.warning);
+		content = t` ${fn(notification.message)} `;
+	} else if (exitPending) {
 		content = t` ${fg(C.warning)("再按一次 Ctrl+C 退出应用")} `;
 	} else if (connectionStatus.state === "connecting") {
 		content = t` ${fg(C.warning)(`${spin} ${connectionStatus.provider} connecting...`)} `;
@@ -165,7 +180,9 @@ export function StatusBar({
 	} else if (error) {
 		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)}${fg(C.divider)(sep)}${fg(C.error)(`✗ ${error}`)} `;
 	} else {
-		content = t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.clock)(duration)} `;
+		content = showSession
+			? t` ${fg(C.model)(modelLabel)}${fg(C.divider)(sep)}${fg(C.usage)(tokenLabel)}${fg(C.divider)(sep)}${fg(barColor)(`${bar} ${percent}%`)}${fg(C.divider)(sep)}${fg(C.divider)("id:")}${fg(C.usage)(sessionId?.slice(0, 8) ?? "")}${fg(C.divider)(sep)}${fg(C.clock)(duration)} `
+			: t``;
 	}
 
 	return (

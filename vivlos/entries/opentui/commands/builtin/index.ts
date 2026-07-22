@@ -12,6 +12,7 @@ import { helpCommand } from "./help.ts";
 import { clearCommand } from "./clear.ts";
 import { sessionsCommand } from "./sessions.ts";
 import { newCommand } from "./new.ts";
+import { renameCommand } from "./rename.ts";
 
 export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(modelsCommand);
@@ -21,4 +22,5 @@ export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(clearCommand);
 	registry.register(sessionsCommand);
 	registry.register(newCommand);
+	registry.register(renameCommand);
 }

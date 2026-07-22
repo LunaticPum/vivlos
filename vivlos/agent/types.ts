@@ -8,10 +8,11 @@ import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
 export interface VivlosAgent {
 	prompt(input: string | AgentMessage[], signal?: AbortSignal): Promise<LoopResult>;
 	getMessages(): readonly Message[];
-	reset(): void;
 
 	/** 当前 session ID */
 	getSessionId(): string;
+	/** 当前 session 名称（可能为 null） */
+	getSessionName(): string | null;
 
 	// ── session 管理 ──
 	listSessions(): SessionMeta[];

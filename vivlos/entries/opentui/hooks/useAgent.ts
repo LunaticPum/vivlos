@@ -50,8 +50,9 @@ export interface UseAgentResult {
 	submit: (text: string) => void;
 	abort: () => void;
 	clearConversation: () => void;
-	/** 切换 session 并恢复对话历史 */
 	switchSession: (sessionId: string) => void;
+	/** 创建新 session 并重置 TUI */
+	newSession: () => void;
 }
 
 // #endregion
@@ -440,14 +441,13 @@ export function useAgent(
 		}
 	}, []);
 
-	/** 清空当前会话 */
+	/** 清空当前会话（仅清TUI，不删JSONL消息） */
 	const clearConversation = useCallback(() => {
-		agent.reset();
 		setTurns([]);
 		setError(null);
 		setLoading(false);
 		currentIdxRef.current = -1;
-	}, [agent]);
+	}, []);
 
 	/** 切换 session 并恢复对话历史 */
 	const switchSession = useCallback((sessionId: string) => {
@@ -458,5 +458,14 @@ export function useAgent(
 		currentIdxRef.current = -1;
 	}, [agent]);
 
-	return { conversationTurns, loading, error, submit, abort, clearConversation, switchSession };
+	/** 创建新 session 并重置 TUI */
+	const newSession = useCallback(() => {
+		agent.createNewSession();
+		setTurns([]);
+		setError(null);
+		setLoading(false);
+		currentIdxRef.current = -1;
+	}, [agent]);
+
+	return { conversationTurns, loading, error, submit, abort, clearConversation, switchSession, newSession };
 }

@@ -2,7 +2,8 @@
  * ChatArea - 对话区分区
  *
  * 遍历 conversationTurns，渲染 UserMessageCard + AgentMessageCard。
- * 无对话时显示 WelcomeScreen。
+ * showWelcome 为 true 且无对话时显示 WelcomeScreen。
+ * showWelcome 为 false 时显示空对话区（/clear 后）。
  */
 
 import { getColors } from "../../designs/colors";
@@ -21,9 +22,9 @@ const FAST_SCROLL: ScrollAcceleration = {
 
 export interface ChatAreaProps {
 	conversationTurns: ConversationTurn[];
-	/** /detail 展开状态，传给 AgentMessageCard */
 	detailExpanded: boolean;
-	/** 欢迎界面信息 */
+	/** true=显示欢迎窗口（/new 后），false=显示空对话区（/clear 后） */
+	showWelcome?: boolean;
 	welcomeInfo?: {
 		cwd: string;
 		sessionId: string;
@@ -32,10 +33,10 @@ export interface ChatAreaProps {
 	};
 }
 
-export function ChatArea({ conversationTurns, detailExpanded, welcomeInfo }: ChatAreaProps) {
+export function ChatArea({ conversationTurns, detailExpanded, showWelcome, welcomeInfo }: ChatAreaProps) {
 	return (
 		<box flexGrow={1} overflow="hidden">
-			{conversationTurns.length === 0 && welcomeInfo ? (
+			{conversationTurns.length === 0 && showWelcome && welcomeInfo ? (
 				<WelcomeScreen
 					cwd={welcomeInfo.cwd}
 					sessionId={welcomeInfo.sessionId}

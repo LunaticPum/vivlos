@@ -21,6 +21,12 @@ export interface CommandContext {
 	clearConversation: () => void;
 	/** 新建会话 */
 	newSession: () => void;
+	/** /rename <name> -- 重命名当前会话 */
+	renameSession: (name: string) => void;
+	/** /sessions <id> -- 直接切换到指定会话 */
+	switchToSession: (id: string) => void;
+	/** 通知总线 -- 在 StatusBar 显示一条消息（默认 3s） */
+	notify: (message: string, color?: string, duration?: number) => void;
 }
 
 /** TUI Slash 命令 */

@@ -79,12 +79,25 @@ export function Chat({
 		abort,
 		clearConversation,
 		switchSession,
+		newSession: useNewSession,
 	} = useAgent(agent, eventBus);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
 	const [showHelp, setShowHelp] = useState(false);
 	const [currentLabel, setCurrentLabel] = useState(modelLabel);
+	const [currentSessionId, setCurrentSessionId] = useState(agent.getSessionId());
+	const [sessionLabel, setSessionLabel] = useState(agent.getSessionName() ?? agent.getSessionId());
+	const [showWelcome, setShowWelcome] = useState(true);
+	const [notification, setNotification] = useState<{ message: string; color?: string } | null>(null);
+	const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	/** 通知总线：生成者指定消息/颜色/延迟（默认 3s），StatusBar 自动消费 */
+	const notify = useCallback((message: string, color?: string, duration = 3000) => {
+		if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+		setNotification({ message, color });
+		notifTimerRef.current = setTimeout(() => setNotification(null), duration);
+	}, []);
 	const [pendingProvider, setPendingProvider] = useState<string | null>(null);
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
@@ -144,14 +157,22 @@ export function Chat({
 			showHelp: () => setShowHelp(true),
 			clearConversation,
 			newSession: () => {
-				agent.reset();
-				setTurns([]);
-				setError(null);
-				setLoading(false);
-				currentIdxRef.current = -1;
+				useNewSession();
+				setCurrentSessionId(agent.getSessionId());
+				setSessionLabel(agent.getSessionName() ?? agent.getSessionId());
 			},
+			renameSession: (name: string) => {
+				agent.renameSession(name);
+				setSessionLabel(name);
+			},
+			switchToSession: (id: string) => {
+				switchSession(id);
+				setCurrentSessionId(id);
+				setSessionLabel(agent.getSessionName() ?? id);
+			},
+			notify,
 		}),
-		[clearConversation, agent],
+		[clearConversation, agent, switchSession, useNewSession, notify],
 	);
 
 	// ── 未知指令错误（3s 自动消失）──
@@ -165,9 +186,12 @@ export function Chat({
 		(text: string) => {
 			const result = checkCommand(text, registry, cmdCtx);
 			if (!result.handled) {
+				setShowWelcome(false);
 				submit(text);
 				return;
 			}
+			// 命令已执行，也关闭欢迎窗口
+			setShowWelcome(false);
 			if (result.error) {
 				showCommandError(result.error);
 			}
@@ -351,15 +375,15 @@ export function Chat({
 			<ChatArea
 				conversationTurns={conversationTurns}
 				detailExpanded={detailExpanded}
+				showWelcome={showWelcome}
 				welcomeInfo={{
 					cwd: process.cwd(),
-					sessionId: agent.getSessionId(),
+					sessionId: currentSessionId,
 					modelLabel: currentLabel,
 					version: "1.0.0",
 				}}
 			/>
 			<box paddingX={2}>
-				{conversationTurns.length > 0 && (
 				<StatusBar
 					modelLabel={currentLabel}
 					loading={loading}
@@ -369,13 +393,15 @@ export function Chat({
 					connectionStatus={connectionStatus}
 					connected={connected}
 					exitPending={exitPending}
+					notification={notification}
+					showSession={conversationTurns.length > 0}
+					sessionId={sessionLabel}
 					usage={lastTurnWithUsage?.usage}
 					contextWindow={
 						llm.getModel(llm.getDefaultProvider(), llm.getDefaultModelId())
 							?.contextWindow
 					}
 				/>
-				)}
 				<InputBar
 					onSubmit={handleSubmit}
 					onCtrlC={handleCtrlC}
@@ -489,6 +515,8 @@ export function Chat({
 					currentItemId={agent.getMessages().length > 0 ? "" : ""}
 					onSelect={(id) => {
 						switchSession(id);
+						setCurrentSessionId(id);
+						setSessionLabel(agent.getSessionName() ?? id);
 						setPopupState("none");
 					}}
 					onClose={() => setPopupState("none")}

@@ -91,9 +91,8 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		getSessionId() {
 			return sessionManager.id;
 		},
-		reset() {
-			sessionManager.reset();
-			params.toolsReset?.();
+		getSessionName() {
+			return sessionManager.name;
 		},
 		listSessions() {
 			return sessionManager.listSessions();

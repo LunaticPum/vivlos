@@ -25,6 +25,7 @@ export function createSessionManager(): SessionManager {
 
 	return {
 		get id() { return current.header.id; },
+		get name() { return current.header.name; },
 		get filePath() { return current.filePath; },
 
 		getMessages() {
@@ -38,14 +39,6 @@ export function createSessionManager(): SessionManager {
 				pending = false;
 			}
 			repoAppend(current.filePath, message);
-		},
-
-		reset() {
-			if (!pending && existsSync(current.filePath)) {
-				deleteSession(current.filePath);
-			}
-			current = createSession();
-			pending = true;
 		},
 
 		listSessions() {

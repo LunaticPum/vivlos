@@ -9,14 +9,13 @@ import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
  */
 export interface SessionManager {
 	readonly id: string;
-	/** 当前 session 的文件路径 */
+	/** 当前 session 的名称（null 表示未命名） */
+	readonly name: string | null;
 	readonly filePath: string;
 
 	// ── 当前 session 消息 ──
 	getMessages(): readonly Message[];
 	appendMessage(message: Message): void;
-	/** 清空当前 session 的消息（删文件重建） */
-	reset(): void;
 
 	// ── 多 session 管理 ──
 	/** 列出所有 session */
