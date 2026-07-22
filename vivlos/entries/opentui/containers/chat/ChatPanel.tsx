@@ -18,6 +18,8 @@ import { ChatArea } from "./ChatArea";
 import { StatusBar, type ConnectionStatus } from "./StatusBar";
 import { InputBar } from "./InputBar";
 import { InfoBar } from "./InfoBar";
+import { useNotification } from "../../hooks/useNotification";
+import { useExitHandler } from "../../hooks/useExitHandler";
 import {
 	SelectionPopup,
 	type SelectionItem,
@@ -87,47 +89,15 @@ export function Chat({
 	const [showHelp, setShowHelp] = useState(false);
 	const [currentLabel, setCurrentLabel] = useState(modelLabel);
 	const [currentSessionId, setCurrentSessionId] = useState(agent.getSessionId());
-	const [sessionLabel, setSessionLabel] = useState(agent.getSessionName() ?? agent.getSessionId());
 	const [showWelcome, setShowWelcome] = useState(true);
-	const [notification, setNotification] = useState<{ message: string; color?: string } | null>(null);
-	const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	/** 通知总线：生成者指定消息/颜色/延迟（默认 3s），StatusBar 自动消费 */
-	const notify = useCallback((message: string, color?: string, duration = 3000) => {
-		if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
-		setNotification({ message, color });
-		notifTimerRef.current = setTimeout(() => setNotification(null), duration);
-	}, []);
+	const { notification, notify } = useNotification();
 	const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-	const [commandError, setCommandError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
 		state: "idle",
 	});
 	const [connected, setConnected] = useState(false);
-	const [exitPending, setExitPending] = useState(false);
-	const exitPendingRef = useRef(false);
-	const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	/** Ctrl+C：loading 时打断，idle 时双击退出 */
-	const handleCtrlC = useCallback(() => {
-		if (loading) {
-			abort();
-			return;
-		}
-		// 用 ref 读状态，避免 useKeyboard 回调用旧闭包
-		if (exitPendingRef.current) {
-			if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-			onExit();
-			return;
-		}
-		exitPendingRef.current = true;
-		setExitPending(true);
-		exitTimerRef.current = setTimeout(() => {
-			exitPendingRef.current = false;
-			setExitPending(false);
-			exitTimerRef.current = null;
-		}, 3000);
-	}, [loading, abort, onExit]);
+	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
+	const sessionLabel = agent.getSessionName() ?? currentSessionId;
 
 	// ── 启动时检查默认 provider 是否已配置 API key ──
 	// 同时检查环境变量和 credential store
@@ -159,27 +129,18 @@ export function Chat({
 			newSession: () => {
 				useNewSession();
 				setCurrentSessionId(agent.getSessionId());
-				setSessionLabel(agent.getSessionName() ?? agent.getSessionId());
 			},
 			renameSession: (name: string) => {
 				agent.renameSession(name);
-				setSessionLabel(name);
 			},
 			switchToSession: (id: string) => {
 				switchSession(id);
 				setCurrentSessionId(id);
-				setSessionLabel(agent.getSessionName() ?? id);
 			},
 			notify,
 		}),
 		[clearConversation, agent, switchSession, useNewSession, notify],
 	);
-
-	// ── 未知指令错误（3s 自动消失）──
-	const showCommandError = useCallback((msg: string) => {
-		setCommandError(msg);
-		setTimeout(() => setCommandError(null), 3000);
-	}, []);
 
 	// ── InputBar 提交：走 checkCommand 派发 ──
 	const handleSubmit = useCallback(
@@ -190,13 +151,12 @@ export function Chat({
 				submit(text);
 				return;
 			}
-			// 命令已执行，也关闭欢迎窗口
 			setShowWelcome(false);
 			if (result.error) {
-				showCommandError(result.error);
+				notify(result.error, "error");
 			}
 		},
-		[registry, cmdCtx, submit, showCommandError],
+		[registry, cmdCtx, submit, notify],
 	);
 
 	const hasCompletedConversation = conversationTurns.some(
@@ -389,7 +349,6 @@ export function Chat({
 					loading={loading}
 					error={error}
 					turnStatus={lastStatus}
-					commandError={commandError}
 					connectionStatus={connectionStatus}
 					connected={connected}
 					exitPending={exitPending}
@@ -516,7 +475,6 @@ export function Chat({
 					onSelect={(id) => {
 						switchSession(id);
 						setCurrentSessionId(id);
-						setSessionLabel(agent.getSessionName() ?? id);
 						setPopupState("none");
 					}}
 					onClose={() => setPopupState("none")}
