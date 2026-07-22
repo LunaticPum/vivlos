@@ -78,6 +78,7 @@ export function Chat({
 		submit,
 		abort,
 		clearConversation,
+		switchSession,
 	} = useAgent(agent, eventBus);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
@@ -350,8 +351,15 @@ export function Chat({
 			<ChatArea
 				conversationTurns={conversationTurns}
 				detailExpanded={detailExpanded}
+				welcomeInfo={{
+					cwd: process.cwd(),
+					sessionId: agent.getSessionId(),
+					modelLabel: currentLabel,
+					version: "1.0.0",
+				}}
 			/>
 			<box paddingX={2}>
+				{conversationTurns.length > 0 && (
 				<StatusBar
 					modelLabel={currentLabel}
 					loading={loading}
@@ -367,6 +375,7 @@ export function Chat({
 							?.contextWindow
 					}
 				/>
+				)}
 				<InputBar
 					onSubmit={handleSubmit}
 					onCtrlC={handleCtrlC}
@@ -479,9 +488,7 @@ export function Chat({
 					}))}
 					currentItemId={agent.getMessages().length > 0 ? "" : ""}
 					onSelect={(id) => {
-						agent.switchSession(id);
-						setTurns([]);
-						setError(null);
+						switchSession(id);
 						setPopupState("none");
 					}}
 					onClose={() => setPopupState("none")}

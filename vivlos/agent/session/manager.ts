@@ -1,7 +1,9 @@
 import type { Message } from "@earendil-works/pi-ai";
+import { existsSync } from "node:fs";
 import type { SessionManager } from "./types.ts";
 import {
 	createSession,
+	ensureSession,
 	openSession,
 	appendMessage as repoAppend,
 	loadMessages,
@@ -13,15 +15,13 @@ import {
 /**
  * 创建基于 JSONL 文件的 SessionManager。
  *
- * 每个 session = .vivlos/sessions/ 下的一个 .jsonl 文件。
- * 消息 append-only，切换 session 时重新加载文件。
+ * 延迟创建：启动时产生 pending sessionId（不写文件）。
+ * 第一条消息写入时通过 ensureSession 创建文件。
+ * 无消息的 pending session 不会产生 JSONL 文件。
  */
 export function createSessionManager(): SessionManager {
-	// 启动时：恢复最近活跃的 session，没有则创建新的
-	const sessions = listSessions();
-	let current = sessions.length > 0
-		? { header: openSession(sessions[0]!.filePath).header, filePath: sessions[0]!.filePath }
-		: createSession();
+	let current = createSession();
+	let pending = true; // 文件尚未创建
 
 	return {
 		get id() { return current.header.id; },
@@ -32,13 +32,20 @@ export function createSessionManager(): SessionManager {
 		},
 
 		appendMessage(message: Message) {
+			// 首次写消息时激活 session（创建文件）
+			if (pending && !existsSync(current.filePath)) {
+				ensureSession(current.header, current.filePath);
+				pending = false;
+			}
 			repoAppend(current.filePath, message);
 		},
 
 		reset() {
-			// 删旧文件，建新 session
-			deleteSession(current.filePath);
+			if (!pending && existsSync(current.filePath)) {
+				deleteSession(current.filePath);
+			}
 			current = createSession();
+			pending = true;
 		},
 
 		listSessions() {
@@ -51,10 +58,12 @@ export function createSessionManager(): SessionManager {
 			if (!target) throw new Error(`Session not found: ${sessionId}`);
 			const { header } = openSession(target.filePath);
 			current = { header, filePath: target.filePath };
+			pending = false;
 		},
 
 		createNew(name?: string) {
 			current = createSession(name);
+			pending = true;
 		},
 
 		deleteSession(sessionId: string) {
@@ -62,19 +71,28 @@ export function createSessionManager(): SessionManager {
 			const target = sessions.find((s) => s.id === sessionId);
 			if (!target) return;
 			deleteSession(target.filePath);
-			// 如果删的是当前 session，切到最近的或新建
+			// 删的是当前 session 时切到最近的或新建
 			if (target.id === current.header.id) {
-				const remaining = listSessions();
-				if (remaining.length > 0) {
-					const { header } = openSession(remaining[0]!.filePath);
-					current = { header, filePath: remaining[0]!.filePath };
-				} else {
+				if (pending) {
 					current = createSession();
+				} else {
+					const remaining = listSessions();
+					if (remaining.length > 0) {
+						const { header } = openSession(remaining[0]!.filePath);
+						current = { header, filePath: remaining[0]!.filePath };
+					} else {
+						current = createSession();
+						pending = true;
+					}
 				}
 			}
 		},
 
 		rename(name: string) {
+			if (pending) {
+				current = { ...current, header: { ...current.header, name } };
+				return;
+			}
 			renameSession(current.filePath, name);
 			current = { ...current, header: { ...current.header, name } };
 		},

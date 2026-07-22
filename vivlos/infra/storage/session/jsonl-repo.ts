@@ -9,29 +9,46 @@ import { toMessageEntry, toMessage } from "./types.ts";
 /**
  * JSONL Session 仓储。
  *
- * 每个 session = .vivlos/sessions/{timestamp}_{id}.jsonl 文件。
- * 第 1 行 header，后续每行一个 entry（append-only）。
+ * 每个 session = .vivlos/sessions/{时间戳}_{id}.jsonl 文件。
+ * 延迟创建：第一条消息写入时才生成文件，之前只有 pending ID。
  */
+
+/** 生成可读的文件名时间戳 */
+function tsName(): string {
+	return new Date().toISOString().replace(/T/g, "-").replace(/:/g, "-").replace(/\..+/, "");
+}
 
 /** 生成 session 文件名 */
 function sessionFileName(header: SessionHeader): string {
-	const ts = new Date(header.createdAt).toISOString().replace(/[:.]/g, "-");
-	return `${ts}_${header.id}.jsonl`;
+	return `${tsName()}_${header.id}.jsonl`;
 }
 
-/** 创建新 session */
+/**
+ * 创建 pending session（不写文件）。
+ * 只有第一条消息通过 ensureSession 才会实际创建文件，
+ * 这样不会产生空 session 的 JSONL 文件。
+ */
 export function createSession(name?: string | null): { header: SessionHeader; filePath: string } {
 	const id = shortId();
 	const header: SessionHeader = {
 		type: "session",
 		version: 1,
 		id,
-		createdAt: Date.now(),
+		createdAt: new Date().toISOString(),
 		name: name ?? null,
 	};
 	const filePath = resolve(getSessionsDir(), sessionFileName(header));
-	writeFileSync(filePath, `${JSON.stringify(header)}\n`, "utf-8");
 	return { header, filePath };
+}
+
+/**
+ * 确保 session 文件存在。
+ * 由 SessionManager.appendMessage 调用，
+ * 只在首次写入消息时才创建文件。
+ */
+export function ensureSession(header: SessionHeader, filePath: string): void {
+	if (existsSync(filePath)) return;
+	writeFileSync(filePath, `${JSON.stringify(header)}\n`, "utf-8");
 }
 
 /** 打开已有 session，返回 header + 所有 entries */
@@ -80,11 +97,11 @@ export function listSessions(): SessionMeta[] {
 		const messages = entries.filter((e) => e.type === "message");
 		const lastTs = messages.length > 0
 			? (messages[messages.length - 1] as MessageEntry).timestamp
-			: header.createdAt;
+			: 0;
 		return {
 			id: header.id,
 			name: header.name,
-			createdAt: header.createdAt,
+			createdAt: new Date(header.createdAt).getTime(),
 			lastActiveAt: lastTs,
 			messageCount: messages.length,
 			filePath,

@@ -5,7 +5,7 @@ export interface SessionHeader {
 	type: "session";
 	version: number;
 	id: string;
-	createdAt: number;
+	createdAt: string;
 	name: string | null;
 }
 

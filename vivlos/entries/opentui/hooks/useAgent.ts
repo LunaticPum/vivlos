@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Usage } from "@earendil-works/pi-ai";
+import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 
@@ -44,12 +44,14 @@ export interface ConversationTurn {
  * tui hook 结果：将 hook 到的数据封装出来传给组件使用
  */
 export interface UseAgentResult {
-	conversationTurns: ConversationTurn[]; // 完整对话历史，保存每轮对话记录
-	loading: boolean; // agent 是否正在运行
-	error: string | null; // 错误信息
+	conversationTurns: ConversationTurn[];
+	loading: boolean;
+	error: string | null;
 	submit: (text: string) => void;
-	abort: () => void; // 打断当前 LLM 调用
-	clearConversation: () => void; // 清空当前会话
+	abort: () => void;
+	clearConversation: () => void;
+	/** 切换 session 并恢复对话历史 */
+	switchSession: (sessionId: string) => void;
 }
 
 // #endregion
@@ -128,6 +130,44 @@ function updateLastThinking(
 		}
 	}
 	return log;
+}
+
+/** 从 Message 数组重建 ConversationTurn[]（用于 session 切换后恢复历史） */
+function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
+	const turns: ConversationTurn[] = [];
+	let cur: ConversationTurn | null = null;
+
+	for (const msg of messages) {
+		if (msg.role === "user") {
+			const text = typeof msg.content === "string"
+				? msg.content
+				: msg.content.filter((c): c is TextContent => c.type === "text").map((c) => c.text).join("");
+			if (cur) turns.push(cur);
+			cur = { userInput: text, log: [], finalText: "", status: "complete", turnCount: 0, toolCount: 0 };
+		} else if (msg.role === "assistant" && cur) {
+			cur.finalText = msg.content.filter((c): c is TextContent => c.type === "text").map((c) => c.text).join("");
+			cur.usage = msg.usage;
+			for (const c of msg.content) {
+				if (c.type === "thinking") {
+					const t = (c as unknown as Record<string, string>).thinking ?? "";
+					cur.log.push({ kind: "thinking", text: t, done: true, turnIndex: cur.turnCount, createdAt: msg.timestamp });
+				}
+				if (c.type === "toolCall") cur.turnCount++;
+			}
+		} else if (msg.role === "toolResult" && cur) {
+			cur.toolCount++;
+			for (let i = cur.log.length - 1; i >= 0; i--) {
+				const e = cur.log[i]!;
+				if (e.kind === "tool" && !e.done) {
+					e.result = extractToolText(msg);
+					e.done = true;
+					break;
+				}
+			}
+		}
+	}
+	if (cur) turns.push(cur);
+	return turns;
 }
 
 // #endregion
@@ -409,5 +449,14 @@ export function useAgent(
 		currentIdxRef.current = -1;
 	}, [agent]);
 
-	return { conversationTurns, loading, error, submit, abort, clearConversation };
+	/** 切换 session 并恢复对话历史 */
+	const switchSession = useCallback((sessionId: string) => {
+		agent.switchSession(sessionId);
+		setTurns(messagesToTurns(agent.getMessages()));
+		setError(null);
+		setLoading(false);
+		currentIdxRef.current = -1;
+	}, [agent]);
+
+	return { conversationTurns, loading, error, submit, abort, clearConversation, switchSession };
 }

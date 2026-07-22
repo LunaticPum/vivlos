@@ -10,6 +10,9 @@ export interface VivlosAgent {
 	getMessages(): readonly Message[];
 	reset(): void;
 
+	/** 当前 session ID */
+	getSessionId(): string;
+
 	// ── session 管理 ──
 	listSessions(): SessionMeta[];
 	switchSession(sessionId: string): void;
