@@ -107,7 +107,7 @@ export function SelectionPopup({
 
 	return (
 		<box
-			width="40%"
+			width="45%"
 			height="45%"
 			overflow="hidden"
 			border={true}
@@ -122,10 +122,10 @@ export function SelectionPopup({
 			paddingTop={1}
 			paddingBottom={0}
 		>
-			<box flexGrow={1} overflow="hidden">
+			<box height="90%" overflow="hidden" width="100%">
 				<scrollbox
 					ref={scrollRef}
-					height="90%"
+					height="95%"
 					verticalScrollbarOptions={{ visible: false }}
 				>
 					{entries.map((e, i) => {
@@ -154,18 +154,19 @@ export function SelectionPopup({
 								</text>
 								{isCur && <text fg={C.current}> ✓</text>}
 								<box flexGrow={1} />
-								{e.item.suffix && (
-									<text fg={C.hint} width={5}>
-										{e.item.suffix}
-									</text>
-								)}
+								{e.item.suffix && <text fg={C.hint}>{e.item.suffix}</text>}
 							</box>
 						);
 					})}
 				</scrollbox>
 			</box>
 
-			<box flexDirection="row" justifyContent="center" width="100%">
+			<box
+				height={1}
+				flexDirection="row"
+				justifyContent="center"
+				width="100%"
+			>
 				<text fg={C.hint}>{"↑↓ 选择  Enter 确认  Esc 退出"}</text>
 			</box>
 		</box>

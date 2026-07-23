@@ -19,15 +19,12 @@ const C = {
 	hint: "#6c7086",
 } as const;
 
-/** 指令名列宽（含 / 前缀） */
-const COL_CMD = 17;
-/** 描述列宽 */
+const COL_CMD = 16;
 const COL_DESC = 23;
+const COL_SHORTCUT = 8;
 
 export interface HelpPopupProps {
-	/** 已注册的指令列表 */
 	commands: TUICommand[];
-	/** 关闭弹窗 */
 	onClose: () => void;
 }
 
@@ -38,8 +35,9 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 
 	return (
 		<box
-			width="40%"
+			width="45%"
 			height="45%"
+			overflow="hidden"
 			border={true}
 			borderStyle="rounded"
 			borderColor={C.border}
@@ -52,24 +50,22 @@ export function HelpPopup({ commands, onClose }: HelpPopupProps) {
 			paddingTop={1}
 			paddingBottom={0}
 		>
-			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
-			<box flexDirection="column" flexGrow={1}>
+			<box height="90%" overflow="hidden" width="100%" alignItems="center">
 				{commands.map((cmd) => (
-					<box key={cmd.name} flexDirection="row">
+					<box key={cmd.name} flexDirection="row" alignItems="center">
 						<box width={COL_CMD}>
 							<text fg={C.command}>{`/${cmd.name}`}</text>
 						</box>
 						<box width={COL_DESC}>
 							<text fg={C.desc}>{cmd.description}</text>
 						</box>
-						{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
+						<box width={COL_SHORTCUT}>
+							{cmd.shortcut && <text fg={C.shortcut}>{cmd.shortcut}</text>}
+						</box>
 					</box>
 				))}
 			</box>
-			{/* <box flexDirection="column" flexGrow={1}>
-			</box> */}
-			{/* 底部提示 -- 贴着边框 */}
-			<box flexDirection="row" justifyContent="center" width="100%">
+			<box flexDirection="row" justifyContent="center" width="100%" height={1}>
 				<text fg={C.hint}>{"Esc 退出"}</text>
 			</box>
 		</box>

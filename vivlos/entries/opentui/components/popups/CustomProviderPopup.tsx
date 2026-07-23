@@ -244,7 +244,7 @@ export function CustomProviderPopup({
 				)}
 			</box>
 
-			<box flexDirection="row" justifyContent="center" width="100%">
+			<box flexDirection="row" justifyContent="center" width="100%" height={1}>
 				<text fg={C.hint}>{"Enter 确认  Esc 返回"}</text>
 			</box>
 		</box>

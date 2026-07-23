@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from "react";
 import spinners from "cli-spinners";
-import { t, fg } from "@opentui/core";
+import { t, fg, type TextChunk } from "@opentui/core";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ConversationTurn } from "../../hooks/useAgent";
 
@@ -26,7 +26,7 @@ const C = {
 	bg: "#232634",
 } as const;
 
-const notifColors: Record<string, (s: string) => string> = {
+const notifColors: Record<string, (s: string) => TextChunk> = {
 	warning: fg(C.warning),
 	success: fg(C.success),
 	error: fg(C.error),
@@ -54,15 +54,16 @@ export interface StatusBarProps {
 	contextWindow?: number;
 }
 
-function useSessionDuration(): string {
+function useSessionDuration(resetKey?: string): string {
 	const [seconds, setSeconds] = useState(0);
 	useEffect(() => {
 		const start = Date.now();
+		setSeconds(0);
 		const timer = setInterval(() => {
 			setSeconds(Math.floor((Date.now() - start) / 1000));
 		}, 1000);
 		return () => clearInterval(timer);
-	}, []);
+	}, [resetKey]);
 	const mm = Math.floor(seconds / 60);
 	const ss = seconds % 60;
 	return `${mm}m${ss.toString().padStart(2, "0")}s`;
@@ -111,7 +112,7 @@ export function StatusBar({
 	usage,
 	contextWindow,
 }: StatusBarProps) {
-	const duration = useSessionDuration();
+	const duration = useSessionDuration(sessionId);
 	const { bar, percent, tokenLabel, barColor } = useContextBar(usage, contextWindow);
 	const spin = useSpinner(connectionStatus.state === "connecting");
 

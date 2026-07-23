@@ -127,8 +127,13 @@ export function Chat({
 			showHelp: () => setShowHelp(true),
 			clearConversation,
 			newSession: () => {
+				if (agent.listSessions().length >= 10) {
+					notify("已达 10 个会话上限，请删除或压缩旧会话", "warning");
+					return;
+				}
 				useNewSession();
 				setCurrentSessionId(agent.getSessionId());
+				setShowWelcome(false);
 			},
 			renameSession: (name: string) => {
 				agent.renameSession(name);
@@ -136,6 +141,7 @@ export function Chat({
 			switchToSession: (id: string) => {
 				switchSession(id);
 				setCurrentSessionId(id);
+				setShowWelcome(false);
 			},
 			notify,
 		}),
@@ -151,7 +157,7 @@ export function Chat({
 				submit(text);
 				return;
 			}
-			setShowWelcome(false);
+			// 命令已执行，不改 showWelcome（弹窗类命令不应退出欢迎窗口）
 			if (result.error) {
 				notify(result.error, "error");
 			}
@@ -343,7 +349,7 @@ export function Chat({
 					version: "1.0.0",
 				}}
 			/>
-			<box paddingX={2}>
+			<box paddingX={2} flexShrink={0}>
 				<StatusBar
 					modelLabel={currentLabel}
 					loading={loading}
@@ -452,35 +458,45 @@ export function Chat({
 				/>
 			</box>
 		)}
-		{popupState === "sessions" && (
-			<box
-				position="absolute"
-				top={0}
-				left={0}
-				width="100%"
-				height="100%"
-				justifyContent="center"
-				alignItems="center"
-				zIndex={100}
-			>
-				<SelectionPopup
-					title="Sessions"
-					recentItems={[]}
-					allItems={agent.listSessions().map<SelectionItem>((s) => ({
+			{popupState === "sessions" && (
+				<box
+					position="absolute"
+					top={0}
+					left={0}
+					width="100%"
+					height="100%"
+					justifyContent="center"
+					alignItems="center"
+					zIndex={100}
+				>
+				{(() => {
+					const sessions = agent.listSessions();
+					const current = sessions.find((s) => s.id === currentSessionId);
+					const others = sessions.filter((s) => s.id !== currentSessionId);
+					const fmtTok = (n: number) => n >= 1_000_000 ? `${Math.floor(n / 1_000_000)}M` : n >= 1000 ? `${Math.floor(n / 1000)}k` : `${n}`;
+					const toItem = (s: typeof sessions[number]): SelectionItem => ({
 						id: s.id,
 						label: s.name ?? s.id,
-						suffix: `${s.messageCount}msg`,
-					}))}
-					currentItemId={agent.getMessages().length > 0 ? "" : ""}
-					onSelect={(id) => {
-						switchSession(id);
-						setCurrentSessionId(id);
-						setPopupState("none");
-					}}
-					onClose={() => setPopupState("none")}
-				/>
-			</box>
-		)}
+						suffix: `${s.turnCount} msg / ${fmtTok(s.totalTokens)}`,
+					});
+					return (
+						<SelectionPopup
+							title="Sessions"
+							recentItems={others.map(toItem)}
+							allItems={current ? [toItem(current)] : []}
+							currentItemId={currentSessionId}
+							onSelect={(id) => {
+								switchSession(id);
+								setCurrentSessionId(id);
+								setShowWelcome(false);
+								setPopupState("none");
+							}}
+							onClose={() => setPopupState("none")}
+						/>
+					);
+				})()}
+				</box>
+			)}
 		{popupState === "apikey" && pendingProvider && (
 				<box
 					position="absolute"

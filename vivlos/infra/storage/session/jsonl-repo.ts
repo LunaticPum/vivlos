@@ -94,16 +94,25 @@ export function listSessions(): SessionMeta[] {
 	return files.map((file) => {
 		const filePath = join(dir, file);
 		const { header, entries } = openSession(filePath);
-		const messages = entries.filter((e) => e.type === "message");
-		const lastTs = messages.length > 0
-			? (messages[messages.length - 1] as MessageEntry).timestamp
-			: 0;
+		const messages = entries.filter((e) => e.type === "message") as MessageEntry[];
+		const lastTs = messages.length > 0 ? messages[messages.length - 1]!.timestamp : 0;
+		let turnCount = 0;
+		let totalTokens = 0;
+		for (const m of messages) {
+			if (m.role === "user") turnCount++;
+			if (m.role === "assistant" && m.usage) {
+				const u = m.usage as { input: number; cacheRead: number; cacheWrite: number };
+				totalTokens = u.input + u.cacheRead + u.cacheWrite;
+			}
+		}
 		return {
 			id: header.id,
 			name: header.name,
 			createdAt: new Date(header.createdAt).getTime(),
 			lastActiveAt: lastTs,
 			messageCount: messages.length,
+			turnCount,
+			totalTokens,
 			filePath,
 		};
 	}).sort((a, b) => b.lastActiveAt - a.lastActiveAt);

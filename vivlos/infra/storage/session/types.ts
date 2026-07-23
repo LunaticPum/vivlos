@@ -28,6 +28,10 @@ export interface SessionMeta {
 	createdAt: number;
 	lastActiveAt: number;
 	messageCount: number;
+	/** 对话轮数（user message 条数） */
+	turnCount: number;
+	/** 上下文 token 总量（最后一条 assistant 的 usage） */
+	totalTokens: number;
 	filePath: string;
 }
 

@@ -44,31 +44,32 @@ export function ChatArea({ conversationTurns, detailExpanded, showWelcome, welco
 					version={welcomeInfo.version}
 				/>
 			) : (
-				<scrollbox
-					height="100%"
-					width="100%"
-					padding={1}
-					stickyScroll={true}
-					stickyStart="bottom"
-					scrollAcceleration={FAST_SCROLL}
-					verticalScrollbarOptions={{ visible: false }}
-				>
-					{conversationTurns.map((convTurn, i) => (
-						<box
-							key={i}
-							flexDirection="column"
-							marginBottom={1}
-							paddingX={1}
-							gap={1}
-						>
-							<UserMessageCard text={convTurn.userInput} />
-							<AgentMessageCard
-								conversationTurn={convTurn}
-								detailExpanded={detailExpanded}
-							/>
-						</box>
-					))}
-				</scrollbox>
+				<box flexGrow={1} overflow="hidden" width="100%">
+					<scrollbox
+						height="100%"
+						width="100%"
+						stickyScroll={true}
+						stickyStart="bottom"
+						scrollAcceleration={FAST_SCROLL}
+						verticalScrollbarOptions={{ visible: false }}
+					>
+						{conversationTurns.map((convTurn, i) => (
+							<box
+								key={i}
+								flexDirection="column"
+								marginBottom={1}
+								paddingX={1}
+								gap={1}
+							>
+								<UserMessageCard text={convTurn.userInput} />
+								<AgentMessageCard
+									conversationTurn={convTurn}
+									detailExpanded={detailExpanded}
+								/>
+							</box>
+						))}
+					</scrollbox>
+				</box>
 			)}
 		</box>
 	);

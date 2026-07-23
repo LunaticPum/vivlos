@@ -49,7 +49,7 @@ export function ApiKeyPopup({ provider, onSubmit, onClose }: ApiKeyPopupProps) {
 			gap={1}
 		>
 			{/* 内容区 -- flexGrow 撑满，把提示顶到底部 */}
-			<box flexDirection="column" flexGrow={1}>
+			<box flexDirection="column" flexGrow={1} width="100%">
 				<text fg={C.text}>{`Provider "${provider}" 需要配置 API Key`}</text>
 				<box marginTop={1}>
 					<input
@@ -65,7 +65,7 @@ export function ApiKeyPopup({ provider, onSubmit, onClose }: ApiKeyPopupProps) {
 				</box>
 			</box>
 			{/* 底部提示 -- 贴着边框 */}
-			<box flexDirection="row" justifyContent="center" width="100%">
+			<box flexDirection="row" justifyContent="center" width="100%" height={1}>
 				<text fg={C.hint}>{"Enter 确认  Esc 返回"}</text>
 			</box>
 		</box>
