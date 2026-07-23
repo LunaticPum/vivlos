@@ -11,6 +11,7 @@ import spinners from "cli-spinners";
 import { t, fg, type TextChunk } from "@opentui/core";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ConversationTurn } from "../../hooks/useAgent";
+import type { ConnectionStatus } from "../../hooks/useProviderManager.js";
 
 const SPINNER = spinners.line;
 const SPINNER_INTERVAL = 80;
@@ -31,13 +32,6 @@ const notifColors: Record<string, (s: string) => TextChunk> = {
 	success: fg(C.success),
 	error: fg(C.error),
 };
-
-/** API Key 连接验证状态 */
-export type ConnectionStatus =
-	| { state: "idle" }
-	| { state: "connecting"; provider: string }
-	| { state: "success"; provider: string }
-	| { state: "failed"; provider: string; error?: string };
 
 export interface StatusBarProps {
 	modelLabel: string;

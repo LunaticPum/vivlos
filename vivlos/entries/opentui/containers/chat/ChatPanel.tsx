@@ -15,11 +15,12 @@
 
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { ChatArea } from "./ChatArea";
-import { StatusBar, type ConnectionStatus } from "./StatusBar";
+import { StatusBar } from "./StatusBar";
 import { InputBar } from "./InputBar";
 import { InfoBar } from "./InfoBar";
 import { useNotification } from "../../hooks/useNotification";
 import { useExitHandler } from "../../hooks/useExitHandler";
+import { useProviderManager } from "../../hooks/useProviderManager.js";
 import {
 	SelectionPopup,
 	type SelectionItem,
@@ -63,7 +64,13 @@ export interface ChatProps {
 	onExit: () => void;
 }
 
-type PopupState = "none" | "models" | "providers" | "apikey" | "custom" | "sessions";
+type PopupState =
+	| "none"
+	| "models"
+	| "providers"
+	| "apikey"
+	| "custom"
+	| "sessions";
 
 export function Chat({
 	modelLabel,
@@ -87,27 +94,28 @@ export function Chat({
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
 	const [showHelp, setShowHelp] = useState(false);
-	const [currentLabel, setCurrentLabel] = useState(modelLabel);
-	const [currentSessionId, setCurrentSessionId] = useState(agent.getSessionId());
+	const [currentSessionId, setCurrentSessionId] = useState(
+		agent.getSessionId(),
+	);
 	const [showWelcome, setShowWelcome] = useState(true);
 	const { notification, notify } = useNotification();
-	const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-		state: "idle",
-	});
-	const [connected, setConnected] = useState(false);
 	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
 	const sessionLabel = agent.getSessionName() ?? currentSessionId;
 
-	// ── 启动时检查默认 provider 是否已配置 API key ──
-	// 同时检查环境变量和 credential store
-	useEffect(() => {
-		const provider = llm.getDefaultProvider();
-		const envVar = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-		llm.hasCredential(provider).then((hasInStore) => {
-			setConnected(hasInStore || !!process.env[envVar]);
-		});
-	}, [llm]);
+	// ── Provider 管理（抽取到 useProviderManager hook）──
+	const {
+		currentLabel,
+		connected,
+		connectionStatus,
+		pendingProvider,
+		handleProviderSelect,
+		handleModelSelect,
+		handleApiKeySubmit,
+		handleCustomProviderSubmit,
+		setPendingProvider,
+	} = useProviderManager(llm, llmConfigRepo, modelLabel, (s) =>
+		setPopupState(s as PopupState),
+	);
 
 	// ── 命令注册表（懒初始化）──
 	const registryRef = useRef<TUICommandRegistry | null>(null);
@@ -178,157 +186,6 @@ export function Chat({
 			? conversationTurns[conversationTurns.length - 1]
 			: undefined;
 	const lastStatus = lastTurn?.status;
-
-	// ── provider 选择 ──
-	const handleProviderSelect = async (providerId: string) => {
-		// Custom 选项 -> 打开自定义 provider 表单
-		if (providerId === "Custom") {
-			setPopupState("custom");
-			return;
-		}
-		// 没切换 provider，直接关闭
-		if (providerId === llm.getDefaultProvider()) {
-			setPopupState("none");
-			return;
-		}
-		// 检查是否有 API key（credential store 或环境变量）
-		const hasKey = await llm.hasCredential(providerId);
-		const envVar = `${providerId.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-		if (!hasKey && !process.env[envVar]) {
-			setPendingProvider(providerId);
-			setPopupState("apikey");
-			return;
-		}
-		// 已有凭证 = 之前连接成功过，直接切换，不做验证
-		const models = llm.listModels(providerId);
-		// 优先用上次使用的 model（recent 格式为 provider/modelId）
-		const recentModels = llmConfigRepo.loadRecentModels();
-		const lastUsedEntry = recentModels.find((e) =>
-			e.startsWith(`${providerId}/`),
-		);
-		const lastUsedId = lastUsedEntry?.split("/")[1];
-		const hasModel = lastUsedId && models.some((m) => m.id === lastUsedId);
-		if (!hasModel) {
-			// 没有上次使用记录，先切 provider 再弹 models
-			llm.setDefault(providerId, models[0]?.id ?? "");
-			setCurrentLabel(`${truncate(providerId, 15)}/${models[0]?.id ?? ""}`);
-			llmConfigRepo.saveConfig({
-				defaultProvider: providerId,
-				defaultModelId: models[0]?.id ?? "",
-			});
-			llmConfigRepo.addRecentProvider(providerId);
-			setPopupState("models");
-			return;
-		}
-		llm.setDefault(providerId, lastUsedId!);
-		setCurrentLabel(`${truncate(providerId, 15)}/${lastUsedId}`);
-		llmConfigRepo.saveConfig({
-			defaultProvider: providerId,
-			defaultModelId: lastUsedId!,
-		});
-		llmConfigRepo.addRecentProvider(providerId);
-		llmConfigRepo.addRecentModel(`${providerId}/${lastUsedId}`);
-		setPopupState("none");
-	};
-
-	// ── API Key 连接验证 + 切换（3s 超时）──
-	const verifyAndSwitch = async (providerId: string) => {
-		setPopupState("none");
-		setConnectionStatus({ state: "connecting", provider: providerId });
-
-		try {
-			const models = llm.listModels(providerId);
-			const model = models[0];
-			if (!model) throw new Error("no models available");
-
-			// 连接验证：发送最小请求测试 API 可达性，15s 超时
-			const stream = llm.stream(
-				model,
-				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
-				{ signal: AbortSignal.timeout(15000) },
-			);
-			for await (const event of stream) {
-				if (event.type === "error") {
-					throw new Error(event.error.errorMessage ?? "connect failed");
-				}
-				if (event.type === "text_delta") {
-					break; // 收到实际响应 = 连接正常
-				}
-			}
-
-			// 验证成功
-			llm.setDefault(providerId, model.id);
-			setCurrentLabel(`${truncate(providerId, 15)}/${model.id}`);
-			setConnected(true);
-			setConnectionStatus({ state: "success", provider: providerId });
-			// 成功提示显示 3s 后恢复 idle 并关闭弹窗
-			setTimeout(() => {
-				setConnectionStatus({ state: "idle" });
-				setPopupState("none");
-			}, 3000);
-
-			// ── SQLite 持久化 ──
-			llmConfigRepo.saveConfig({
-				defaultProvider: providerId,
-				defaultModelId: model.id,
-			});
-			llmConfigRepo.addRecentProvider(providerId);
-			llmConfigRepo.addRecentModel(`${providerId}/${model.id}`);
-		} catch (err) {
-			// 连接失败：如果是自定义 provider，从内存列表和 SQLite 中移除
-			const customIds = llmConfigRepo.listCustomProviders();
-			if (customIds.some((id) => id.startsWith(`${providerId}/`))) {
-				llm.removeProvider(providerId);
-				customIds
-					.filter((id) => id.startsWith(`${providerId}/`))
-					.forEach((id) => llmConfigRepo.removeCustomProvider(id));
-			}
-			const errorMsg = err instanceof Error ? err.message : String(err);
-			setConnectionStatus({
-				state: "failed",
-				provider: providerId,
-				error: errorMsg,
-			});
-			// 失败提示显示 3s 后恢复 idle
-			setTimeout(() => setConnectionStatus({ state: "idle" }), 3000);
-		}
-	};
-
-	// ── API key 输入完成 ──
-	const handleApiKeySubmit = async (key: string) => {
-		if (!pendingProvider) return;
-		await llm.setCredential(pendingProvider, key);
-		const provider = pendingProvider;
-		setPendingProvider(null);
-		await verifyAndSwitch(provider);
-	};
-
-	// ── 自定义 provider 提交 -- 注册 + 连接验证 ──
-	const handleCustomProviderSubmit = async (config: {
-		baseUrl: string;
-		apiStandard: "openai" | "anthropic";
-		modelId: string;
-		apiKey: string;
-		contextWindow?: number;
-	}) => {
-		const providerId = llm.addCustomProvider(config);
-		llmConfigRepo.saveCustomProvider(`${providerId}/${config.modelId}`, config);
-		await llm.setCredential(providerId, config.apiKey);
-		await verifyAndSwitch(providerId);
-	};
-
-	// ── model 选择（接收 provider/modelId 格式）──
-	const handleModelSelect = (entry: string) => {
-		const [provider, modelId] = entry.split("/");
-		llm.setDefault(provider, modelId);
-		setCurrentLabel(`${truncate(provider, 15)}/${modelId}`);
-		setPopupState("none");
-		llmConfigRepo.saveConfig({
-			defaultProvider: provider,
-			defaultModelId: modelId,
-		});
-		llmConfigRepo.addRecentModel(entry);
-	};
 
 	return (
 		<box
@@ -455,9 +312,9 @@ export function Chat({
 						currentItemId={llm.getDefaultProvider()}
 						onSelect={handleProviderSelect}
 						onClose={() => setPopupState("none")}
-				/>
-			</box>
-		)}
+					/>
+				</box>
+			)}
 			{popupState === "sessions" && (
 				<box
 					position="absolute"
@@ -469,35 +326,40 @@ export function Chat({
 					alignItems="center"
 					zIndex={100}
 				>
-				{(() => {
-					const sessions = agent.listSessions();
-					const current = sessions.find((s) => s.id === currentSessionId);
-					const others = sessions.filter((s) => s.id !== currentSessionId);
-					const fmtTok = (n: number) => n >= 1_000_000 ? `${Math.floor(n / 1_000_000)}M` : n >= 1000 ? `${Math.floor(n / 1000)}k` : `${n}`;
-					const toItem = (s: typeof sessions[number]): SelectionItem => ({
-						id: s.id,
-						label: s.name ?? s.id,
-						suffix: `${s.turnCount} msg / ${fmtTok(s.totalTokens)}`,
-					});
-					return (
-						<SelectionPopup
-							title="Sessions"
-							recentItems={others.map(toItem)}
-							allItems={current ? [toItem(current)] : []}
-							currentItemId={currentSessionId}
-							onSelect={(id) => {
-								switchSession(id);
-								setCurrentSessionId(id);
-								setShowWelcome(false);
-								setPopupState("none");
-							}}
-							onClose={() => setPopupState("none")}
-						/>
-					);
-				})()}
+					{(() => {
+						const sessions = agent.listSessions();
+						const current = sessions.find((s) => s.id === currentSessionId);
+						const others = sessions.filter((s) => s.id !== currentSessionId);
+						const fmtTok = (n: number) =>
+							n >= 1_000_000
+								? `${Math.floor(n / 1_000_000)}M`
+								: n >= 1000
+									? `${Math.floor(n / 1000)}k`
+									: `${n}`;
+						const toItem = (s: (typeof sessions)[number]): SelectionItem => ({
+							id: s.id,
+							label: s.name ?? s.id,
+							suffix: `${s.turnCount} msg / ${fmtTok(s.totalTokens)}`,
+						});
+						return (
+							<SelectionPopup
+								title="Sessions"
+								recentItems={others.map(toItem)}
+								allItems={current ? [toItem(current)] : []}
+								currentItemId={currentSessionId}
+								onSelect={(id) => {
+									switchSession(id);
+									setCurrentSessionId(id);
+									setShowWelcome(false);
+									setPopupState("none");
+								}}
+								onClose={() => setPopupState("none")}
+							/>
+						);
+					})()}
 				</box>
 			)}
-		{popupState === "apikey" && pendingProvider && (
+			{popupState === "apikey" && pendingProvider && (
 				<box
 					position="absolute"
 					top={0}

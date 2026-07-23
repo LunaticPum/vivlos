@@ -115,7 +115,7 @@ export function SelectionPopup({
 			borderColor={C.border}
 			title={` ${title} `}
 			titleAlignment="left"
-			paddingX={1}
+			paddingX={3}
 			backgroundColor={C.bg}
 			flexDirection="column"
 			alignItems="center"
@@ -161,12 +161,7 @@ export function SelectionPopup({
 				</scrollbox>
 			</box>
 
-			<box
-				height={1}
-				flexDirection="row"
-				justifyContent="center"
-				width="100%"
-			>
+			<box height={1} flexDirection="row" justifyContent="center" width="100%">
 				<text fg={C.hint}>{"↑↓ 选择  Enter 确认  Esc 退出"}</text>
 			</box>
 		</box>
