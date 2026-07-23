@@ -1,7 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { parse as parseYaml } from "yaml";
-import { getConfigDir } from "@vivlos/infra/paths.ts";
+import { loadConfig } from "@vivlos/infra/config/index.ts";
 
 export interface BashRule {
 	pattern: string;
@@ -9,40 +6,33 @@ export interface BashRule {
 }
 
 /**
- * 加载 .vivlos/config/permissions.yml 中的 bash 权限规则。
+ * 从 .vivlos/config.json 的 tool.bash 加载权限规则。
  * 文件不存在时返回 null（默认全 allow）。
  *
- * 格式：
- * ```yaml
- * bash:
- *   "tvly *": allow
- *   "git *": allow
- *   "rm -rf *": deny
- *   "*": allow
+ * config.json 格式：
+ * ```json
+ * {
+ *   "tool": {
+ *     "bash": {
+ *       "rm -rf /*": "deny",
+ *       "*": "allow"
+ *     }
+ *   }
+ * }
  * ```
  */
 export function loadBashPermissions(): BashRule[] | null {
-	const filePath = resolve(getConfigDir(), "permissions.yml");
-	if (!existsSync(filePath)) return null;
+	const config = loadConfig();
+	const bashRules = config.tool.bash;
+	if (!bashRules || Object.keys(bashRules).length === 0) return null;
 
-	try {
-		const raw = readFileSync(filePath, "utf-8");
-		const parsed = parseYaml(raw) as Record<string, unknown> | null;
-		if (!parsed || typeof parsed !== "object") return null;
-
-		const bashSection = parsed["bash"];
-		if (!bashSection || typeof bashSection !== "object") return null;
-
-		const rules: BashRule[] = [];
-		for (const [pattern, action] of Object.entries(bashSection)) {
-			if (action === "allow" || action === "deny") {
-				rules.push({ pattern, action });
-			}
+	const rules: BashRule[] = [];
+	for (const [pattern, action] of Object.entries(bashRules)) {
+		if (action === "allow" || action === "deny") {
+			rules.push({ pattern, action });
 		}
-		return rules.length > 0 ? rules : null;
-	} catch {
-		return null;
 	}
+	return rules.length > 0 ? rules : null;
 }
 
 /**

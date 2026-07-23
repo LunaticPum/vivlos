@@ -27,7 +27,7 @@ import {
 	ensureConfigDir,
 	ensureSessionsDir,
 } from "@vivlos/infra/paths.ts";
-import { ensureAllConfigs } from "@vivlos/infra/config/index.ts";
+import { ensureConfig } from "@vivlos/infra/config/index.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
 	cleanTempDir();
 	ensureTempDir();
 	ensureConfigDir();
-	ensureAllConfigs();
+	ensureConfig();
 	ensureSessionsDir();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
 

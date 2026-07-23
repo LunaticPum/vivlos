@@ -15,7 +15,7 @@
  *     LLM 调用 skill({ name, reference: "filename" }) 加载。
  *
  * skill 工具自包含文件读取，不依赖 read 工具。
- * bash 权限控制通过 .vivlos/config/permissions.yml 外置配置。
+ * bash 权限控制通过 .vivlos/config.json 的 tool.bash 外置配置。
  */
 
 /** Skill 来源类型 */
