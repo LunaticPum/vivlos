@@ -85,6 +85,13 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			) ?? model;
 			return loop.run(input, { model: currentModel, maxTurns, reasoning: params.thinkingLevel, signal });
 		},
+		async compact() {
+			const currentModel = params.llm.getModel(
+				params.llm.getDefaultProvider(),
+				params.llm.getDefaultModelId(),
+			) ?? model;
+			return loop.compactNow(currentModel);
+		},
 		getMessages() {
 			return sessionManager.getMessages();
 		},
@@ -99,10 +106,12 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		},
 		switchSession(sessionId: string) {
 			sessionManager.switchTo(sessionId);
+			loop.resetCompaction();
 			params.toolsReset?.();
 		},
 		createNewSession(name?: string) {
 			sessionManager.createNew(name);
+			loop.resetCompaction();
 			params.toolsReset?.();
 		},
 		deleteSession(sessionId: string) {

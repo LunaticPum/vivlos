@@ -16,6 +16,8 @@ export interface SessionManager {
 	// ── 当前 session 消息 ──
 	getMessages(): readonly Message[];
 	appendMessage(message: Message): void;
+	/** 替换全部消息（压缩后用，仅内存，不重写 JSONL） */
+	replaceMessages(messages: Message[]): void;
 
 	// ── 多 session 管理 ──
 	/** 列出所有 session */

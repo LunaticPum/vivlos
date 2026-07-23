@@ -22,6 +22,8 @@ import {
 export function createSessionManager(): SessionManager {
 	let current = createSession();
 	let pending = true; // 文件尚未创建
+	// 压缩后的消息覆盖（null = 从磁盘读）
+	let messagesOverride: Message[] | null = null;
 
 	return {
 		get id() { return current.header.id; },
@@ -29,7 +31,7 @@ export function createSessionManager(): SessionManager {
 		get filePath() { return current.filePath; },
 
 		getMessages() {
-			return loadMessages(current.filePath);
+			return messagesOverride ?? loadMessages(current.filePath);
 		},
 
 		appendMessage(message: Message) {
@@ -39,6 +41,13 @@ export function createSessionManager(): SessionManager {
 				pending = false;
 			}
 			repoAppend(current.filePath, message);
+			if (messagesOverride) {
+				messagesOverride.push(message);
+			}
+		},
+
+		replaceMessages(messages: Message[]) {
+			messagesOverride = messages;
 		},
 
 		listSessions() {
@@ -46,6 +55,7 @@ export function createSessionManager(): SessionManager {
 		},
 
 		switchTo(sessionId: string) {
+			messagesOverride = null;
 			const sessions = listSessions();
 			const target = sessions.find((s) => s.id === sessionId);
 			if (!target) throw new Error(`Session not found: ${sessionId}`);
@@ -55,6 +65,7 @@ export function createSessionManager(): SessionManager {
 		},
 
 		createNew(name?: string) {
+			messagesOverride = null;
 			current = createSession(name);
 			pending = true;
 		},

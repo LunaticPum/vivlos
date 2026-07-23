@@ -84,28 +84,55 @@ export function createPromptBuilder(
 
 	let memoryText: string | undefined;
 	let skillsText: string | undefined;
+	let compactedHistoryText: string | undefined;
+	let cachedSP: string | undefined;
+
+	const doBuild = (): string => {
+		const sections: string[] = [];
+
+		sections.push(wrapXml("identity", identityTpl));
+
+		const envContent = substitute(environmentTpl, getEnvironmentValues());
+		sections.push(wrapXml("environment", envContent));
+
+		if (skillsText) sections.push(wrapXml("available_skills", skillsText));
+		if (memoryText) sections.push(wrapXml("memory", memoryText));
+		if (compactedHistoryText)
+			sections.push(wrapXml("compacted_history", compactedHistoryText));
+
+		sections.push(wrapXml("rules", rulesTpl));
+
+		return sections.join("\n\n");
+	};
 
 	return {
 		build() {
-			const sections: string[] = [];
-
-			sections.push(wrapXml("identity", identityTpl));
-
-			const envContent = substitute(environmentTpl, getEnvironmentValues());
-			sections.push(wrapXml("environment", envContent));
-
-			if (skillsText) sections.push(wrapXml("available_skills", skillsText));
-			if (memoryText) sections.push(wrapXml("memory", memoryText));
-
-			sections.push(wrapXml("rules", rulesTpl));
-
-			return sections.join("\n\n");
+			return doBuild();
 		},
 		setMemory(text: string) {
 			memoryText = text;
+			cachedSP = undefined;
 		},
 		setSkills(text: string) {
 			skillsText = text;
+			cachedSP = undefined;
+		},
+		setCompactedHistory(text: string) {
+			compactedHistoryText = text;
+			cachedSP = undefined;
+		},
+		freeze() {
+			cachedSP = doBuild();
+		},
+		getCached() {
+			if (cachedSP === undefined) cachedSP = doBuild();
+			return cachedSP;
+		},
+		isFrozen() {
+			return cachedSP !== undefined;
+		},
+		invalidate() {
+			cachedSP = undefined;
 		},
 	};
 }
