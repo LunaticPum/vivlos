@@ -12,6 +12,7 @@ import { t, fg, type TextChunk } from "@opentui/core";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ConversationTurn } from "../../hooks/useAgent";
 import type { ConnectionStatus } from "../../hooks/useProviderManager.js";
+import { getContextTokens, formatTokens } from "@vivlos/shared/utils/index.ts";
 
 const SPINNER = spinners.line;
 const SPINNER_INTERVAL = 80;
@@ -24,10 +25,11 @@ const C = {
 	warning: "#f9e2af",
 	success: "#a6e3a1",
 	divider: "#cba6f7",
-	bg: "#232634",
+	bg: "#1e1e2e",
 } as const;
 
 const notifColors: Record<string, (s: string) => TextChunk> = {
+	info: fg(C.success),
 	warning: fg(C.warning),
 	success: fg(C.success),
 	error: fg(C.error),
@@ -63,31 +65,40 @@ function useSessionDuration(resetKey?: string): string {
 	return `${mm}m${ss.toString().padStart(2, "0")}s`;
 }
 
-function formatTokens(n: number): string {
-	if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
-	if (n >= 10_000) return `${Math.floor(n / 1_000)}k`;
-	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-	return `${n}`;
-}
-
-function useContextBar(usage: Usage | undefined, contextWindow: number | undefined) {
+function useContextBar(
+	usage: Usage | undefined,
+	contextWindow: number | undefined,
+) {
 	const windowLabel = formatTokens(contextWindow ?? 0);
 	if (!usage || !contextWindow || contextWindow === 0) {
-		return { bar: "░".repeat(8), percent: 0, tokenLabel: `0/${windowLabel}`, barColor: C.usage };
+		return {
+			bar: "░".repeat(8),
+			percent: 0,
+			tokenLabel: `0/${windowLabel}`,
+			barColor: C.usage,
+		};
 	}
-	const used = usage.input + usage.cacheRead + usage.cacheWrite;
+	const used = getContextTokens(usage);
 	const percent = Math.round((used / contextWindow) * 100);
 	const filled = Math.round((percent / 100) * 8);
 	const bar = "█".repeat(filled) + "░".repeat(8 - filled);
 	const barColor = percent > 70 ? C.error : percent > 50 ? C.warning : C.usage;
-	return { bar, percent, tokenLabel: `${formatTokens(used)}/${windowLabel}`, barColor };
+	return {
+		bar,
+		percent,
+		tokenLabel: `${formatTokens(used)}/${windowLabel}`,
+		barColor,
+	};
 }
 
 function useSpinner(active: boolean): string {
 	const [frame, setFrame] = useState(0);
 	useEffect(() => {
 		if (!active) return;
-		const timer = setInterval(() => setFrame((f) => (f + 1) % SPINNER.frames.length), SPINNER_INTERVAL);
+		const timer = setInterval(
+			() => setFrame((f) => (f + 1) % SPINNER.frames.length),
+			SPINNER_INTERVAL,
+		);
 		return () => clearInterval(timer);
 	}, [active]);
 	return SPINNER.frames[frame]!;
@@ -107,7 +118,10 @@ export function StatusBar({
 	contextWindow,
 }: StatusBarProps) {
 	const duration = useSessionDuration(sessionId);
-	const { bar, percent, tokenLabel, barColor } = useContextBar(usage, contextWindow);
+	const { bar, percent, tokenLabel, barColor } = useContextBar(
+		usage,
+		contextWindow,
+	);
 	const spin = useSpinner(connectionStatus.state === "connecting");
 
 	const sep = " │ ";
@@ -115,7 +129,9 @@ export function StatusBar({
 
 	// ── overlay 消息（替换整条状态栏）──
 	if (notification) {
-		const fn = notification.color ? (notifColors[notification.color] ?? fg(C.warning)) : fg(C.warning);
+		// 先查 notifColors 语义键（info/warning/success/error），不命中则当 hex 颜色直传
+		const color = notification.color ?? C.warning;
+		const fn = notifColors[color] ?? fg(color);
 		content = t` ${fn(notification.message)} `;
 	} else if (exitPending) {
 		content = t` ${fg(C.warning)("再按一次 Ctrl+C 退出应用")} `;

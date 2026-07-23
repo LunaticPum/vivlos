@@ -21,13 +21,15 @@ export function initLogger(eventBus: EventBus): void {
  *
  * @param level "error" | "warn" | "info"
  * @param message 日志内容
- * @param error   可选 Error 对象（VivlosError 实例会被 toLogLine() 结构化输出）
+ * @param error  可选 Error 对象（VivlosError 实例会被 toLogLine() 结构化输出）
+ * @param onTui  true 时通知同时在 TUI StatusBar 显示（默认 false，仅日志持久化）
  */
 export function log(
 	level: "info" | "warn" | "error",
 	message: string,
 	error?: Error,
+	onTui?: boolean,
 ): void {
 	if (!bus) return;
-	bus.emit({ type: "log", level, message, error });
+	bus.emit({ type: "log", level, message, error, onTui });
 }

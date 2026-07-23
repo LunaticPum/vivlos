@@ -83,4 +83,19 @@ export type VivlosEvent =
 			readonly level: "info" | "warn" | "error";
 			readonly message: string;
 			readonly error?: Error;
+			/** true 时通知同时在 TUI StatusBar 显示（默认 false，仅日志持久化） */
+			readonly onTui?: boolean;
+	  }
+	// ———— 上下文压缩 ————
+	| {
+			readonly type: "compaction:started";
+			readonly sessionId: string;
+	  }
+	| {
+			readonly type: "compaction:ended";
+			readonly sessionId: string;
+			/** 压缩结果：true = 实际压缩了消息，false = noOp（无可压缩内容） */
+			readonly compressed: boolean;
+			/** 被压缩的消息数量（noOp 时为 0） */
+			readonly compactedCount: number;
 	  };
