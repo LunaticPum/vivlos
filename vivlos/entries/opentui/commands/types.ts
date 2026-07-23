@@ -25,6 +25,8 @@ export interface CommandContext {
 	renameSession: (name: string) => void;
 	/** /sessions <id> -- 直接切换到指定会话 */
 	switchToSession: (id: string) => void;
+	/** /compact -- 手动触发上下文压缩 */
+	compact: () => Promise<void>;
 	/** 通知总线 -- 在 StatusBar 显示一条消息（默认 3s） */
 	notify: (message: string, color?: string, duration?: number) => void;
 }

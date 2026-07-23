@@ -19,6 +19,7 @@ import type {
 	TextareaRenderable,
 	CursorChangeEvent,
 	ContentChangeEvent,
+	ScrollBoxRenderable,
 } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import type { TUICommandRegistry } from "../../commands/registry";
@@ -48,6 +49,7 @@ const inputBorder: BorderCharacters = {
 
 const MAX_LINES = 4;
 const MAX_HISTORY = 6;
+const MAX_SUGGESTIONS = 5;
 
 export interface InputBarProps {
 	/** 提交文本（非指令时触发） */
@@ -92,6 +94,8 @@ export function InputBar({
 
 	// ── textarea 实例 ──
 	const textareaRef = useRef<TextareaRenderable>(null);
+	// ── 补全框 scrollbox 实例 ──
+	const suggestionScrollRef = useRef<ScrollBoxRenderable>(null);
 
 	// ── 失焦自动抢回：除弹窗激活外，始终聚焦 textarea ──
 	const popupActiveRef = useRef(popupActive);
@@ -117,6 +121,15 @@ export function InputBar({
 		if (registry.get(query)) return [];
 		return registry.list().filter((cmd) => cmd.name.startsWith(query));
 	})();
+
+	// 选中项变化时滚动到可见位置（scrollbox 自带 scrollbar 自动显示/隐藏）
+	useEffect(() => {
+		if (slashSuggestions.length > 0) {
+			suggestionScrollRef.current?.scrollChildIntoView(
+				`sugg-${selectedSuggestionIdx}`,
+			);
+		}
+	}, [selectedSuggestionIdx, slashSuggestions.length]);
 
 	// 输入变化时重置选中项
 	useEffect(() => {
@@ -294,21 +307,25 @@ export function InputBar({
 					right={2}
 					zIndex={50}
 					backgroundColor={C.suggestionBg}
-					paddingX={1}
 					flexDirection="column"
 				>
-					{slashSuggestions.map((cmd, i) => (
-						<box key={cmd.name} flexDirection="row">
-							<box width={14}>
-								<text fg={i === selectedSuggestionIdx ? C.border : C.text}>
-									{` /${cmd.name}`}
+					<scrollbox
+						ref={suggestionScrollRef}
+						height={Math.min(slashSuggestions.length, MAX_SUGGESTIONS)}
+					>
+						{slashSuggestions.map((cmd, i) => (
+							<box key={cmd.name} id={`sugg-${i}`} flexDirection="row" paddingX={1}>
+								<box width={14}>
+									<text fg={i === selectedSuggestionIdx ? C.border : C.text}>
+										{` /${cmd.name}`}
+									</text>
+								</box>
+								<text fg={i === selectedSuggestionIdx ? C.border : C.subtext}>
+									{cmd.description}
 								</text>
 							</box>
-							<text fg={i === selectedSuggestionIdx ? C.border : C.subtext}>
-								{cmd.description}
-							</text>
-						</box>
-					))}
+						))}
+					</scrollbox>
 				</box>
 			)}
 			<box
