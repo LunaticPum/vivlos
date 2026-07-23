@@ -18,8 +18,19 @@ export interface MessageEntry {
 	[key: string]: unknown;
 }
 
-/** 所有 entry 类型的 union（未来扩展 compaction / label） */
-export type SessionEntry = MessageEntry;
+/** Compaction entry -- 记录一次上下文压缩的摘要和元信息 */
+export interface CompactionEntry {
+	type: "compaction";
+	/** 压缩生成的结构化摘要文本 */
+	summary: string;
+	/** 被压缩的消息数量（middle 段） */
+	compactedCount: number;
+	/** 压缩时间戳 */
+	timestamp: number;
+}
+
+/** 所有 entry 类型的 union */
+export type SessionEntry = MessageEntry | CompactionEntry;
 
 /** Session 列表项元信息 */
 export interface SessionMeta {

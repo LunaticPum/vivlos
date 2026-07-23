@@ -2,8 +2,9 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, unlinkSync, re
 import { resolve, join } from "node:path";
 import { getSessionsDir } from "../../paths.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
-import type { Message } from "@earendil-works/pi-ai";
-import type { SessionHeader, SessionEntry, SessionMeta, MessageEntry } from "./types.ts";
+import { getContextTokens } from "@vivlos/shared/utils/tokens.ts";
+import type { Message, Usage } from "@earendil-works/pi-ai";
+import type { SessionHeader, SessionEntry, SessionMeta, MessageEntry, CompactionEntry } from "./types.ts";
 import { toMessageEntry, toMessage } from "./types.ts";
 
 /**
@@ -101,8 +102,7 @@ export function listSessions(): SessionMeta[] {
 		for (const m of messages) {
 			if (m.role === "user") turnCount++;
 			if (m.role === "assistant" && m.usage) {
-				const u = m.usage as { input: number; cacheRead: number; cacheWrite: number };
-				totalTokens = u.input + u.cacheRead + u.cacheWrite;
+				totalTokens = getContextTokens(m.usage as Usage);
 			}
 		}
 		return {
@@ -134,4 +134,12 @@ export function renameSession(filePath: string, name: string): void {
 /** 追加 Message（自动转为 entry） */
 export function appendMessage(filePath: string, message: Message): void {
 	appendEntry(filePath, toMessageEntry(message));
+}
+
+/** 追加 Compaction entry（记录一次压缩的摘要） */
+export function appendCompaction(
+	filePath: string,
+	entry: CompactionEntry,
+): void {
+	appendEntry(filePath, entry);
 }
