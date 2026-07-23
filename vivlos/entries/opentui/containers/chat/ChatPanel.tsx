@@ -16,6 +16,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { ChatArea } from "./ChatArea";
 import { StatusBar } from "./StatusBar";
+import { formatTokens } from "@vivlos/shared/utils/index.ts";
 import { InputBar } from "./InputBar";
 import { InfoBar } from "./InfoBar";
 import { useNotification } from "../../hooks/useNotification";
@@ -40,14 +41,6 @@ import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
-
-/** 格式化 context window 为简洁后缀 */
-function fmtCtx(n?: number): string | undefined {
-	if (!n) return undefined;
-	if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
-	if (n >= 1000) return `${Math.floor(n / 1000)}k`;
-	return `${n}`;
-}
 
 /** 截断字符串，超长用 ... 替代（仅用于显示，不影响存储） */
 function truncate(s: string, max: number): string {
@@ -94,11 +87,13 @@ export function Chat({
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
 	const [showHelp, setShowHelp] = useState(false);
+	// sessions 弹窗删除后递增，触发列表重渲染
+	const [sessionsVersion, setSessionsVersion] = useState(0);
 	const [currentSessionId, setCurrentSessionId] = useState(
 		agent.getSessionId(),
 	);
 	const [showWelcome, setShowWelcome] = useState(true);
-	const { notification, notify } = useNotification();
+	const { notification, notify } = useNotification(eventBus);
 	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
 	const sessionLabel = agent.getSessionName() ?? currentSessionId;
 
@@ -150,6 +145,9 @@ export function Chat({
 				switchSession(id);
 				setCurrentSessionId(id);
 				setShowWelcome(false);
+			},
+			compact: async () => {
+				await agent.compact();
 			},
 			notify,
 		}),
@@ -272,7 +270,7 @@ export function Chat({
 								return {
 									id: entry,
 									label: `[${truncate(p, 10)}] ${m}`,
-									suffix: fmtCtx(llm.getModel(p, m)?.contextWindow),
+									suffix: formatTokens(llm.getModel(p, m)?.contextWindow ?? 0) || undefined,
 								};
 							})}
 						allItems={llm
@@ -280,7 +278,7 @@ export function Chat({
 							.map<SelectionItem>((m) => ({
 								id: `${llm.getDefaultProvider()}/${m.id}`,
 								label: m.id,
-								suffix: fmtCtx(m.contextWindow),
+								suffix: formatTokens(m.contextWindow),
 							}))}
 						currentItemId={`${llm.getDefaultProvider()}/${llm.getDefaultModelId()}`}
 						onSelect={handleModelSelect}
@@ -327,19 +325,14 @@ export function Chat({
 					zIndex={100}
 				>
 					{(() => {
+						void sessionsVersion; // 删除后重渲染
 						const sessions = agent.listSessions();
 						const current = sessions.find((s) => s.id === currentSessionId);
 						const others = sessions.filter((s) => s.id !== currentSessionId);
-						const fmtTok = (n: number) =>
-							n >= 1_000_000
-								? `${Math.floor(n / 1_000_000)}M`
-								: n >= 1000
-									? `${Math.floor(n / 1000)}k`
-									: `${n}`;
 						const toItem = (s: (typeof sessions)[number]): SelectionItem => ({
 							id: s.id,
 							label: s.name ?? s.id,
-							suffix: `${s.turnCount} msg / ${fmtTok(s.totalTokens)}`,
+							suffix: `${s.turnCount} msg / ${formatTokens(s.totalTokens)}`,
 						});
 						return (
 							<SelectionPopup
@@ -347,13 +340,17 @@ export function Chat({
 								recentItems={others.map(toItem)}
 								allItems={current ? [toItem(current)] : []}
 								currentItemId={currentSessionId}
-								onSelect={(id) => {
-									switchSession(id);
-									setCurrentSessionId(id);
-									setShowWelcome(false);
-									setPopupState("none");
-								}}
-								onClose={() => setPopupState("none")}
+							onSelect={(id) => {
+								switchSession(id);
+								setCurrentSessionId(id);
+								setShowWelcome(false);
+								setPopupState("none");
+							}}
+							onClose={() => setPopupState("none")}
+							onDelete={(id) => {
+								agent.deleteSession(id);
+								setSessionsVersion((v) => v + 1);
+							}}
 							/>
 						);
 					})()}

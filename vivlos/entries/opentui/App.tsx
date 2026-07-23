@@ -5,7 +5,7 @@ import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
 
 const C = {
-	bg: "#11111b",
+	bg: "#24273a",
 } as const;
 
 export function App({
