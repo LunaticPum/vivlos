@@ -12,7 +12,12 @@ import type { SessionManager } from "@vivlos/agent/session/index.ts";
 import type { MemoryManager } from "@vivlos/agent/memory/types.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
-import { compact, type CompactorDeps, type CompactionState, type CompactionResult } from "../compression/index.ts";
+import {
+	compact,
+	type CompactorDeps,
+	type CompactionState,
+	type CompactionResult,
+} from "../compression/index.ts";
 import type { CompressionConfig } from "@vivlos/infra/config/index.ts";
 import { loadConfig } from "@vivlos/infra/config/index.ts";
 import { appendCompaction } from "@vivlos/infra/storage/session/index.ts";
@@ -84,49 +89,53 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 
-		// --- 1.5 压缩检查（在构建 context 前检查是否需要压缩） ---
-		if (config.model.contextWindow > 0) {
-			const compactorDeps: CompactorDeps = {
-				llm: deps.llm,
-				model: resolveCompressionModel(deps.llm, compressionConfig, config.model),
-				config: compressionConfig,
-			};
-			const result = await compact({
-				messages: [...sessionManager.getMessages()],
-				contextWindow: config.model.contextWindow,
-				deps: compactorDeps,
-				state: compactionState,
-				signal: config.signal,
-			});
-			if (!result.noOp) {
-				sessionManager.replaceMessages(result.messages);
-				promptBuilder.setCompactedHistory(result.summary);
-				promptBuilder.invalidate();
-				// 写 compaction entry 到 JSONL（审计用）
-				appendCompaction(sessionManager.filePath, {
-					type: "compaction",
-					summary: result.summary,
-					compactedCount: result.compactedCount,
-					timestamp: Date.now(),
+			// --- 1.5 压缩检查（在构建 context 前检查是否需要压缩） ---
+			if (config.model.contextWindow > 0) {
+				const compactorDeps: CompactorDeps = {
+					llm: deps.llm,
+					model: resolveCompressionModel(
+						deps.llm,
+						compressionConfig,
+						config.model,
+					),
+					config: compressionConfig,
+				};
+				const result = await compact({
+					messages: [...sessionManager.getMessages()],
+					contextWindow: config.model.contextWindow,
+					deps: compactorDeps,
+					state: compactionState,
+					signal: config.signal,
 				});
+				if (!result.noOp) {
+					sessionManager.replaceMessages(result.messages);
+					promptBuilder.setCompactedHistory(result.summary);
+					promptBuilder.invalidate();
+					// 写 compaction entry 到 JSONL（审计用）
+					appendCompaction(sessionManager.filePath, {
+						type: "compaction",
+						summary: result.summary,
+						compactedCount: result.compactedCount,
+						timestamp: Date.now(),
+					});
+				}
 			}
-		}
 
-		// --- 2. Lazy freeze: SP 未冻结时读 memory + 冻结（session 启动/切换/压缩后首次） ---
-		if (!promptBuilder.isFrozen()) {
-			const memoryBlock = await params.memoryManager.buildPrompt();
-			if (memoryBlock) {
-				promptBuilder.setMemory(memoryBlock);
+			// --- 2. Lazy freeze: SP 未冻结时读 memory + 冻结（session 启动/切换/压缩后首次） ---
+			if (!promptBuilder.isFrozen()) {
+				const memoryBlock = await params.memoryManager.buildPrompt();
+				if (memoryBlock) {
+					promptBuilder.setMemory(memoryBlock);
+				}
+				promptBuilder.freeze();
 			}
-			promptBuilder.freeze();
-		}
 
-		// --- 3. 构造 AgentContext（SP 复用 session 级冻结快照） ---
-		const context: AgentContext = {
-			systemPrompt: promptBuilder.getCached(),
-			messages: [...sessionManager.getMessages()],
-			tools: params.tools ?? [],
-		};
+			// --- 3. 构造 AgentContext（SP 复用 session 级冻结快照） ---
+			const context: AgentContext = {
+				systemPrompt: promptBuilder.getCached(),
+				messages: [...sessionManager.getMessages()],
+				tools: params.tools ?? [],
+			};
 
 			// --- 4. 构造 streamFn -- 桥接 LLMClient -> StreamFn ---
 			// --- 4. 构造 streamFn -- 桥接 LLMClient -> pi StreamFn ---
@@ -191,7 +200,11 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			} catch (err) {
 				const error = err instanceof Error ? err : new Error(String(err));
 				log("error", error.message, error);
-				deps.eventBus.emit({ type: "agent:error", sessionId: sessionManager.id, error });
+				deps.eventBus.emit({
+					type: "agent:error",
+					sessionId: sessionManager.id,
+					error,
+				});
 				return { messages: [], turns: turn, error };
 			}
 		},
@@ -207,30 +220,47 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 		/** 手动触发压缩（/compact 命令用，跳过阈值和防抖） */
 		async compactNow(model: Model<Api>): Promise<CompactionResult> {
+			deps.eventBus.emit({
+				type: "compaction:started",
+				sessionId: sessionManager.id,
+			});
 			const compactorDeps: CompactorDeps = {
 				llm: deps.llm,
 				model: resolveCompressionModel(deps.llm, compressionConfig, model),
 				config: compressionConfig,
 			};
-			const result = await compact({
-				messages: [...sessionManager.getMessages()],
-				contextWindow: model.contextWindow,
-				deps: compactorDeps,
-				state: compactionState,
-				force: true,
-			});
-			if (!result.noOp) {
-				sessionManager.replaceMessages(result.messages);
-				promptBuilder.setCompactedHistory(result.summary);
-				promptBuilder.invalidate();
-				appendCompaction(sessionManager.filePath, {
-					type: "compaction",
-					summary: result.summary,
-					compactedCount: result.compactedCount,
-					timestamp: Date.now(),
+			let compressed = false;
+			let compactedCount = 0;
+			try {
+				const result = await compact({
+					messages: [...sessionManager.getMessages()],
+					contextWindow: model.contextWindow,
+					deps: compactorDeps,
+					state: compactionState,
+					force: true,
+				});
+				if (!result.noOp) {
+					sessionManager.replaceMessages(result.messages);
+					promptBuilder.setCompactedHistory(result.summary);
+					promptBuilder.invalidate();
+					appendCompaction(sessionManager.filePath, {
+						type: "compaction",
+						summary: result.summary,
+						compactedCount: result.compactedCount,
+						timestamp: Date.now(),
+					});
+					compressed = true;
+					compactedCount = result.compactedCount;
+				}
+				return result;
+			} finally {
+				deps.eventBus.emit({
+					type: "compaction:ended",
+					sessionId: sessionManager.id,
+					compressed,
+					compactedCount,
 				});
 			}
-			return result;
 		},
 	};
 }
