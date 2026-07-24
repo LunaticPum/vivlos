@@ -21,6 +21,8 @@ import { InputBar } from "./InputBar";
 import { InfoBar } from "./InfoBar";
 import { useNotification } from "../../hooks/useNotification";
 import { useExitHandler } from "../../hooks/useExitHandler";
+import { log } from "@vivlos/infra/logger/logger.ts";
+import { loadConfig } from "@vivlos/infra/config/index.ts";
 import { useProviderManager } from "../../hooks/useProviderManager.js";
 import {
 	SelectionPopup,
@@ -93,9 +95,22 @@ export function Chat({
 		agent.getSessionId(),
 	);
 	const [showWelcome, setShowWelcome] = useState(true);
-	const { notification, notify } = useNotification(eventBus);
+	const [compressing, setCompressing] = useState(false);
+	const { notification } = useNotification(eventBus);
 	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
 	const sessionLabel = agent.getSessionName() ?? currentSessionId;
+
+	// ── 压缩状态：监听 EventBus compaction 事件 ──
+	useEffect(() => {
+		const offStart = eventBus.on("compaction:started", () =>
+			setCompressing(true),
+		);
+		const offEnd = eventBus.on("compaction:ended", () => setCompressing(false));
+		return () => {
+			offStart();
+			offEnd();
+		};
+	}, [eventBus]);
 
 	// ── Provider 管理（抽取到 useProviderManager hook）──
 	const {
@@ -131,7 +146,12 @@ export function Chat({
 			clearConversation,
 			newSession: () => {
 				if (agent.listSessions().length >= 10) {
-					notify("已达 10 个会话上限，请删除或压缩旧会话", "warning");
+					log(
+						"warn",
+						"已达 10 个会话上限，请删除或压缩旧会话",
+						undefined,
+						true,
+					);
 					return;
 				}
 				useNewSession();
@@ -147,11 +167,49 @@ export function Chat({
 				setShowWelcome(false);
 			},
 			compact: async () => {
-				await agent.compact();
+				const messages = agent.getMessages();
+				if (messages.length === 0) {
+					log("warn", "无对话内容可压缩", undefined, true);
+					return;
+				}
+				if (!messages.some((m) => m.role === "assistant")) {
+					log(
+						"warn",
+						"首轮对话无法压缩，至少完成一轮对话后使用",
+						undefined,
+						true,
+					);
+					return;
+				}
+				const { protectLastN } = loadConfig().compression;
+				if (messages.length < protectLastN * 2) {
+					log("warn", "对话过短，无需压缩", undefined, true);
+					return;
+				}
+				log("warn", "正在压缩上下文...", undefined, true);
+				try {
+					const result = await agent.compact();
+					if (result.noOp) {
+						log("warn", "无可压缩内容", undefined, true);
+					} else {
+						log(
+							"info",
+							`上下文压缩完成（${result.compactedCount} 条消息）`,
+							undefined,
+							true,
+						);
+					}
+				} catch (err) {
+					log(
+						"error",
+						`压缩失败: ${err instanceof Error ? err.message : String(err)}`,
+						undefined,
+						true,
+					);
+				}
 			},
-			notify,
 		}),
-		[clearConversation, agent, switchSession, useNewSession, notify],
+		[clearConversation, agent, switchSession, useNewSession],
 	);
 
 	// ── InputBar 提交：走 checkCommand 派发 ──
@@ -165,10 +223,10 @@ export function Chat({
 			}
 			// 命令已执行，不改 showWelcome（弹窗类命令不应退出欢迎窗口）
 			if (result.error) {
-				notify(result.error, "error");
+				log("error", result.error, undefined, true);
 			}
 		},
-		[registry, cmdCtx, submit, notify],
+		[registry, cmdCtx, submit],
 	);
 
 	const hasCompletedConversation = conversationTurns.some(
@@ -246,6 +304,8 @@ export function Chat({
 					loading={loading}
 					detailExpanded={detailExpanded}
 					hasCompletedConversation={hasCompletedConversation}
+					compressing={compressing}
+					compressingModel={currentLabel}
 				/>
 			</box>
 
@@ -270,7 +330,9 @@ export function Chat({
 								return {
 									id: entry,
 									label: `[${truncate(p, 10)}] ${m}`,
-									suffix: formatTokens(llm.getModel(p, m)?.contextWindow ?? 0) || undefined,
+									suffix:
+										formatTokens(llm.getModel(p, m)?.contextWindow ?? 0) ||
+										undefined,
 								};
 							})}
 						allItems={llm
@@ -340,17 +402,17 @@ export function Chat({
 								recentItems={others.map(toItem)}
 								allItems={current ? [toItem(current)] : []}
 								currentItemId={currentSessionId}
-							onSelect={(id) => {
-								switchSession(id);
-								setCurrentSessionId(id);
-								setShowWelcome(false);
-								setPopupState("none");
-							}}
-							onClose={() => setPopupState("none")}
-							onDelete={(id) => {
-								agent.deleteSession(id);
-								setSessionsVersion((v) => v + 1);
-							}}
+								onSelect={(id) => {
+									switchSession(id);
+									setCurrentSessionId(id);
+									setShowWelcome(false);
+									setPopupState("none");
+								}}
+								onClose={() => setPopupState("none")}
+								onDelete={(id) => {
+									agent.deleteSession(id);
+									setSessionsVersion((v) => v + 1);
+								}}
 							/>
 						);
 					})()}
