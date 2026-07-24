@@ -8,7 +8,7 @@
  * 替代默认的 InMemoryCredentialStore，实现 API key 重启不丢失。
  */
 
-import type { Credential, CredentialStore } from "@earendil-works/pi-ai";
+import type { Credential, CredentialStore, CredentialInfo } from "@earendil-works/pi-ai";
 import type { ConfigRepository } from "./config-repo.ts";
 
 /**
@@ -36,6 +36,18 @@ export function createSqliteCredentialStore(
 
     async delete(providerId) {
       configRepo.remove(`credential:${providerId}`);
+    },
+
+    async list(): Promise<readonly CredentialInfo[]> {
+      const PREFIX = "credential:";
+      return configRepo
+        .listKeys(PREFIX)
+        .map((key) => {
+          const cred = configRepo.get<Credential>(key);
+          if (!cred) return null;
+          return { providerId: key.slice(PREFIX.length), type: cred.type };
+        })
+        .filter((c): c is CredentialInfo => c !== null);
     },
   };
 }

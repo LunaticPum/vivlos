@@ -11,9 +11,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.80.3",
+		"@earendil-works/pi-agent-core": "^0.80.10",
 		"@earendil-works/pi-ai": "^0.82.0",
-		"@earendil-works/pi-tui": "^0.80.3",
+		"@earendil-works/pi-tui": "^0.80.10",
 		"@opentui-ui/dialog": "^0.1.2",
 		"@opentui-ui/toast": "^0.0.5",
 		"@opentui/core": "^0.4.3",
@@ -34,5 +34,8 @@
 		"tsx": "4.22.1",
 		"typescript": "5.9.3",
 		"vitest": "4.1.0"
+	},
+	"overrides": {
+		"@earendil-works/pi-ai": "^0.82.0"
 	}
 }

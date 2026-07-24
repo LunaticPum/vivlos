@@ -137,10 +137,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				tools: params.tools ?? [],
 			};
 
-			// --- 4. 构造 streamFn -- 桥接 LLMClient -> StreamFn ---
 			// --- 4. 构造 streamFn -- 桥接 LLMClient -> pi StreamFn ---
-			// 适配函数：从 SimpleStreamOptions 提取 signal + reasoning 传给 LLMClient.stream
-			// 返回类型 AssistantMessageEventStream 是 StreamFn 期望类型的子类型（协变）
 			const streamFn: StreamFn = (model, context, options) => {
 				return deps.llm.stream(model, context, {
 					signal: options?.signal,
