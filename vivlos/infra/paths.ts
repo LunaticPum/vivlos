@@ -68,6 +68,26 @@ export function ensureSessionsDir(): string {
 	return ensureDir(getSessionsDir());
 }
 
+/** 获取 tasks 目录路径（跨 session 长期目标） */
+export function getTasksDir(): string {
+	return resolve(getVivlosDir(), "tasks");
+}
+
+/** 确保 tasks 目录存在 */
+export function ensureTasksDir(): string {
+	return ensureDir(getTasksDir());
+}
+
+/** 获取 memories 目录路径（L1 Markdown 记忆） */
+export function getMemoriesDir(): string {
+	return resolve(getVivlosDir(), "memories");
+}
+
+/** 确保 memories 目录存在 */
+export function ensureMemoriesDir(): string {
+	return ensureDir(getMemoriesDir());
+}
+
 /** 获取临时文件目录路径 */
 export function getTempDir(): string {
 	return resolve(getVivlosDir(), "temp");

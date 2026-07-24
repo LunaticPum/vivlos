@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import type { VivlosEvent } from "./types.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
 
-export type { VivlosEvent } from "./types.ts";
+export type { VivlosEvent, TodoItem, TaskItem } from "./types.ts";
 
 /**
  * vivlos 事件总线接口。

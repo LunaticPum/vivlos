@@ -98,4 +98,60 @@ export type VivlosEvent =
 			readonly compressed: boolean;
 			/** 被压缩的消息数量（noOp 时为 0） */
 			readonly compactedCount: number;
+	  }
+	// ———— todo（session 级短期任务） ————
+	| {
+			readonly type: "todo:updated";
+			readonly sessionId: string;
+			readonly todos: TodoItem[];
+	  }
+	// ———— task（跨 session 长期目标） ————
+	| {
+			readonly type: "task:created";
+			readonly listName: string;
+			readonly task: TaskItem;
+	  }
+	| {
+			readonly type: "task:updated";
+			readonly listName: string;
+			readonly task: TaskItem;
+	  }
+	| {
+			readonly type: "task:completed";
+			readonly listName: string;
+			readonly taskId: string;
+	  }
+	// ———— offer_choice（TUI 交互选择） ————
+	| {
+			readonly type: "offer_choice:pending";
+			readonly resolveId: string;
+			readonly prompt: string;
+			readonly choices: readonly string[];
+			readonly multiple: boolean;
+	  }
+	| {
+			readonly type: "offer_choice:resolved";
+			readonly resolveId: string;
+			readonly selection: string | readonly string[];
 	  };
+
+// #region 共享类型（事件 + tool + SideBar 共用）
+
+/** todo 条目 */
+export interface TodoItem {
+	readonly content: string;
+	readonly status: "pending" | "in_progress" | "completed" | "cancelled";
+	readonly priority?: "high" | "medium" | "low";
+}
+
+/** task 条目（长期目标） */
+export interface TaskItem {
+	readonly id: string;
+	readonly title: string;
+	readonly description?: string;
+	readonly status: "pending" | "in_progress" | "completed";
+	readonly createdAt: number;
+	readonly completedAt?: number;
+}
+
+// #endregion
