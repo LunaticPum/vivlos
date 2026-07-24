@@ -78,7 +78,6 @@ export function Chat({
 	const {
 		conversationTurns,
 		loading,
-		error,
 		submit,
 		abort,
 		clearConversation,
@@ -266,7 +265,6 @@ export function Chat({
 				<StatusBar
 					modelLabel={currentLabel}
 					loading={loading}
-					error={error}
 					turnStatus={lastStatus}
 					connectionStatus={connectionStatus}
 					connected={connected}

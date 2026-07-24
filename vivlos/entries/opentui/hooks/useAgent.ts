@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
+import { log } from "@vivlos/infra/logger/logger.ts";
 
 // #region 类型
 
@@ -46,7 +47,6 @@ export interface ConversationTurn {
 export interface UseAgentResult {
 	conversationTurns: ConversationTurn[];
 	loading: boolean;
-	error: string | null;
 	submit: (text: string) => void;
 	abort: () => void;
 	clearConversation: () => void;
@@ -179,7 +179,6 @@ export function useAgent(
 ): UseAgentResult {
 	const [conversationTurns, setTurns] = useState<ConversationTurn[]>([]);
 	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 
 	// #region useAgent hook
 
@@ -194,7 +193,6 @@ export function useAgent(
 		unsubs.push(
 			eventBus.on("agent:start", () => {
 				setLoading(true);
-				setError(null);
 			}),
 		);
 
@@ -361,7 +359,7 @@ export function useAgent(
 				setLoading(false);
 
 				const isAborted = e.error.message.toLowerCase().includes("abort");
-				if (!isAborted) setError(e.error.message);
+				if (!isAborted) log("error", e.error.message, e.error, true);
 
 				const idx = currentIdxRef.current;
 				setTurns((prev) =>
@@ -388,7 +386,6 @@ export function useAgent(
 			if (!text.trim()) return;
 			currentIdxRef.current = conversationTurns.length; // 注意 turns 数组不能被清空，ChatArea 组件会渲染所有的 turns，从而确保终端的历史条目信息都可见
 
-			setError(null);
 			setTurns((prev) => [
 				...prev,
 				{
@@ -409,14 +406,12 @@ export function useAgent(
 				.prompt(text, controller.signal)
 				.then((result) => {
 					// 如果 loop 返回了 error 但没走 catch（比如 turn_end 里的 error 事件）
-					if (result.error && !controller.signal.aborted) {
-						setError(result.error.message);
-					}
-				})
-				.catch((err) => {
-					setError(
-						`fatal: ${err instanceof Error ? err.message : String(err)}`,
-					);
+				if (result.error && !controller.signal.aborted) {
+					log("error", result.error.message, result.error, true);
+				}
+			})
+			.catch((err) => {
+				log("error", `fatal: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err : undefined, true);
 					setLoading(false);
 					currentIdxRef.current = -1;
 				});
@@ -444,7 +439,6 @@ export function useAgent(
 	/** 清空当前会话（仅清TUI，不删JSONL消息） */
 	const clearConversation = useCallback(() => {
 		setTurns([]);
-		setError(null);
 		setLoading(false);
 		currentIdxRef.current = -1;
 	}, []);
@@ -453,7 +447,6 @@ export function useAgent(
 	const switchSession = useCallback((sessionId: string) => {
 		agent.switchSession(sessionId);
 		setTurns(messagesToTurns(agent.getMessages()));
-		setError(null);
 		setLoading(false);
 		currentIdxRef.current = -1;
 	}, [agent]);
@@ -462,10 +455,9 @@ export function useAgent(
 	const newSession = useCallback(() => {
 		agent.createNewSession();
 		setTurns([]);
-		setError(null);
 		setLoading(false);
 		currentIdxRef.current = -1;
 	}, [agent]);
 
-	return { conversationTurns, loading, error, submit, abort, clearConversation, switchSession, newSession };
+	return { conversationTurns, loading, submit, abort, clearConversation, switchSession, newSession };
 }

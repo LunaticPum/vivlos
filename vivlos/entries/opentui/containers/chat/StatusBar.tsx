@@ -38,7 +38,6 @@ const notifColors: Record<string, (s: string) => TextChunk> = {
 export interface StatusBarProps {
 	modelLabel: string;
 	loading?: boolean;
-	error?: string | null;
 	turnStatus?: ConversationTurn["status"];
 	connectionStatus?: ConnectionStatus;
 	connected?: boolean;
@@ -106,7 +105,6 @@ function useSpinner(active: boolean): string {
 
 export function StatusBar({
 	modelLabel,
-	error = null,
 	turnStatus,
 	connectionStatus = { state: "idle" },
 	connected = true,
@@ -155,8 +153,6 @@ export function StatusBar({
 
 		if (turnStatus === "aborted") {
 			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${fg(C.divider)("id:")}${segSession}${d}${segClock}${d}${fg(C.warning)("⚠️ 请求已中断")} `;
-		} else if (error) {
-			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${fg(C.divider)("id:")}${segSession}${d}${segClock}${d}${fg(C.error)(`✗ ${error}`)} `;
 		} else {
 			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${fg(C.divider)("id:")}${segSession}${d}${segClock} `;
 		}
