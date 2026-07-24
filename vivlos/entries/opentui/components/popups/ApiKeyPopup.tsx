@@ -33,7 +33,7 @@ export function ApiKeyPopup({ provider, onSubmit, onClose }: ApiKeyPopupProps) {
 
 	return (
 		<box
-			width="35%"
+			width="45%"
 			height="25%"
 			border={true}
 			borderStyle="rounded"
