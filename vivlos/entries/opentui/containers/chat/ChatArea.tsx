@@ -12,6 +12,7 @@ import { AgentMessageCard } from "../../components/AgentMessageCard";
 import { WelcomeScreen } from "../../components/WelcomeScreen";
 import type { ConversationTurn } from "../../hooks/useAgent";
 import type { ScrollAcceleration } from "@opentui/core";
+import type { PiAiVersionInfo } from "@vivlos/infra/version.ts";
 
 const colors = getColors();
 
@@ -30,6 +31,7 @@ export interface ChatAreaProps {
 		sessionId: string;
 		modelLabel: string;
 		version: string;
+		piAi: PiAiVersionInfo;
 	};
 }
 
@@ -42,6 +44,7 @@ export function ChatArea({ conversationTurns, detailExpanded, showWelcome, welco
 					sessionId={welcomeInfo.sessionId}
 					modelLabel={welcomeInfo.modelLabel}
 					version={welcomeInfo.version}
+					piAi={welcomeInfo.piAi}
 				/>
 			) : (
 				<box flexGrow={1} overflow="hidden" width="100%">

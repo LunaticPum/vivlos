@@ -3,6 +3,7 @@ import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
+import type { PiAiVersionInfo } from "@vivlos/infra/version.ts";
 
 const C = {
 	bg: "#24273a",
@@ -14,6 +15,7 @@ export function App({
 	eventBus,
 	llm,
 	llmConfigRepo,
+	piAiVersion,
 	onExit,
 }: {
 	modelLabel: string;
@@ -21,6 +23,7 @@ export function App({
 	eventBus: EventBus;
 	llm: LLMClient;
 	llmConfigRepo: LLMConfigRepository;
+	piAiVersion: PiAiVersionInfo;
 	onExit: () => void;
 }) {
 	return (
@@ -31,6 +34,7 @@ export function App({
 				eventBus={eventBus}
 				llm={llm}
 				llmConfigRepo={llmConfigRepo}
+				piAiVersion={piAiVersion}
 				onExit={onExit}
 			/>
 		</box>

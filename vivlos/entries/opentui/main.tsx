@@ -32,6 +32,7 @@ import {
 	getMemoriesDir,
 } from "@vivlos/infra/paths.ts";
 import { ensureConfig } from "@vivlos/infra/config/index.ts";
+import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
@@ -160,6 +161,7 @@ async function main(): Promise<void> {
 
 	// ── 装配 OpenTUI ──
 	const modelLabel = `${llmConfig.defaultProvider}/${llmConfig.defaultModelId}`;
+	const piAiVersion = await checkPiAiVersion();
 	const renderer = await createCliRenderer({ exitOnCtrlC: false });
 	createRoot(renderer).render(
 		<App
@@ -168,6 +170,7 @@ async function main(): Promise<void> {
 			eventBus={eventBus}
 			llm={llm}
 			llmConfigRepo={llmConfigRepo}
+			piAiVersion={piAiVersion}
 			onExit={cleanup}
 		/>,
 	);

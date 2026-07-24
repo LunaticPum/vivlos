@@ -43,6 +43,7 @@ import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
+import type { PiAiVersionInfo } from "@vivlos/infra/version.ts";
 
 /** 截断字符串，超长用 ... 替代（仅用于显示，不影响存储） */
 function truncate(s: string, max: number): string {
@@ -55,6 +56,7 @@ export interface ChatProps {
 	eventBus: EventBus;
 	llm: LLMClient;
 	llmConfigRepo: LLMConfigRepository;
+	piAiVersion: PiAiVersionInfo;
 	/** 退出应用回调（双击 Ctrl+C 触发） */
 	onExit: () => void;
 }
@@ -73,6 +75,7 @@ export function Chat({
 	eventBus,
 	llm,
 	llmConfigRepo,
+	piAiVersion,
 	onExit,
 }: ChatProps) {
 	const {
@@ -259,6 +262,7 @@ export function Chat({
 					sessionId: currentSessionId,
 					modelLabel: currentLabel,
 					version: "1.0.0",
+					piAi: piAiVersion,
 				}}
 			/>
 			<box paddingX={2} flexShrink={0}>
