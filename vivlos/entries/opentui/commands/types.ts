@@ -27,8 +27,6 @@ export interface CommandContext {
 	switchToSession: (id: string) => void;
 	/** /compact -- 手动触发上下文压缩 */
 	compact: () => Promise<void>;
-	/** 通知总线 -- 在 StatusBar 显示一条消息（默认 3s） */
-	notify: (message: string, color?: string, duration?: number) => void;
 }
 
 /** TUI Slash 命令 */

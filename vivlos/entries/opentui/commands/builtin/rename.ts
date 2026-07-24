@@ -3,6 +3,7 @@
  */
 
 import type { TUICommand } from "../types.ts";
+import { log } from "@vivlos/infra/logger/logger.ts";
 
 export const renameCommand: TUICommand = {
 	name: "rename",
@@ -10,10 +11,10 @@ export const renameCommand: TUICommand = {
 	execute: (ctx, args) => {
 		const name = args.trim();
 		if (!name) {
-			ctx.notify("请通过 /rename <name> 重命名当前会话", "warning");
+			log("warn", "请通过 /rename <name> 重命名当前会话", undefined, true);
 			return;
 		}
 		ctx.renameSession(name);
-		ctx.notify(`当前会话已重命名为 ${name}`, "success");
+		log("info", `当前会话已重命名为 ${name}`, undefined, true);
 	},
 };
