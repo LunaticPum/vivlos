@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, appendFileSync, existsSync, unlinkSync, readdirSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, mkdirSync, rmSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
 import { getSessionsDir } from "../../paths.ts";
 import { shortId } from "@vivlos/shared/utils/id.ts";
 import { getContextTokens } from "@vivlos/shared/utils/tokens.ts";
@@ -10,18 +10,18 @@ import { toMessageEntry, toMessage } from "./types.ts";
 /**
  * JSONL Session 仓储。
  *
- * 每个 session = .vivlos/sessions/{时间戳}_{id}.jsonl 文件。
- * 延迟创建：第一条消息写入时才生成文件，之前只有 pending ID。
+ * 每个 session = .vivlos/sessions/{时间戳}_{id}/ 目录，内含 history.jsonl。
+ * 延迟创建：第一条消息写入时才生成目录和文件，之前只有 pending ID。
  */
 
-/** 生成可读的文件名时间戳 */
+/** 生成可读的目录名时间戳 */
 function tsName(): string {
 	return new Date().toISOString().replace(/T/g, "-").replace(/:/g, "-").replace(/\..+/, "");
 }
 
-/** 生成 session 文件名 */
-function sessionFileName(header: SessionHeader): string {
-	return `${tsName()}_${header.id}.jsonl`;
+/** 生成 session 目录名 */
+function sessionDirName(header: SessionHeader): string {
+	return `${tsName()}_${header.id}`;
 }
 
 /**
@@ -38,7 +38,7 @@ export function createSession(name?: string | null): { header: SessionHeader; fi
 		createdAt: new Date().toISOString(),
 		name: name ?? null,
 	};
-	const filePath = resolve(getSessionsDir(), sessionFileName(header));
+	const filePath = resolve(getSessionsDir(), sessionDirName(header), "history.jsonl");
 	return { header, filePath };
 }
 
@@ -49,6 +49,7 @@ export function createSession(name?: string | null): { header: SessionHeader; fi
  */
 export function ensureSession(header: SessionHeader, filePath: string): void {
 	if (existsSync(filePath)) return;
+	mkdirSync(dirname(filePath), { recursive: true });
 	writeFileSync(filePath, `${JSON.stringify(header)}\n`, "utf-8");
 }
 
@@ -91,9 +92,14 @@ export function listSessions(): SessionMeta[] {
 	const dir = getSessionsDir();
 	if (!existsSync(dir)) return [];
 
-	const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
-	return files.map((file) => {
-		const filePath = join(dir, file);
+	const sessionDirs = readdirSync(dir, { withFileTypes: true })
+		.filter((e) => e.isDirectory())
+		.map((e) => join(dir, e.name));
+
+	const results: SessionMeta[] = [];
+	for (const sessionDir of sessionDirs) {
+		const filePath = join(sessionDir, "history.jsonl");
+		if (!existsSync(filePath)) continue;
 		const { header, entries } = openSession(filePath);
 		const messages = entries.filter((e) => e.type === "message") as MessageEntry[];
 		const lastTs = messages.length > 0 ? messages[messages.length - 1]!.timestamp : 0;
@@ -105,7 +111,7 @@ export function listSessions(): SessionMeta[] {
 				totalTokens = getContextTokens(m.usage as Usage);
 			}
 		}
-		return {
+		results.push({
 			id: header.id,
 			name: header.name,
 			createdAt: new Date(header.createdAt).getTime(),
@@ -114,13 +120,17 @@ export function listSessions(): SessionMeta[] {
 			turnCount,
 			totalTokens,
 			filePath,
-		};
-	}).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+		});
+	}
+	return results.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
 }
 
-/** 删除 session */
+/** 删除 session（删除整个 session 目录） */
 export function deleteSession(filePath: string): void {
-	if (existsSync(filePath)) unlinkSync(filePath);
+	const dirPath = dirname(filePath);
+	if (existsSync(dirPath)) {
+		rmSync(dirPath, { recursive: true, force: true });
+	}
 }
 
 /** 重命名 session（重写 header 行） */

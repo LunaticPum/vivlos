@@ -12,6 +12,8 @@ export interface SessionManager {
 	/** 当前 session 的名称（null 表示未命名） */
 	readonly name: string | null;
 	readonly filePath: string;
+	/** session 目录路径（filePath 的父目录，todo tool 等按 session 写文件用） */
+	readonly dirPath: string;
 
 	// ── 当前 session 消息 ──
 	getMessages(): readonly Message[];

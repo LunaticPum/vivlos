@@ -1,5 +1,6 @@
 import type { Message } from "@earendil-works/pi-ai";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import type { SessionManager } from "./types.ts";
 import {
 	createSession,
@@ -29,6 +30,7 @@ export function createSessionManager(): SessionManager {
 		get id() { return current.header.id; },
 		get name() { return current.header.name; },
 		get filePath() { return current.filePath; },
+		get dirPath() { return dirname(current.filePath); },
 
 		getMessages() {
 			return messagesOverride ?? loadMessages(current.filePath);
