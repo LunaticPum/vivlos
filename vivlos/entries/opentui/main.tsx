@@ -26,6 +26,10 @@ import {
 	cleanTempDir,
 	ensureConfigDir,
 	ensureSessionsDir,
+	ensureTasksDir,
+	ensureMemoriesDir,
+	getTasksDir,
+	getMemoriesDir,
 } from "@vivlos/infra/paths.ts";
 import { ensureConfig } from "@vivlos/infra/config/index.ts";
 
@@ -33,7 +37,7 @@ import { ensureConfig } from "@vivlos/infra/config/index.ts";
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
-import { createBuiltinTools } from "@vivlos/agent/tools/index.ts";
+import { createBuiltinTools, createAdvancedTools } from "@vivlos/agent/tools/index.ts";
 import {
 	scanSkillsDir,
 	formatSkillsForPrompt,
@@ -55,6 +59,8 @@ async function main(): Promise<void> {
 	ensureConfigDir();
 	ensureConfig();
 	ensureSessionsDir();
+	ensureTasksDir();
+	ensureMemoriesDir();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
 
 	// ── SQLite 持久化层 ──
@@ -106,12 +112,23 @@ async function main(): Promise<void> {
 	const skillRegistry = scanSkillsDir(resolve(skillsDir, "builtin"), "builtin");
 	scanSkillsDir(resolve(skillsDir, "extension"), "extension", skillRegistry);
 
-	const { tools, reset: toolsReset } = createBuiltinTools(
+	const { tools: builtinTools, reset: toolsReset } = createBuiltinTools(
 		process.cwd(),
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
 	const memoryManager = createMemoryManager(dbPath);
+
+	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
+	const advancedTools = createAdvancedTools({
+		eventBus,
+		getSessionId: () => sessionManager.id,
+		getSessionDir: () => sessionManager.dirPath,
+		tasksDir: getTasksDir(),
+		memoriesDir: getMemoriesDir(),
+		memoryConfig: { memoryCap: 2200, userCap: 1375 },
+	});
+	const tools = [...builtinTools, ...advancedTools];
 
 	const promptBuilder = createPromptBuilder();
 	const skillsText = formatSkillsForPrompt(skillRegistry.list());
