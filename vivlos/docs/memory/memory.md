@@ -416,36 +416,28 @@ Dreaming Prompt 将内容分成两类：
 
 ```mermaid
 sequenceDiagram
-    participant Loop as Agent Loop
+    participant Agent as Agent Loop
     participant Dream as Dreaming
     participant LLM as 审视模型
     participant Store as MemoryStore
     participant Disk as memories/*.md
     participant Log as Logger/EventBus
 
-    Loop->>Dream: 本轮新增 messages + model + Store
+    Agent->>Dream: 本轮新增 messages + model + Store
     Dream->>LLM: Save/Skip Prompt + 对话文本
     LLM-->>Dream: text_delta 流
     Dream->>Dream: 拼接文本并解析 JSON
     alt entries 为空或 JSON 无效
-        Dream-->>Loop: 跳过
+        Dream-->>Agent: 跳过
     else 存在候选条目
-        loop 每条候选记忆
-            Dream->>Store: add(file, content)
-            Store->>Store: 执行统一安全与 cap 检查
-            alt written
-                Store->>Disk: 写盘
-                Dream->>Dream: written + 1
-            else duplicate
-                Store-->>Dream: 成功 no-op
-            else rejected
-                Store-->>Dream: error
-                Dream->>Log: warning + 拒绝原因
-            end
-        end
-        Dream->>Log: 仅报告真实写入数量
+        Dream->>Store: 依次 add 每条候选记忆
+        Store->>Store: 分别执行安全、去重与 cap 检查
+        Store->>Disk: 仅写入通过检查的条目
+        Store-->>Dream: 每条返回 written / duplicate / error
+        Dream->>Dream: 统计 written 并继续处理拒绝项
+        Dream->>Log: 报告真实写入数量与拒绝原因
     end
-    Dream-->>Loop: 完成，不返回对话消息
+    Dream-->>Agent: 完成，不返回对话消息
 ```
 
 ### 8.3 失败隔离
@@ -506,36 +498,36 @@ Memory 磁盘状态和 System Prompt 快照是两个不同状态：
 ```mermaid
 sequenceDiagram
     participant Session as Session
-    participant Loop as Agent Loop
+    participant Agent as Agent Loop
     participant Manager as MemoryManager
     participant Store as MemoryStore
     participant Prompt as PromptBuilder
     participant Tool as memory tool / Dreaming
     participant Disk as memories/*.md
 
-    Session->>Loop: 首个 Turn
-    Loop->>Prompt: isFrozen()
-    Prompt-->>Loop: false
-    Loop->>Manager: buildPrompt()
+    Session->>Agent: 首个 Turn
+    Agent->>Prompt: isFrozen()
+    Prompt-->>Agent: false
+    Agent->>Manager: buildPrompt()
     Manager->>Store: read(memory/user)
     Store->>Disk: 读取 Markdown
     Store-->>Manager: 条目 + usage
-    Manager-->>Loop: Memory block
-    Loop->>Prompt: setMemory() + freeze()
+    Manager-->>Agent: Memory block
+    Agent->>Prompt: setMemory() + freeze()
 
     Note over Prompt: 当前 session 的 System Prompt 快照
 
-    Loop->>Tool: 后续 Turn 中产生记忆写入
+    Agent->>Tool: 后续 Turn 中产生记忆写入
     Tool->>Store: add / replace / remove
     Store->>Disk: 磁盘立即更新
 
     Note over Disk,Prompt: live state 已更新，cached SP 保持不变
 
-    Session->>Loop: 新 session 首个 Turn
-    Loop->>Prompt: isFrozen() = false
-    Loop->>Manager: buildPrompt()
+    Session->>Agent: 新 session 首个 Turn
+    Agent->>Prompt: isFrozen() = false
+    Agent->>Manager: buildPrompt()
     Manager->>Disk: 读取更新后的 Markdown
-    Loop->>Prompt: freeze 新快照
+    Agent->>Prompt: freeze 新快照
 ```
 
 ### 10.2 快照失效时机
@@ -566,7 +558,7 @@ Compression 是一个显式重建例外：同一 session 内压缩成功后，�
 ```mermaid
 sequenceDiagram
     actor User
-    participant Loop as Agent Loop
+    participant Agent as Agent Loop
     participant Comp as Compression
     participant Session as SessionManager
     participant Manager as MemoryManager
@@ -577,25 +569,25 @@ sequenceDiagram
     participant Dream as Dreaming
     participant Log as Logger/EventBus
 
-    User->>Loop: 输入一条消息
-    Loop->>Comp: 检查 context 用量
+    User->>Agent: 输入一条消息
+    Agent->>Comp: 检查 context 用量
     alt 达到压缩条件
         Comp->>Session: replaceMessages()
         Comp->>Prompt: setCompactedHistory() + invalidate()
     end
 
-    Loop->>Prompt: isFrozen()
+    Agent->>Prompt: isFrozen()
     alt SP 尚未冻结或已失效
-        Loop->>Manager: buildPrompt()
+        Agent->>Manager: buildPrompt()
         Manager->>Store: read + getUsage
         Store-->>Manager: memory/user 条目
-        Manager-->>Loop: Memory block
-        Loop->>Prompt: setMemory() + freeze()
+        Manager-->>Agent: Memory block
+        Agent->>Prompt: setMemory() + freeze()
     end
 
-    Loop->>Prompt: getCached()
-    Prompt-->>Loop: Frozen System Prompt
-    Loop->>LLM: SP + session history + 当前输入
+    Agent->>Prompt: getCached()
+    Prompt-->>Agent: Frozen System Prompt
+    Agent->>LLM: SP + session history + 当前输入
 
     loop 模型工具内循环
         LLM->>Tool: tool call
@@ -606,15 +598,15 @@ sequenceDiagram
         Tool-->>LLM: tool result
     end
 
-    LLM-->>Loop: 最终回复与本轮新增消息
-    Loop->>Session: appendMessage()
-    Loop->>Dream: 审视本轮新增消息
+    LLM-->>Agent: 最终回复与本轮新增消息
+    Agent->>Session: appendMessage()
+    Agent->>Dream: 审视本轮新增消息
     Dream->>LLM: Save/Skip 请求
     LLM-->>Dream: JSON entries
     Dream->>Store: 对每条候选执行 add
     Store-->>Dream: written / duplicate / error
     Dream->>Log: 实际写入或拒绝信息
-    Loop-->>User: run() 完成
+    Agent-->>User: run() 完成
 ```
 
 当前实现中，Dreaming 位于 `run()` 返回之前，因此 UI 可能已经收到主回复流，但调用仍需等待 Dreaming 完成。
