@@ -38,7 +38,10 @@ import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
-import { createBuiltinTools, createAdvancedTools } from "@vivlos/agent/tools/index.ts";
+import {
+	createBuiltinTools,
+	createAdvancedTools,
+} from "@vivlos/agent/tools/index.ts";
 import {
 	scanSkillsDir,
 	formatSkillsForPrompt,
@@ -118,7 +121,7 @@ async function main(): Promise<void> {
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
-	const memoryManager = createMemoryManager(dbPath);
+	const memoryManager = createMemoryManager(getMemoriesDir());
 
 	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
 	const advancedTools = createAdvancedTools({

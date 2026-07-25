@@ -1,49 +1,37 @@
 /**
- * Memory 持久化层类型定义。
+ * MemoryManager -- agent 层使用的接口。
  *
- * 参照 Hermes 的双存储模型：
- * - memory：agent 的工作笔记（环境、项目进度、技术细节）
- * - user：用户画像（偏好、习惯、约束）
+ * 参照 Hermes L1 Markdown Memory（02-memory.md §1.1-1.3）。
+ * CRUD 由 memory tool 直接操作 Markdown 文件，MemoryManager 只负责：
+ * - buildPrompt(): 读取 memory.md + user.md，格式化注入 SP
+ * - getUsage(): 返回当前用量（SideBar 显示用）
  *
- * MemoryEntry / MemoryRepository 在 infra/storage/repo/memory-repo.ts 定义，
- * 此处 re-export 供 agent 层使用。
+ * Frozen Snapshot 语义：
+ * - Session 启动时 buildPrompt() 读盘 -> 冻结进 SP
+ * - memory tool 写盘后当前 session SP 不变
+ * - 下个 session 启动才带上新写入
  */
-export type { MemoryEntry, MemoryRepository } from "@vivlos/infra/storage/index.ts";
 
-/**
- * MemoryManager —— agent 层使用的接口。
- *
- * 封装 MemoryRepository，加上 prompt 注入逻辑。
- * 参照 Hermes memory tool 的设计（add/replace/remove + 字符预算）。
- */
+/** 单个文件的用量信息 */
+export interface MemoryUsage {
+	readonly used: number;
+	readonly cap: number;
+}
+
 export interface MemoryManager {
-	/** 添加 agent memory */
-	add(content: string): Promise<void>;
-	/** 替换 agent memory */
-	replace(oldText: string, newText: string): Promise<void>;
-	/** 删除 agent memory */
-	remove(oldText: string): Promise<void>;
-	/** 获取所有 agent memory */
-	list(): Promise<readonly import("@vivlos/infra/storage/index.ts").MemoryEntry[]>;
-
-	/** 设置用户画像 */
-	setProfile(content: string): Promise<void>;
-	/** 获取用户画像 */
-	getProfile(): Promise<string>;
-
 	/**
 	 * 构建注入 system prompt 的 memory 块。
 	 *
 	 * 格式参照 Hermes：
 	 * ══════════════════════════════════════════════
-	 * MEMORY (your personal notes) [XX% — used/total chars]
+	 * MEMORY (agent notes) [XX% — used/total chars]
 	 * ══════════════════════════════════════════════
 	 * entry1
+	 * ---
 	 * entry2
-	 * ...
-	 *
-	 * 字符预算：默认 2200 chars（和 Hermes 保持一致）。
-	 * 超限时精简（优先保留最近更新的条目），并追加 `...truncated` 标记。
 	 */
 	buildPrompt(): Promise<string>;
+
+	/** 获取 memory.md 和 user.md 的当前用量（SideBar 显示用） */
+	getUsage(): { memory: MemoryUsage; user: MemoryUsage };
 }
