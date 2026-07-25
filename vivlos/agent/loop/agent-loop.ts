@@ -22,6 +22,8 @@ import type { CompressionConfig } from "@vivlos/infra/config/index.ts";
 import { loadConfig } from "@vivlos/infra/config/index.ts";
 import { appendCompaction } from "@vivlos/infra/storage/session/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
+import { dreaming } from "../memory/dreaming/dreaming.ts";
+import { getMemoriesDir } from "@vivlos/infra/paths.ts";
 
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
@@ -192,6 +194,17 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						sessionManager.appendMessage(m as Message);
 					}
 				}
+
+				// --- 10. Dreaming 审视（参照 Hermes Loop 步骤 8） ---
+				// 审视本轮对话，有料写入 memory.md/user.md，无料跳过
+				// 写盘不影响当前 session SP（Frozen Snapshot），下个 session 才生效
+				await dreaming({
+					llm: deps.llm,
+					model: config.model,
+					messages: newMessages as Message[],
+					memoriesDir: getMemoriesDir(),
+					signal: config.signal,
+				});
 
 				return { messages: newMessages, turns: turn };
 			} catch (err) {
