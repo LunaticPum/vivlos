@@ -2,11 +2,11 @@
  * MemoryManager -- Markdown 文件实现。
  *
  * 参照 Hermes L1 Markdown Memory（02-memory.md §1.1-1.3）：
- * - memory.md: agent 笔记（--- 分隔，cap ~2200 字符）
- * - user.md: 用户画像（cap ~1375 字符）
+ * - memory.md: agent 笔记（--- 分隔）
+ * - user.md: 用户画像
  *
- * buildPrompt() 从 Markdown 文件读取并格式化注入 SP。
- * CRUD 由 memory tool 直接操作文件（Phase 1 已实现），不经过 MemoryManager。
+ * buildPrompt() 通过 MemoryStore 读取并格式化注入 SP。
+ * 字符上限来自 config.json，CRUD 与用量统计均以 MemoryStore 为准。
  *
  * Frozen Snapshot 语义：
  * - Session 启动时 buildPrompt() 读盘 -> 冻结进 SP
@@ -14,60 +14,38 @@
  * - 下个 session 启动才带上新写入
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
-import type { MemoryManager } from "./types.ts";
+import type { MemoryManager, MemoryStore, MemoryUsage } from "./types.ts";
 
-/** 条目分隔符（与 memory tool 保持一致） */
+/** 条目分隔符（与 MemoryStore 保持一致） */
 const SEPARATOR = "\n---\n";
 
-/** 字符上限（与 Hermes 保持一致，后续可移入 config） */
-const MEMORY_CAP = 2200;
-const USER_CAP = 1375;
-
-/** 读取 Markdown 文件的条目列表 */
-function readEntries(filePath: string): string[] {
-	if (!existsSync(filePath)) return [];
-	const raw = readFileSync(filePath, "utf-8").trim();
-	if (!raw) return [];
-	return raw
-		.split(SEPARATOR)
-		.map((e) => e.trim())
-		.filter((e) => e.length > 0);
-}
-
-/** 读取文件字符数 */
-function fileLength(filePath: string): number {
-	if (!existsSync(filePath)) return 0;
-	return readFileSync(filePath, "utf-8").length;
-}
+// #region MemoryManager 主入口
 
 /**
  * 创建 MemoryManager。
  *
- * buildPrompt() 从 Markdown 文件读取并格式化注入 SP。
- * CRUD 由 memory tool 直接操作文件，不经过 MemoryManager。
+ * buildPrompt() 通过 MemoryStore 读取 Markdown 并格式化注入 SP。
+ * CRUD 由 memory tool 和 Dreaming 通过同一个 Store 执行。
  */
-export function createMemoryManager(memoriesDir: string): MemoryManager {
-	const memoryPath = resolve(memoriesDir, "memory.md");
-	const userPath = resolve(memoriesDir, "user.md");
-
+export function createMemoryManager(store: MemoryStore): MemoryManager {
 	return {
 		async buildPrompt() {
 			const sections: string[] = [];
 
 			// ── agent memory ──
-			const memoryEntries = readEntries(memoryPath);
+			const memoryEntries = store.read("memory");
 			if (memoryEntries.length > 0) {
 				const content = memoryEntries.join("\n---\n");
-				sections.push(formatBlock("MEMORY (agent notes)", content, MEMORY_CAP));
+				sections.push(
+					formatBlock("MEMORY (agent notes)", content, store.getUsage("memory")),
+				);
 			}
 
 			// ── user profile ──
-			const userEntries = readEntries(userPath);
+			const userEntries = store.read("user");
 			if (userEntries.length > 0) {
 				const content = userEntries.join("\n---\n");
-				sections.push(formatBlock("USER PROFILE", content, USER_CAP));
+				sections.push(formatBlock("USER PROFILE", content, store.getUsage("user")));
 			}
 
 			return sections.join("\n\n");
@@ -75,21 +53,25 @@ export function createMemoryManager(memoriesDir: string): MemoryManager {
 
 		getUsage() {
 			return {
-				memory: { used: fileLength(memoryPath), cap: MEMORY_CAP },
-				user: { used: fileLength(userPath), cap: USER_CAP },
+				memory: store.getUsage("memory"),
+				user: store.getUsage("user"),
 			};
 		},
 	};
 }
+
+// #endregion
+
+// #region Prompt 格式化
 
 /**
  * 格式化 Hermes 风格的记忆块。
  *
  * 用量超过 50% 时在 header 显示百分比，超限则从前面裁剪旧条目。
  */
-function formatBlock(title: string, body: string, cap: number): string {
+function formatBlock(title: string, body: string, usage: MemoryUsage): string {
 	const BORDER = "═".repeat(42);
-	const used = body.length;
+	const { used, cap } = usage;
 	const pct = Math.round((used / cap) * 100);
 
 	let header = `${BORDER}\n${title}`;
@@ -113,3 +95,5 @@ function formatBlock(title: string, body: string, cap: number): string {
 
 	return `${header}\n${output}`;
 }
+
+// #endregion

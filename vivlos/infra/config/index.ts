@@ -28,11 +28,24 @@ export interface CompressionConfig {
 
 // #endregion
 
+// #region MemoryConfig
+
+export interface MemoryConfig {
+	/** Markdown 记忆文件的字符上限 */
+	characterLimit: {
+		memory: number;
+		user: number;
+	};
+}
+
+// #endregion
+
 // #region VivlosConfig
 
 export interface VivlosConfig {
 	tool: ToolConfig;
 	compression: CompressionConfig;
+	memory: MemoryConfig;
 }
 
 const DEFAULT_CONFIG: VivlosConfig = {
@@ -48,6 +61,12 @@ const DEFAULT_CONFIG: VivlosConfig = {
 		protectLastN: 20,
 		model: null,
 		maxConsecutiveNoOp: 2,
+	},
+	memory: {
+		characterLimit: {
+			memory: 2200,
+			user: 1375,
+		},
 	},
 };
 
@@ -70,15 +89,35 @@ export function loadConfig(): VivlosConfig {
 	try {
 		const raw = readFileSync(filePath, "utf-8");
 		const userConfig = JSON.parse(raw) as Partial<VivlosConfig>;
+		const userMemoryLimits = userConfig.memory?.characterLimit;
 		return {
 			tool: {
 				bash: { ...DEFAULT_CONFIG.tool.bash, ...userConfig.tool?.bash },
 			},
 			compression: { ...DEFAULT_CONFIG.compression, ...userConfig.compression },
+			memory: {
+				characterLimit: {
+					memory: positiveInteger(
+						userMemoryLimits?.memory,
+						DEFAULT_CONFIG.memory.characterLimit.memory,
+					),
+					user: positiveInteger(
+						userMemoryLimits?.user,
+						DEFAULT_CONFIG.memory.characterLimit.user,
+					),
+				},
+			},
 		};
 	} catch {
 		return DEFAULT_CONFIG;
 	}
+}
+
+/** 配置值必须是正整数，否则回退默认值 */
+function positiveInteger(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isInteger(value) && value > 0
+		? value
+		: fallback;
 }
 
 /** 确保 config.json 存在，不存在则生成默认配置 */

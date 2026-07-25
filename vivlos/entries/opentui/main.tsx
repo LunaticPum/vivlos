@@ -31,13 +31,16 @@ import {
 	getTasksDir,
 	getMemoriesDir,
 } from "@vivlos/infra/paths.ts";
-import { ensureConfig } from "@vivlos/infra/config/index.ts";
+import { ensureConfig, loadConfig } from "@vivlos/infra/config/index.ts";
 import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
-import { createMemoryManager } from "@vivlos/agent/memory/index.ts";
+import {
+	createMemoryManager,
+	createMemoryStore,
+} from "@vivlos/agent/memory/index.ts";
 import {
 	createBuiltinTools,
 	createAdvancedTools,
@@ -62,6 +65,7 @@ async function main(): Promise<void> {
 	ensureTempDir();
 	ensureConfigDir();
 	ensureConfig();
+	const config = loadConfig();
 	ensureSessionsDir();
 	ensureTasksDir();
 	ensureMemoriesDir();
@@ -121,7 +125,11 @@ async function main(): Promise<void> {
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
-	const memoryManager = createMemoryManager(getMemoriesDir());
+	const memoryStore = createMemoryStore(
+		getMemoriesDir(),
+		config.memory.characterLimit,
+	);
+	const memoryManager = createMemoryManager(memoryStore);
 
 	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
 	const advancedTools = createAdvancedTools({
@@ -129,8 +137,7 @@ async function main(): Promise<void> {
 		getSessionId: () => sessionManager.id,
 		getSessionDir: () => sessionManager.dirPath,
 		tasksDir: getTasksDir(),
-		memoriesDir: getMemoriesDir(),
-		memoryConfig: { memoryCap: 2200, userCap: 1375 },
+		memoryStore,
 	});
 	const tools = [...builtinTools, ...advancedTools];
 
@@ -148,6 +155,7 @@ async function main(): Promise<void> {
 		tools,
 		toolsReset,
 		memoryManager,
+		memoryStore,
 		sessionManager,
 		promptBuilder,
 		thinkingLevel: "medium",

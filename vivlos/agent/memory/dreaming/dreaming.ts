@@ -8,15 +8,10 @@
  */
 
 import type { Message, Model, Api, Context, TextContent } from "@earendil-works/pi-ai";
+import type { MemoryStore } from "../types.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
 import { DREAMING_PROMPT } from "./prompt.ts";
-
-const SEPARATOR = "\n---\n";
-const MEMORY_CAP = 2200;
-const USER_CAP = 1375;
 
 // #region 类型
 
@@ -30,8 +25,8 @@ export interface DreamingOptions {
 	model: Model<Api>;
 	/** 本轮新增的消息 */
 	messages: Message[];
-	/** ~/.vivlos/memories 目录路径 */
-	memoriesDir: string;
+	/** 统一的安全记忆写入入口 */
+	memoryStore: MemoryStore;
 	signal?: AbortSignal;
 }
 
@@ -45,7 +40,7 @@ export interface DreamingOptions {
  * 失败时静默跳过（不影响主流程），仅 log 记录。
  */
 export async function dreaming(options: DreamingOptions): Promise<void> {
-	const { llm, model, messages, memoriesDir, signal } = options;
+	const { llm, model, messages, memoryStore, signal } = options;
 
 	if (messages.length === 0) return;
 
@@ -76,14 +71,20 @@ export async function dreaming(options: DreamingOptions): Promise<void> {
 		const entries = parseEntries(raw);
 		if (entries.length === 0) return;
 
-		// 4. 写盘
+		// 4. 统一通过 MemoryStore 安全写盘，并按实际结果统计
+		let written = 0;
 		for (const entry of entries) {
-			const cap = entry.file === "memory" ? MEMORY_CAP : USER_CAP;
-			const filePath = resolve(memoriesDir, `${entry.file}.md`);
-			appendEntry(filePath, entry.content, cap);
+			const result = memoryStore.add(entry.file, entry.content);
+			if (!result.ok) {
+				log("warn", `Dreaming: 拒绝写入 ${entry.file}.md：${result.error.message}`);
+				continue;
+			}
+			if (result.value.status === "written") written++;
 		}
 
-		log("info", `Dreaming: 写入 ${entries.length} 条记忆`, undefined, true);
+		if (written > 0) {
+			log("info", `Dreaming: 写入 ${written} 条记忆`, undefined, true);
+		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		log("warn", `Dreaming 审视跳过: ${msg}`);
@@ -110,28 +111,6 @@ function parseEntries(raw: string): DreamingEntry[] {
 	} catch {
 		return [];
 	}
-}
-
-/** 追加条目到 Markdown 文件（duplicate 检测 + cap 检查） */
-function appendEntry(filePath: string, content: string, cap: number): void {
-	mkdirSync(resolve(filePath, ".."), { recursive: true });
-
-	const existing = existsSync(filePath) ? readFileSync(filePath, "utf-8").trim() : "";
-	const entries = existing ? existing.split(SEPARATOR).map((e) => e.trim()).filter(Boolean) : [];
-
-	// Duplicate = No-op
-	if (entries.some((e) => e === content)) return;
-
-	// Cap 检查
-	const currentLen = existing.length;
-	const addedLen = (entries.length > 0 ? SEPARATOR.length : 0) + content.length;
-	if (currentLen + addedLen > cap) {
-		log("warn", `Dreaming: ${filePath} 已达上限（${currentLen}/${cap}），跳过写入`);
-		return;
-	}
-
-	const newContent = entries.length > 0 ? existing + SEPARATOR + content : content;
-	writeFileSync(filePath, newContent + "\n", "utf-8");
 }
 
 /** 将消息列表序列化为文本 */

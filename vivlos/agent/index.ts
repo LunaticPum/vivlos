@@ -11,7 +11,7 @@ import { createMaxTurnsHook, type LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
 
 import type { VivlosAgent } from "./types.ts";
-import type { MemoryManager } from "./memory/types.ts";
+import type { MemoryManager, MemoryStore } from "./memory/types.ts";
 
 /**
  * agent 组合根参数。
@@ -28,6 +28,8 @@ export interface CreateAgentParams {
 
 	/** MemoryManager——每次 prompt 前注入记忆块到 system prompt */
 	readonly memoryManager: MemoryManager;
+	/** MemoryStore——memory tool 与 Dreaming 共用的安全读写入口 */
+	readonly memoryStore: MemoryStore;
 	/** PromptBuilder——组装 system prompt（可选，默认用内置模板） */
 	readonly promptBuilder?: PromptBuilder;
 	/** SessionManager——消息存储管理器（可选，默认内存实现） */
@@ -71,6 +73,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	const loop = createAgentLoop({
 		deps: { llm: params.llm, eventBus: params.eventBus },
 		memoryManager,
+		memoryStore: params.memoryStore,
 		sessionManager,
 		promptBuilder,
 		hooks,

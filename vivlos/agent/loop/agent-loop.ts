@@ -9,7 +9,7 @@ import {
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
 
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemoryManager } from "@vivlos/agent/memory/types.ts";
+import type { MemoryManager, MemoryStore } from "@vivlos/agent/memory/types.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import {
@@ -23,7 +23,6 @@ import { loadConfig } from "@vivlos/infra/config/index.ts";
 import { appendCompaction } from "@vivlos/infra/storage/session/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
 import { dreaming } from "../memory/dreaming/dreaming.ts";
-import { getMemoriesDir } from "@vivlos/infra/paths.ts";
 
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
@@ -38,6 +37,8 @@ export interface CreateAgentLoopParams {
 
 	/** MemoryManager -- 记忆存储管理（session 启动/切换时读入冻结快照） */
 	readonly memoryManager: MemoryManager;
+	/** MemoryStore -- memory tool 与 Dreaming 共用的安全写入入口 */
+	readonly memoryStore: MemoryStore;
 	/** SessionManager -- 消息存储管理 */
 	readonly sessionManager: SessionManager;
 	/** PromptBuilder -- system prompt 组装（session 级冻结快照） */
@@ -202,7 +203,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					llm: deps.llm,
 					model: config.model,
 					messages: newMessages as Message[],
-					memoriesDir: getMemoriesDir(),
+					memoryStore: params.memoryStore,
 					signal: config.signal,
 				});
 
