@@ -13,7 +13,10 @@
 
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { AdvancedToolDeps } from "../index.ts";
+import type {
+	MemoryMutationResult,
+	MemoryStore,
+} from "@vivlos/agent/memory/types.ts";
 import { description } from "./description.ts";
 
 // #region Tool 参数
@@ -34,6 +37,15 @@ const Params = Type.Object({
 
 type Params = Static<typeof Params>;
 
+export interface MemoryToolDeps {
+	readonly memoryStore: MemoryStore;
+}
+
+export interface MemoryToolDetails {
+	readonly message: string;
+	readonly mutation?: MemoryMutationResult;
+}
+
 // #endregion
 
 // #region Tool 主入口
@@ -43,7 +55,9 @@ type Params = Static<typeof Params>;
  *
  * 此层只负责校验 tool 参数和格式化返回文案；所有文件与安全规则由 MemoryStore 统一处理。
  */
-export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Params, { message: string }> {
+export function createMemoryTool(
+	deps: MemoryToolDeps,
+): AgentTool<typeof Params, MemoryToolDetails> {
 	return {
 		name: "memory",
 		description,
@@ -52,7 +66,7 @@ export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Param
 		async execute(
 			_toolCallId: string,
 			params: Params,
-		): Promise<AgentToolResult<{ message: string }>> {
+		): Promise<AgentToolResult<MemoryToolDetails>> {
 			const fileName = params.file === "memory" ? "memory.md" : "user.md";
 
 			switch (params.action) {
@@ -61,11 +75,17 @@ export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Param
 						return err("add 操作需要 content 参数");
 					}
 					const result = deps.memoryStore.add(params.file, params.content);
-					if (!result.ok) return err(result.error.message);
+					if (!result.ok) return err(result.error.message, result);
 					if (result.value.status === "duplicate") {
-						return ok(`已存在（静默跳过）："${truncate(result.value.content)}"`);
+						return ok(
+							`已存在（静默跳过）："${truncate(result.value.content)}"${formatUsage(result)}`,
+							result,
+						);
 					}
-					return ok(`已写入 ${fileName}："${truncate(result.value.content)}"`);
+					return ok(
+						`已写入 ${fileName}："${truncate(result.value.content)}"${formatUsage(result)}`,
+						result,
+					);
 				}
 
 				case "replace": {
@@ -77,9 +97,10 @@ export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Param
 						params.old_text,
 						params.new_text,
 					);
-					if (!result.ok) return err(result.error.message);
+					if (!result.ok) return err(result.error.message, result);
 					return ok(
-						`已替换 ${fileName} 中："${truncate(params.old_text)}" -> "${truncate(result.value.content)}"`,
+						`已替换 ${fileName} 中："${truncate(params.old_text)}" -> "${truncate(result.value.content)}"${formatUsage(result)}`,
+						result,
 					);
 				}
 
@@ -88,8 +109,11 @@ export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Param
 						return err("remove 操作需要 old_text 参数");
 					}
 					const result = deps.memoryStore.remove(params.file, params.old_text);
-					if (!result.ok) return err(result.error.message);
-					return ok(`已从 ${fileName} 删除："${truncate(result.value.content)}"`);
+					if (!result.ok) return err(result.error.message, result);
+					return ok(
+						`已从 ${fileName} 删除："${truncate(result.value.content)}"${formatUsage(result)}`,
+						result,
+					);
 				}
 			}
 		},
@@ -101,13 +125,29 @@ export function createMemoryTool(deps: AdvancedToolDeps): AgentTool<typeof Param
 // #region Tool 返回结果
 
 /** 构造成功结果 */
-function ok(message: string): AgentToolResult<{ message: string }> {
-	return { content: [{ type: "text", text: message }], details: { message } };
+function ok(
+	message: string,
+	mutation?: MemoryMutationResult,
+): AgentToolResult<MemoryToolDetails> {
+	return { content: [{ type: "text", text: message }], details: { message, mutation } };
 }
 
 /** 构造错误结果 */
-function err(message: string): AgentToolResult<{ message: string }> {
-	return { content: [{ type: "text", text: `错误：${message}` }], details: { message } };
+function err(
+	message: string,
+	mutation?: MemoryMutationResult,
+): AgentToolResult<MemoryToolDetails> {
+	const code = mutation && !mutation.ok ? `[${mutation.error.code}] ` : "";
+	return {
+		content: [{ type: "text", text: `错误：${code}${message}` }],
+		details: { message, mutation },
+	};
+}
+
+/** 将 Store 返回的最新用量附加到 tool result，供调用模型继续策展 */
+function formatUsage(result: MemoryMutationResult): string {
+	if (!result.ok) return "";
+	return `（${result.value.usage.used}/${result.value.usage.cap} 字符）`;
 }
 
 /** 截断过长文本用于日志显示 */

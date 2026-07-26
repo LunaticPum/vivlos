@@ -1,5 +1,4 @@
 import { Database, type Database as DatabaseType } from "bun:sqlite";
-import { initMemorySchema } from "./repo/memory-repo.ts";
 import { initConfigSchema } from "./repo/config-repo.ts";
 
 const instances = new Map<string, DatabaseType>();
@@ -20,7 +19,6 @@ export function getDb(dbPath: string): DatabaseType {
   db.run("PRAGMA foreign_keys = ON");
 
   // ── 各业务模块自管 schema ──
-  initMemorySchema(db);
   initConfigSchema(db);
 
   instances.set(dbPath, db);

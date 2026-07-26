@@ -50,7 +50,7 @@ flowchart TB
     LOOP --> MANAGER
     LOOP --> PROMPT
     LOOP --> DREAM
-    DREAM --> STORE
+    DREAM --> TOOL
     DREAM --> LOG
     SESSION --> LOOP
     COMPRESS --> LOOP
@@ -63,7 +63,7 @@ flowchart TB
 | `MemoryStore` | Markdown 解析、序列化、CRUD、用量、安全检查、容量检查 | Prompt 格式、模型调用、UI 文案 |
 | `MemoryManager` | 从 Store 读取内容，构造注入 System Prompt 的 Memory block | 写入和安全检查 |
 | `memory tool` | 接收模型参数，调用 Store，格式化 tool result | 直接读写文件 |
-| `Dreaming` | 调用模型审视本轮内容，将候选条目交给 Store | 绕过 Store 写盘、修改当前 SP |
+| `Dreaming` | 构造 live Context，运行受限工具循环，将 tool result 回灌审视模型 | 直接写盘、修改当前 SP、输出用户回复 |
 | `PromptBuilder` | 缓存并返回冻结的 System Prompt | 持久化 Memory |
 | `Agent Loop` | 决定何时读取、冻结、落盘和启动 Dreaming | 实现具体文件规则 |
 | `infra/config` | 提供启动期字符上限 | 动态监听配置和文件读写 |
@@ -373,6 +373,8 @@ sequenceDiagram
 
 memory tool 不持有路径、cap、安全正则或文件 API。这样，任何新增写入入口都无法通过复用 tool 外观来绕过底层规则。
 
+tool result 同时包含两种信息：模型可读的文本会展示错误码与最新 `used/cap`，结构化 details 会保留完整 `MemoryMutationResult`。主模型和 Dreaming 都通过同一份结果判断下一步操作。
+
 ---
 
 ## 8. 自动写入：Dreaming
@@ -380,6 +382,15 @@ memory tool 不持有路径、cap、安全正则或文件 API。这样，任何�
 Dreaming 是每个成功 Turn 结束后的记忆审视步骤。主回复和 session 消息已经生成后，Dreaming 再检查本轮新增消息是否包含值得长期保存的信息。
 
 ### 8.1 Save / Skip
+
+Dreaming Context Builder 在每次审视开始前读取磁盘 live state，并向审视模型提供：
+
+- 当前 `memory.md` 和 `user.md` 的规范化条目。
+- 两个文件各自的 `used/cap`。
+- 本轮新增消息的纯文本内容。
+- Save/Skip 与策展规则。
+
+Memory 和 conversation 会被放进独立 XML 数据区块，并执行 XML 转义。它们是待分析数据，不是审视模型需要执行的指令。
 
 Dreaming Prompt 将内容分成两类：
 
@@ -393,24 +404,16 @@ Dreaming Prompt 将内容分成两类：
 | 已完成工作 | |
 | 用户明确要求记住 | |
 
-模型输出统一 JSON：
+没有可保存内容时，审视模型不调用工具，直接结束。需要更新时，它只能使用 memory tool，并遵循以下操作语义：
 
-```json
-{
-  "entries": [
-    {
-      "file": "memory",
-      "content": "项目使用 Bun 作为运行时。"
-    }
-  ]
-}
-```
+| 场景 | 操作 |
+|------|------|
+| 新增长期事实 | `add` |
+| 纠正或合并已有事实 | `replace` |
+| 删除过时、低价值内容 | `remove` |
+| cap 不足 | 先 `replace/remove` 策展，再重试 `add` |
 
-没有可保存内容时返回：
-
-```json
-{"entries": []}
-```
+每个审视 Turn 最多调用一次 memory tool。模型必须先读取 tool result，再决定是否进入下一轮，避免同一批操作基于过期状态并发写盘。
 
 ### 8.2 执行时序
 
@@ -418,25 +421,29 @@ Dreaming Prompt 将内容分成两类：
 sequenceDiagram
     participant Agent as Agent Loop
     participant Dream as Dreaming
-    participant LLM as 审视模型
+    participant Review as 审视模型
+    participant Tool as memory tool
     participant Store as MemoryStore
     participant Disk as memories/*.md
     participant Log as Logger/EventBus
 
     Agent->>Dream: 本轮新增 messages + model + Store
-    Dream->>LLM: Save/Skip Prompt + 对话文本
-    LLM-->>Dream: text_delta 流
-    Dream->>Dream: 拼接文本并解析 JSON
-    alt entries 为空或 JSON 无效
-        Dream-->>Agent: 跳过
-    else 存在候选条目
-        Dream->>Store: 依次 add 每条候选记忆
-        Store->>Store: 分别执行安全、去重与 cap 检查
-        Store->>Disk: 仅写入通过检查的条目
-        Store-->>Dream: 每条返回 written / duplicate / error
-        Dream->>Dream: 统计 written 并继续处理拒绝项
-        Dream->>Log: 报告真实写入数量与拒绝原因
+    Dream->>Store: read(memory/user) + getUsage()
+    Store->>Disk: 读取 live Markdown
+    Store-->>Dream: live 条目 + used/cap
+    Dream->>Review: Save/Skip Prompt + live snapshot + conversation
+    alt 没有值得保存的内容
+        Review-->>Dream: 结束，不调用工具
+    else 需要策展 Memory
+        Review->>Tool: 每轮一个 add / replace / remove
+        Tool->>Store: 执行统一安全与 cap 检查
+        Store->>Disk: 仅在 written 时更新文件
+        Store-->>Tool: MemoryMutationResult
+        Tool-->>Review: toolResult + 错误码 + 最新 usage
+        Review->>Review: 根据结果继续策展或结束
     end
+    Note over Dream,Review: 最多 4 个审视 Turn；unsafe_content 立即终止
+    Dream->>Log: 报告真实变更次数与安全拒绝
     Dream-->>Agent: 完成，不返回对话消息
 ```
 
@@ -445,12 +452,21 @@ sequenceDiagram
 Dreaming 包裹完整的 `try/catch`：
 
 - 模型调用失败不会撤销主回复。
-- 非法 JSON 视为没有可保存条目。
-- 单条记忆被 Store 拒绝时继续处理剩余条目。
-- duplicate 不产生错误，也不计入写入数量。
-- 只有真实写盘数量大于零时才发送成功通知。
+- 审视循环最多运行 4 个 Turn，达到上限后正常退出。
+- 每个 Turn 只允许一个 memory tool 调用，多调用会被 hook 拦截。
+- `capacity_exceeded`、`ambiguous_match`、`not_found` 和 `invalid_input` 作为错误 tool result 回灌，允许模型修正后重试。
+- `unsafe_content` 会被标记为错误并立即终止当前 Dreaming，不允许改写后绕过扫描。
+- duplicate 是成功 no-op，不计入真实变更次数。
+- 只有 `written` 状态计入变更通知。
+- 审视模型的最终文本会被丢弃，不进入主 session，也不展示给用户。
 
 Dreaming 当前使用本轮主模型，并等待审视完成后才让 `AgentLoop.run()` 返回。
+
+### 8.4 Subagent 演进边界
+
+当前 Dreaming 在模块内部组装一个受限 pi Agent Loop，并自行配置工具白名单、轮次上限和生命周期。代码中保留了 `TODO(subagents)`：统一 subagent runtime 建立后，Dreaming 会迁移为 Memory subagent，由公共运行时接管这些编排职责。
+
+这次迁移只替换循环基础设施，不改变 live Context、MemoryStore、memory tool 和错误策略。
 
 ---
 
@@ -564,9 +580,10 @@ sequenceDiagram
     participant Manager as MemoryManager
     participant Store as MemoryStore
     participant Prompt as PromptBuilder
-    participant LLM as 主模型
+    participant Main as 主模型
     participant Tool as Tools
     participant Dream as Dreaming
+    participant Review as 审视模型
     participant Log as Logger/EventBus
 
     User->>Agent: 输入一条消息
@@ -587,25 +604,29 @@ sequenceDiagram
 
     Agent->>Prompt: getCached()
     Prompt-->>Agent: Frozen System Prompt
-    Agent->>LLM: SP + session history + 当前输入
+    Agent->>Main: SP + session history + 当前输入
 
     loop 模型工具内循环
-        LLM->>Tool: tool call
+        Main->>Tool: tool call
         alt 调用 memory tool
             Tool->>Store: 安全 CRUD
             Store-->>Tool: mutation result
         end
-        Tool-->>LLM: tool result
+        Tool-->>Main: tool result
     end
 
-    LLM-->>Agent: 最终回复与本轮新增消息
+    Main-->>Agent: 最终回复与本轮新增消息
     Agent->>Session: appendMessage()
     Agent->>Dream: 审视本轮新增消息
-    Dream->>LLM: Save/Skip 请求
-    LLM-->>Dream: JSON entries
-    Dream->>Store: 对每条候选执行 add
-    Store-->>Dream: written / duplicate / error
-    Dream->>Log: 实际写入或拒绝信息
+    Dream->>Store: 读取 live memory/user + usage
+    Store-->>Dream: live snapshot
+    Dream->>Review: snapshot + conversation + memory tool
+    Review->>Tool: 每轮至多一个 Memory 操作
+    Tool->>Store: 安全 CRUD
+    Store-->>Tool: MemoryMutationResult
+    Tool-->>Review: toolResult 回灌
+    Review-->>Dream: 完成或达到 4 Turn 上限
+    Dream->>Log: 实际变更或安全拒绝信息
     Agent-->>User: run() 完成
 ```
 
@@ -641,15 +662,15 @@ Tool 返回会进入当前消息历史，因此模型在同一个 Turn 内能看
 
 ### 12.5 Logger 与 EventBus
 
-Dreaming 使用 `log()` 报告真实写入数量和安全拒绝原因。Logger 将需要展示的消息送入 EventBus，由 TUI 通知层消费。
+Dreaming 使用 `log()` 报告真实变更次数和安全拒绝原因。Logger 将需要展示的消息送入 EventBus，由 TUI 通知层消费。
 
 Store 本身不依赖 UI，也不主动发事件。这样 Store 可以在测试、其他入口和未来后台任务中复用。
 
 ### 12.6 SQLite
 
-当前 Memory 运行路径不读取或写入 SQLite。旧 Memory repository 已停止导出，也不会执行旧数据迁移。
+当前 Memory 运行路径不读取或写入 SQLite。旧 Memory repository 及 schema 初始化已经移除，也不会执行旧数据迁移。
 
-SQLite 仍用于其他基础设施数据，因此不能通过删除整个数据库来清理旧 Memory。废弃的 Memory repository 源文件会单独移除，不增加自动 `DROP TABLE` 行为。
+SQLite 仍用于其他基础设施数据，因此不能通过删除整个数据库来清理旧 Memory。现有数据库中的旧表不会自动 `DROP`，但运行时已经不再创建、读取或写入它们。
 
 ---
 
@@ -697,11 +718,14 @@ Memory 的验证分成三个层次。
 
 通过 fake LLM stream 覆盖：
 
-- Save JSON 写入正确文件。
-- Skip JSON 不写盘。
-- 非法 JSON 静默跳过。
-- 危险候选被 Store 拒绝。
-- duplicate 和 over-cap 不误报写入数量。
+- 无需保存时不调用 memory tool。
+- tool result 进入下一次审视模型调用。
+- `capacity_exceeded` 后能够 remove/replace 并重试。
+- `ambiguous_match`、`not_found` 和 `invalid_input` 能够反馈修正。
+- `unsafe_content` 终止本次循环且不写盘。
+- duplicate 不计入真实变更次数。
+- 单个 Turn 的多个 memory tool call 被拦截。
+- 达到 4 Turn 上限后正常结束。
 - 模型异常不会让主流程抛错。
 
 ### 14.3 Frozen Snapshot 集成测试
@@ -729,7 +753,10 @@ Memory 的验证分成三个层次。
 | 并发 | 没有跨进程锁和并发写事务 |
 | 原子写入 | 当前直接覆盖目标 Markdown 文件 |
 | Dreaming 模型 | 使用当前主对话模型 |
+| Dreaming 工具 | 仅开放 memory tool，每个 Turn 最多调用一次 |
+| Dreaming 轮次 | 最多 4 个审视 Turn |
 | Dreaming 延迟 | `AgentLoop.run()` 等待审视结束 |
+| Subagent | 当前使用模块内受限 Agent Loop，后续迁移到统一 runtime |
 | 配置更新 | 仅进程启动时读取 |
 | 旧数据 | 不迁移旧 SQLite Memory |
 | 全文历史召回 | 尚未实现 Session Search |
