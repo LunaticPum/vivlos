@@ -1,5 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { MemoryStore } from "@vivlos/agent/memory/types.ts";
+import type { MemoryService } from "@vivlos/agent/memory/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createTodoTool } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";
@@ -21,8 +21,8 @@ export interface AdvancedToolDeps {
 	readonly getSessionDir: () => string;
 	/** tasks 目录路径（~/.vivlos/tasks） */
 	readonly tasksDir: string;
-	/** Markdown Memory 的统一安全读写入口 */
-	readonly memoryStore: MemoryStore;
+	/** 主模型 Memory 命令的统一业务入口 */
+	readonly memoryService: MemoryService;
 }
 
 /**

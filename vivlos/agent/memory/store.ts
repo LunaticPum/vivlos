@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import type {
 	MemoryFile,
@@ -7,35 +8,14 @@ import type {
 	MemoryMutationResult,
 	MemoryStore,
 	MemoryStoreErrorCode,
+	MemoryStoreSnapshot,
 } from "./types.ts";
 
-// #region Markdown 格式与安全规则
+// #region Markdown 格式
 
 /** 文件条目之间使用独立的 --- 行分隔 */
 const SEPARATOR = "\n---\n";
-const SEPARATOR_LINE = /^[ \t]*---[ \t]*$/m;
-
-/** 会改变未来 session 行为的常见 prompt injection 模式 */
-const INJECTION_PATTERNS: RegExp[] = [
-	/ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)/i,
-	/you\s+are\s+now\s+/i,
-	/disregard\s+(all\s+)?(previous|prior|above)/i,
-	/system\s*:\s*/i,
-	/\[INST\]|\[\/INST\]|<<SYS>>|<\|im_start\|>/i,
-];
-
-/** 不允许持久化到 system prompt 的常见凭证模式 */
-const CREDENTIAL_PATTERNS: RegExp[] = [
-	/BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY/i,
-	/\bsk-[a-zA-Z0-9]{20,}/,
-	/\bapi[_-]?key\s*[:=]\s*\S+/i,
-	/\bpassword\s*[:=]\s*\S+/i,
-	/\bsecret\s*[:=]\s*\S+/i,
-	/\bAKIA[0-9A-Z]{16}/,
-];
-
-/** 人眼难以审计、但可能改变模型输入语义的不可见字符 */
-const INVISIBLE_UNICODE = /[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/;
+const SEPARATOR_PATTERN = /\r?\n---\r?\n/;
 
 // #endregion
 
@@ -56,16 +36,17 @@ export function createMemoryStore(
 	});
 
 	return {
-		read,
+		readSnapshot() {
+			return createSnapshot(read("memory"), read("user"), limits);
+		},
 
 		add(file, rawContent) {
 			const content = rawContent.trim();
-			const validation = validateContent(content);
-			if (validation) return validation;
+			if (!content) return failure("invalid_input", "记忆内容不能为空");
 
 			const entries = read(file);
 			if (entries.includes(content)) {
-				return success("duplicate", file, content, usage(file, entries));
+				return success("duplicate", file, content, content, usage(file, entries));
 			}
 
 			const nextEntries = [...entries, content];
@@ -73,7 +54,7 @@ export function createMemoryStore(
 			if (capacityError) return capacityError;
 
 			writeEntries(filePath(file), nextEntries);
-			return success("written", file, content, usage(file, nextEntries));
+			return success("written", file, undefined, content, usage(file, nextEntries));
 		},
 
 		replace(file, rawOldText, rawNewText) {
@@ -90,8 +71,18 @@ export function createMemoryStore(
 
 			const index = matches[0]!;
 			const content = entries[index]!.replace(oldText, newText).trim();
-			const validation = validateContent(content);
-			if (validation) return validation;
+			if (
+				content === entries[index] ||
+				entries.some((entry, entryIndex) => entryIndex !== index && entry === content)
+			) {
+				return success(
+					"duplicate",
+					file,
+					entries[index],
+					entries[index],
+					usage(file, entries),
+				);
+			}
 
 			const nextEntries = [...entries];
 			nextEntries[index] = content;
@@ -99,7 +90,13 @@ export function createMemoryStore(
 			if (capacityError) return capacityError;
 
 			writeEntries(filePath(file), nextEntries);
-			return success("written", file, content, usage(file, nextEntries));
+			return success(
+				"written",
+				file,
+				entries[index],
+				content,
+				usage(file, nextEntries),
+			);
 		},
 
 		remove(file, rawOldText) {
@@ -114,11 +111,7 @@ export function createMemoryStore(
 			const nextEntries = [...entries];
 			const [content] = nextEntries.splice(matches[0]!, 1);
 			writeEntries(filePath(file), nextEntries);
-			return success("written", file, content!, usage(file, nextEntries));
-		},
-
-		getUsage(file) {
-			return usage(file);
+			return success("written", file, content!, undefined, usage(file, nextEntries));
 		},
 	};
 }
@@ -132,12 +125,39 @@ function readEntries(filePath: string): string[] {
 	if (!existsSync(filePath)) return [];
 	const raw = readFileSync(filePath, "utf-8").trim();
 	if (!raw) return [];
-	return raw.split(SEPARATOR).map((entry) => entry.trim()).filter(Boolean);
+	return raw.split(SEPARATOR_PATTERN).map((entry) => entry.trim()).filter(Boolean);
 }
 
 /** 序列化后的长度是 cap 与 usage 的唯一计算口径 */
 function serialize(entries: string[]): string {
 	return entries.length > 0 ? `${entries.join(SEPARATOR)}\n` : "";
+}
+
+/**
+ * 从同一次读取结果构造双文件快照。
+ * revision 只依赖规范化内容，不受多余首尾空白影响。
+ */
+function createSnapshot(
+	memoryEntries: string[],
+	userEntries: string[],
+	limits: MemoryLimits,
+): MemoryStoreSnapshot {
+	const memoryContent = serialize(memoryEntries);
+	const userContent = serialize(userEntries);
+	const revision = createHash("sha256")
+		.update(memoryContent)
+		.update("\0")
+		.update(userContent)
+		.digest("hex");
+
+	return {
+		entries: { memory: memoryEntries, user: userEntries },
+		usage: {
+			memory: { used: memoryContent.length, cap: limits.memory },
+			user: { used: userContent.length, cap: limits.user },
+		},
+		revision: `sha256:${revision}`,
+	};
 }
 
 /** 覆盖写入规范化内容；空列表会生成真正的空文件 */
@@ -149,29 +169,6 @@ function writeEntries(filePath: string, entries: string[]): void {
 // #endregion
 
 // #region 内容与操作校验
-
-/** 拒绝空内容、分隔符注入、prompt injection、凭证与隐藏字符 */
-function validateContent(content: string): MemoryMutationResult | null {
-	if (!content) return failure("invalid_input", "记忆内容不能为空");
-	if (SEPARATOR_LINE.test(content)) {
-		return failure("invalid_input", "记忆内容不能包含独立的 --- 分隔行");
-	}
-
-	for (const pattern of INJECTION_PATTERNS) {
-		if (pattern.test(content)) {
-			return failure("unsafe_content", `检测到 prompt injection 模式 (${pattern.source})`);
-		}
-	}
-	for (const pattern of CREDENTIAL_PATTERNS) {
-		if (pattern.test(content)) {
-			return failure("unsafe_content", `检测到凭证模式 (${pattern.source})`);
-		}
-	}
-	if (INVISIBLE_UNICODE.test(content)) {
-		return failure("unsafe_content", "检测到不可见 Unicode 字符");
-	}
-	return null;
-}
 
 /** 返回包含指定子串的全部条目下标，用于检测模糊匹配 */
 function matchingIndexes(entries: string[], oldText: string): number[] {
@@ -210,10 +207,11 @@ function checkCapacity(entries: string[], cap: number): MemoryMutationResult | n
 function success(
 	status: "written" | "duplicate",
 	file: MemoryFile,
-	content: string,
+	before: string | undefined,
+	after: string | undefined,
 	usage: { used: number; cap: number },
 ): MemoryMutationResult {
-	return { ok: true, value: { status, file, content, usage } };
+	return { ok: true, value: { status, file, before, after, usage } };
 }
 
 function failure(

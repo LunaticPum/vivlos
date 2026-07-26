@@ -13,9 +13,11 @@
 
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory/types.ts";
 import type {
-	MemoryMutationResult,
-	MemoryStore,
+	MemoryCommand,
+	MemoryCommandResult,
+	MemoryService,
 } from "@vivlos/agent/memory/types.ts";
 import { description } from "./description.ts";
 
@@ -33,17 +35,33 @@ const Params = Type.Object({
 	content: Type.Optional(Type.String({ description: "要追加的内容（add 时必填）" })),
 	old_text: Type.Optional(Type.String({ description: "要匹配的子串（replace/remove 时必填）" })),
 	new_text: Type.Optional(Type.String({ description: "替换后的文本（replace 时必填）" })),
+	reasonCode: Type.Union(
+		[
+			Type.Literal(MAIN_MEMORY_REASON_CODES[0]),
+			Type.Literal(MAIN_MEMORY_REASON_CODES[1]),
+			Type.Literal(MAIN_MEMORY_REASON_CODES[2]),
+			Type.Literal(MAIN_MEMORY_REASON_CODES[3]),
+			Type.Literal(MAIN_MEMORY_REASON_CODES[4]),
+		],
+		{ description: "本次记忆操作的稳定原因分类（必填）" },
+	),
+	reason: Type.Optional(
+		Type.String({
+			description: "简短、可审计的原因说明；不要包含完整推理",
+			maxLength: 200,
+		}),
+	),
 });
 
 type Params = Static<typeof Params>;
 
 export interface MemoryToolDeps {
-	readonly memoryStore: MemoryStore;
+	readonly memoryService: MemoryService;
 }
 
 export interface MemoryToolDetails {
 	readonly message: string;
-	readonly mutation?: MemoryMutationResult;
+	readonly result?: MemoryCommandResult;
 }
 
 // #endregion
@@ -53,7 +71,7 @@ export interface MemoryToolDetails {
 /**
  * 创建 memory tool。
  *
- * 此层只负责校验 tool 参数和格式化返回文案；所有文件与安全规则由 MemoryStore 统一处理。
+ * 此层只负责参数适配和返回文案；所有安全与写入规则由 MemoryService 统一处理。
  */
 export function createMemoryTool(
 	deps: MemoryToolDeps,
@@ -67,55 +85,14 @@ export function createMemoryTool(
 			_toolCallId: string,
 			params: Params,
 		): Promise<AgentToolResult<MemoryToolDetails>> {
-			const fileName = params.file === "memory" ? "memory.md" : "user.md";
+			const command = toCommand(params);
+			if (typeof command === "string") return err(command);
 
-			switch (params.action) {
-				case "add": {
-					if (!params.content) {
-						return err("add 操作需要 content 参数");
-					}
-					const result = deps.memoryStore.add(params.file, params.content);
-					if (!result.ok) return err(result.error.message, result);
-					if (result.value.status === "duplicate") {
-						return ok(
-							`已存在（静默跳过）："${truncate(result.value.content)}"${formatUsage(result)}`,
-							result,
-						);
-					}
-					return ok(
-						`已写入 ${fileName}："${truncate(result.value.content)}"${formatUsage(result)}`,
-						result,
-					);
-				}
-
-				case "replace": {
-					if (!params.old_text || params.new_text === undefined) {
-						return err("replace 操作需要 old_text 和 new_text 参数");
-					}
-					const result = deps.memoryStore.replace(
-						params.file,
-						params.old_text,
-						params.new_text,
-					);
-					if (!result.ok) return err(result.error.message, result);
-					return ok(
-						`已替换 ${fileName} 中："${truncate(params.old_text)}" -> "${truncate(result.value.content)}"${formatUsage(result)}`,
-						result,
-					);
-				}
-
-				case "remove": {
-					if (!params.old_text) {
-						return err("remove 操作需要 old_text 参数");
-					}
-					const result = deps.memoryStore.remove(params.file, params.old_text);
-					if (!result.ok) return err(result.error.message, result);
-					return ok(
-						`已从 ${fileName} 删除："${truncate(result.value.content)}"${formatUsage(result)}`,
-						result,
-					);
-				}
+			const result = deps.memoryService.executeMainCommand(command);
+			if (!result.ok) {
+				return err(result.error.message, result);
 			}
+			return ok(formatSuccess(result), result);
 		},
 	};
 }
@@ -127,27 +104,66 @@ export function createMemoryTool(
 /** 构造成功结果 */
 function ok(
 	message: string,
-	mutation?: MemoryMutationResult,
+	result?: MemoryCommandResult,
 ): AgentToolResult<MemoryToolDetails> {
-	return { content: [{ type: "text", text: message }], details: { message, mutation } };
+	return { content: [{ type: "text", text: message }], details: { message, result } };
 }
 
 /** 构造错误结果 */
 function err(
 	message: string,
-	mutation?: MemoryMutationResult,
+	result?: MemoryCommandResult,
 ): AgentToolResult<MemoryToolDetails> {
-	const code = mutation && !mutation.ok ? `[${mutation.error.code}] ` : "";
+	const code = result && !result.ok ? `[${result.error.code}] ` : "";
 	return {
 		content: [{ type: "text", text: `错误：${code}${message}` }],
-		details: { message, mutation },
+		details: { message, result },
 	};
 }
 
-/** 将 Store 返回的最新用量附加到 tool result，供调用模型继续策展 */
-function formatUsage(result: MemoryMutationResult): string {
-	if (!result.ok) return "";
-	return `（${result.value.usage.used}/${result.value.usage.cap} 字符）`;
+/** 将宽松的 Tool 参数收窄为 MemoryService 命令。 */
+function toCommand(params: Params): MemoryCommand | string {
+	const reason = params.reason?.trim();
+	const metadata = { reasonCode: params.reasonCode, ...(reason ? { reason } : {}) };
+
+	switch (params.action) {
+		case "add":
+			if (!params.content) return "add 操作需要 content 参数";
+			return { ...metadata, action: "add", file: params.file, content: params.content };
+		case "replace":
+			if (!params.old_text || params.new_text === undefined) {
+				return "replace 操作需要 old_text 和 new_text 参数";
+			}
+			return {
+				...metadata,
+				action: "replace",
+				file: params.file,
+				oldText: params.old_text,
+				newText: params.new_text,
+			};
+		case "remove":
+			if (!params.old_text) return "remove 操作需要 old_text 参数";
+			return { ...metadata, action: "remove", file: params.file, oldText: params.old_text };
+	}
+}
+
+function formatSuccess(result: MemoryCommandResult): string {
+	if (!result.ok) return result.error.message;
+	const mutation = result.value;
+	const fileName = mutation.file === "memory" ? "memory.md" : "user.md";
+	const usage = `（${mutation.usage.used}/${mutation.usage.cap} 字符）`;
+
+	if (mutation.status === "noop") {
+		return `内容未变化（静默跳过）${usage}`;
+	}
+	switch (result.command.action) {
+		case "add":
+			return `已写入 ${fileName}："${truncate(mutation.after!)}"${usage}`;
+		case "replace":
+			return `已替换 ${fileName} 中："${truncate(mutation.before!)}" -> "${truncate(mutation.after!)}"${usage}`;
+		case "remove":
+			return `已从 ${fileName} 删除："${truncate(mutation.before!)}"${usage}`;
+	}
 }
 
 /** 截断过长文本用于日志显示 */

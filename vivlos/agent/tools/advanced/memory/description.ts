@@ -14,5 +14,8 @@ Skip: 琐碎问题 / 可搜索的事实 / 原始数据 / session 特有的随机
 ## 规则
 - 每条记忆应是一条完整、独立的事实或偏好
 - memory.md 存项目/环境/决策经验；user.md 存用户画像/偏好/沟通风格
-- 超 cap 时先 remove 腾空间再 add，不要堆砌
+- 每次操作必须提供 reasonCode：explicit_user_request / explicit_user_forget / user_correction / stable_project_decision / preference_observed
+- remove 只用于用户明确要求遗忘，并使用 explicit_user_forget；纠正已有事实应使用 replace
+- reason 可选，只写简短、可审计的原因，不要写完整推理
+- 超 cap 时优先 replace 精简已有条目，不得为了腾空间擅自 remove
 - 写入的条目会进每个未来 session 的 SP，谨慎写入`;

@@ -38,7 +38,9 @@ import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import {
-	createMemoryManager,
+	createMemorySecurity,
+	createMemoryService,
+	createMemorySnapshot,
 	createMemoryStore,
 } from "@vivlos/agent/memory/index.ts";
 import {
@@ -125,11 +127,16 @@ async function main(): Promise<void> {
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
+	const memorySecurity = createMemorySecurity();
 	const memoryStore = createMemoryStore(
 		getMemoriesDir(),
 		config.memory.characterLimit,
 	);
-	const memoryManager = createMemoryManager(memoryStore);
+	const memoryService = createMemoryService({
+		store: memoryStore,
+		security: memorySecurity,
+	});
+	const memorySnapshot = createMemorySnapshot(memoryStore, memorySecurity);
 
 	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
 	const advancedTools = createAdvancedTools({
@@ -137,7 +144,7 @@ async function main(): Promise<void> {
 		getSessionId: () => sessionManager.id,
 		getSessionDir: () => sessionManager.dirPath,
 		tasksDir: getTasksDir(),
-		memoryStore,
+		memoryService,
 	});
 	const tools = [...builtinTools, ...advancedTools];
 
@@ -154,8 +161,7 @@ async function main(): Promise<void> {
 		maxTurns: 10,
 		tools,
 		toolsReset,
-		memoryManager,
-		memoryStore,
+		memorySnapshot,
 		sessionManager,
 		promptBuilder,
 		thinkingLevel: "medium",

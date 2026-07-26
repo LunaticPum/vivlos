@@ -9,7 +9,7 @@ import {
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
 
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemoryManager, MemoryStore } from "@vivlos/agent/memory/types.ts";
+import type { MemorySnapshot } from "@vivlos/agent/memory/types.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import {
@@ -22,7 +22,6 @@ import type { CompressionConfig } from "@vivlos/infra/config/index.ts";
 import { loadConfig } from "@vivlos/infra/config/index.ts";
 import { appendCompaction } from "@vivlos/infra/storage/session/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
-import { dreaming } from "../memory/dreaming/dreaming.ts";
 
 import type { LoopConfig, LoopResult, AgentLoopDeps } from "./types.ts";
 import { mapAgentEvent } from "./event-mapper.ts";
@@ -35,10 +34,8 @@ export interface CreateAgentLoopParams {
 	/** LLM + EventBus 基础依赖 */
 	readonly deps: AgentLoopDeps;
 
-	/** MemoryManager -- 记忆存储管理（session 启动/切换时读入冻结快照） */
-	readonly memoryManager: MemoryManager;
-	/** MemoryStore -- memory tool 与 Dreaming 共用的安全写入入口 */
-	readonly memoryStore: MemoryStore;
+	/** MemorySnapshot -- session 启动/切换时构造可冻结的 Memory Prompt */
+	readonly memorySnapshot: MemorySnapshot;
 	/** SessionManager -- 消息存储管理 */
 	readonly sessionManager: SessionManager;
 	/** PromptBuilder -- system prompt 组装（session 级冻结快照） */
@@ -126,10 +123,9 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 			// --- 2. Lazy freeze: SP 未冻结时读 memory + 冻结（session 启动/切换/压缩后首次） ---
 			if (!promptBuilder.isFrozen()) {
-				const memoryBlock = await params.memoryManager.buildPrompt();
-				if (memoryBlock) {
-					promptBuilder.setMemory(memoryBlock);
-				}
+				const memoryBlock = params.memorySnapshot.buildPrompt();
+				// 空字符串也必须写入，避免 invalidate 后沿用旧 Memory。
+				promptBuilder.setMemory(memoryBlock);
 				promptBuilder.freeze();
 			}
 
@@ -195,17 +191,6 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						sessionManager.appendMessage(m as Message);
 					}
 				}
-
-				// --- 10. Dreaming 审视（参照 Hermes Loop 步骤 8） ---
-				// 审视本轮对话，有料写入 memory.md/user.md，无料跳过
-				// 写盘不影响当前 session SP（Frozen Snapshot），下个 session 才生效
-				await dreaming({
-					llm: deps.llm,
-					model: config.model,
-					messages: newMessages as Message[],
-					memoryStore: params.memoryStore,
-					signal: config.signal,
-				});
 
 				return { messages: newMessages, turns: turn };
 			} catch (err) {
