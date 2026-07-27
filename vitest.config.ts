@@ -5,7 +5,7 @@ const piAiSrc = resolve(__dirname, "packages/ai/src");
 
 export default defineConfig({
 	test: {
-		include: ["vivlos/**/*.test.ts"],
+		include: ["vivlos/tests/**/*.test.ts"],
 	},
 	resolve: {
 		alias: [

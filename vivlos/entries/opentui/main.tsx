@@ -38,6 +38,8 @@ import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
 import {
+	createMemoryCommandContextController,
+	createMemoryEventJournal,
 	createMemorySecurity,
 	createMemoryService,
 	createMemorySnapshot,
@@ -127,6 +129,7 @@ async function main(): Promise<void> {
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
+	const memoryCommandContext = createMemoryCommandContextController();
 	const memorySecurity = createMemorySecurity();
 	const memoryStore = createMemoryStore(
 		getMemoriesDir(),
@@ -135,6 +138,8 @@ async function main(): Promise<void> {
 	const memoryService = createMemoryService({
 		store: memoryStore,
 		security: memorySecurity,
+		appendEvent: (draft) =>
+			createMemoryEventJournal(draft.sessionId, sessionManager.dirPath).append(draft),
 	});
 	const memorySnapshot = createMemorySnapshot(memoryStore, memorySecurity);
 
@@ -145,6 +150,7 @@ async function main(): Promise<void> {
 		getSessionDir: () => sessionManager.dirPath,
 		tasksDir: getTasksDir(),
 		memoryService,
+		getMemoryCommandContext: () => memoryCommandContext.current(),
 	});
 	const tools = [...builtinTools, ...advancedTools];
 
@@ -162,6 +168,7 @@ async function main(): Promise<void> {
 		tools,
 		toolsReset,
 		memorySnapshot,
+		memoryCommandContext,
 		sessionManager,
 		promptBuilder,
 		thinkingLevel: "medium",

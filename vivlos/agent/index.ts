@@ -11,7 +11,10 @@ import { createMaxTurnsHook, type LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
 
 import type { VivlosAgent } from "./types.ts";
-import type { MemorySnapshot } from "./memory/types.ts";
+import type {
+	MemoryCommandContextController,
+	MemorySnapshot,
+} from "./memory/types.ts";
 
 /**
  * agent 组合根参数。
@@ -28,6 +31,7 @@ export interface CreateAgentParams {
 
 	/** MemorySnapshot——重建 Frozen Prompt 时读取当前 Memory */
 	readonly memorySnapshot: MemorySnapshot;
+	readonly memoryCommandContext: MemoryCommandContextController;
 	/** PromptBuilder——组装 system prompt（可选，默认用内置模板） */
 	readonly promptBuilder?: PromptBuilder;
 	/** SessionManager——消息存储管理器（可选，默认内存实现） */
@@ -70,6 +74,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	const loop = createAgentLoop({
 		deps: { llm: params.llm, eventBus: params.eventBus },
 		memorySnapshot: params.memorySnapshot,
+		memoryCommandContext: params.memoryCommandContext,
 		sessionManager,
 		promptBuilder,
 		hooks,

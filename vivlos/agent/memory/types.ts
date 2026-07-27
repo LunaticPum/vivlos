@@ -103,6 +103,20 @@ export type MemoryCommand = MemoryCommandReason &
 		  }
 	);
 
+/** 主模型 Memory 命令引用的当前 session/turn 消息来源。 */
+export interface MemoryCommandContext {
+	readonly sessionId: string;
+	readonly turnId: string;
+	readonly sourceMessageIds: readonly string[];
+}
+
+export interface MemoryCommandContextController {
+	begin(sessionId: string, sourceMessageIds: readonly string[]): void;
+	setTurn(turn: number): void;
+	current(): MemoryCommandContext;
+	clear(): void;
+}
+
 export type MemoryCommandErrorCode =
 	| "invalid_input"
 	| "not_found"
@@ -139,7 +153,10 @@ export type MemoryCommandResult = MemoryCommandResultBase &
 
 /** Memory 在线命令的统一业务入口 */
 export interface MemoryService {
-	executeMainCommand(command: MemoryCommand): MemoryCommandResult;
+	executeMainCommand(
+		command: MemoryCommand,
+		context: MemoryCommandContext,
+	): MemoryCommandResult;
 }
 
 // #endregion

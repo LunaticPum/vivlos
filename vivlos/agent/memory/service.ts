@@ -1,6 +1,7 @@
 import type { MemorySecurity, MemorySecurityViolation } from "./security.ts";
 import type {
 	MemoryCommand,
+	MemoryCommandContext,
 	MemoryCommandErrorCode,
 	MemoryCommandResult,
 	MemoryMutation,
@@ -8,23 +9,32 @@ import type {
 	MemoryStore,
 	MemoryStoreSnapshot,
 } from "./types.ts";
+import type { MemoryEventDraft } from "./events/journal.ts";
+import type { MemoryEvent } from "./events/types.ts";
 
 // #region Service 主入口
 
 export interface MemoryServiceDependencies {
 	readonly store: MemoryStore;
 	readonly security: MemorySecurity;
+	readonly appendEvent: (draft: MemoryEventDraft) => MemoryEvent;
 }
 
 /** 创建主模型 Memory 命令的统一业务入口。 */
 export function createMemoryService({
 	store,
 	security,
+	appendEvent,
 }: MemoryServiceDependencies): MemoryService {
 	return {
-		executeMainCommand(rawCommand) {
+		executeMainCommand(rawCommand, context) {
+			validateCommandContext(context);
 			const command = normalizeCommand(rawCommand);
 			const before = store.readSnapshot();
+			const finish = (result: MemoryCommandResult): MemoryCommandResult => {
+				appendEvent(toEventDraft(result, context));
+				return result;
+			};
 
 			const operationViolation = security.validateOperation({
 				actor: "main",
@@ -32,34 +42,36 @@ export function createMemoryService({
 				reasonCode: command.reasonCode,
 			})[0];
 			if (operationViolation) {
-				return rejectedViolation(command, operationViolation, before.revision);
+				return finish(rejectedViolation(command, operationViolation, before.revision));
 			}
 
 			const reasonViolation = validateReason(command.reason, security);
 			if (reasonViolation) {
-				return rejectedViolation(command, reasonViolation, before.revision);
+				return finish(rejectedViolation(command, reasonViolation, before.revision));
 			}
 
 			const candidate = candidateFor(command, before);
 			if (candidate !== null) {
 				const contentViolation = security.scanCandidate(candidate)[0];
 				if (contentViolation) {
-					return rejectedViolation(command, contentViolation, before.revision);
+					return finish(rejectedViolation(command, contentViolation, before.revision));
 				}
 			}
 
 			const mutation = executeStoreCommand(store, command);
 			if (!mutation.ok) {
-				return rejected(
+				return finish(rejected(
 					command,
 					mutation.error.code,
 					mutation.error.message,
 					before.revision,
-				);
+				));
 			}
 
 			const after = store.readSnapshot();
-			return committed(command, mutation.value, before.revision, after.revision);
+			return finish(
+				committed(command, mutation.value, before.revision, after.revision),
+			);
 		},
 	};
 }
@@ -103,6 +115,18 @@ function validateReason(
 		};
 	}
 	return security.scanCandidate(reason)[0] ?? null;
+}
+
+function validateCommandContext(context: MemoryCommandContext): void {
+	if (!context.sessionId.trim() || !context.turnId.trim()) {
+		throw new Error("MemoryCommandContext 需要非空的 sessionId 和 turnId");
+	}
+	if (
+		context.sourceMessageIds.length === 0 ||
+		context.sourceMessageIds.some((id) => !id.trim())
+	) {
+		throw new Error("MemoryCommandContext 需要至少一个非空 sourceMessageId");
+	}
 }
 
 /** add 扫描完整条目；replace 在唯一命中时扫描替换后的完整条目。 */
@@ -202,6 +226,52 @@ function errorCodeFor(violation: MemorySecurityViolation): MemoryCommandErrorCod
 		case "forbidden_operation":
 			return "forbidden_operation";
 	}
+}
+
+function toEventDraft(
+	result: MemoryCommandResult,
+	context: MemoryCommandContext,
+): MemoryEventDraft {
+	const base = {
+		sessionId: context.sessionId,
+		turnId: context.turnId,
+		actor: "main" as const,
+		file: result.command.file,
+		sourceMessageIds: [...context.sourceMessageIds],
+	};
+
+	if (!result.ok) {
+		return {
+			...base,
+			action: "reject",
+			reasonCode:
+				result.error.code === "unsafe_content"
+					? "security_rejection"
+					: "invalid_operation",
+			reason: result.error.message.slice(0, 200),
+			status: "rejected",
+		};
+	}
+	if (result.value.status === "noop") {
+		return {
+			...base,
+			action: "duplicate",
+			reasonCode: "duplicate_suppression",
+			...(result.command.reason ? { reason: result.command.reason } : {}),
+			before: result.value.before,
+			after: result.value.after,
+			status: "noop",
+		};
+	}
+	return {
+		...base,
+		action: result.command.action,
+		reasonCode: result.command.reasonCode,
+		...(result.command.reason ? { reason: result.command.reason } : {}),
+		before: result.value.before,
+		after: result.value.after,
+		status: "committed",
+	};
 }
 
 // #endregion

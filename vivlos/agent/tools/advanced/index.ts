@@ -1,5 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { MemoryService } from "@vivlos/agent/memory/types.ts";
+import type {
+	MemoryCommandContext,
+	MemoryService,
+} from "@vivlos/agent/memory/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createTodoTool } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";
@@ -23,6 +26,7 @@ export interface AdvancedToolDeps {
 	readonly tasksDir: string;
 	/** 主模型 Memory 命令的统一业务入口 */
 	readonly memoryService: MemoryService;
+	readonly getMemoryCommandContext: () => MemoryCommandContext;
 }
 
 /**

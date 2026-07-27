@@ -7,9 +7,13 @@ import {
 	type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { Model, Api, Message } from "@earendil-works/pi-ai";
+import { randomUUID } from "node:crypto";
 
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemorySnapshot } from "@vivlos/agent/memory/types.ts";
+import type {
+	MemoryCommandContextController,
+	MemorySnapshot,
+} from "@vivlos/agent/memory/types.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import {
@@ -36,6 +40,7 @@ export interface CreateAgentLoopParams {
 
 	/** MemorySnapshot -- session 启动/切换时构造可冻结的 Memory Prompt */
 	readonly memorySnapshot: MemorySnapshot;
+	readonly memoryCommandContext: MemoryCommandContextController;
 	/** SessionManager -- 消息存储管理 */
 	readonly sessionManager: SessionManager;
 	/** PromptBuilder -- system prompt 组装（session 级冻结快照） */
@@ -78,7 +83,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			config: LoopConfig,
 		): Promise<LoopResult> {
 			// --- 1. 构造 user message(s) ---
-			const prompts: AgentMessage[] =
+			const rawPrompts: AgentMessage[] =
 				typeof userInput === "string"
 					? [
 							{
@@ -88,6 +93,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 							},
 						]
 					: userInput;
+			const prompts = rawPrompts.map(ensureMessageId);
 
 			// --- 1.5 压缩检查（在构建 context 前检查是否需要压缩） ---
 			if (config.model.contextWindow > 0) {
@@ -161,6 +167,10 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			};
 
 			let turn = 0;
+			params.memoryCommandContext.begin(
+				sessionManager.id,
+				prompts.map(readMessageId),
+			);
 			try {
 				// --- 6. 启动 agentLoop ---
 				const stream = agentLoop(
@@ -173,7 +183,10 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 
 				// --- 7. 遍历事件流 -> 映射为 VivlosEvent -> 发到 eventbus ---
 				for await (const event of stream) {
-					if (event.type === "turn_start") turn++;
+					if (event.type === "turn_start") {
+						turn++;
+						params.memoryCommandContext.setTurn(turn);
+					}
 					const vivlosEvents = mapAgentEvent(event, sessionManager.id, turn);
 					for (const ve of vivlosEvents) deps.eventBus.emit(ve);
 				}
@@ -202,6 +215,8 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					error,
 				});
 				return { messages: [], turns: turn, error };
+			} finally {
+				params.memoryCommandContext.clear();
 			}
 		},
 
@@ -260,6 +275,24 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 		},
 	};
 }
+
+// #region Message provenance
+
+type IdentifiedAgentMessage = AgentMessage & { readonly id: string };
+
+function ensureMessageId(message: AgentMessage): IdentifiedAgentMessage {
+	const existing = (message as AgentMessage & { id?: unknown }).id;
+	if (typeof existing === "string" && existing.trim()) {
+		return message as IdentifiedAgentMessage;
+	}
+	return { ...message, id: randomUUID() } as IdentifiedAgentMessage;
+}
+
+function readMessageId(message: AgentMessage): string {
+	return (message as IdentifiedAgentMessage).id;
+}
+
+// #endregion
 
 /**
  * 解析压缩用的模型：config.model 为 null 时用当前模型，否则按 "provider/modelId" 解析。

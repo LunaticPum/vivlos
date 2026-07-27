@@ -16,10 +16,11 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory/types.ts";
 import type {
 	MemoryCommand,
+	MemoryCommandContext,
 	MemoryCommandResult,
 	MemoryService,
 } from "@vivlos/agent/memory/types.ts";
-import { description } from "./description.ts";
+import { memoryDescription } from "./description.ts";
 
 // #region Tool 参数
 
@@ -28,13 +29,18 @@ const Params = Type.Object({
 		[Type.Literal("add"), Type.Literal("replace"), Type.Literal("remove")],
 		{ description: "操作类型" },
 	),
-	file: Type.Union(
-		[Type.Literal("memory"), Type.Literal("user")],
-		{ description: "目标文件：memory = 项目/环境笔记，user = 用户画像" },
+	file: Type.Union([Type.Literal("memory"), Type.Literal("user")], {
+		description: "目标文件：memory = 项目/环境笔记，user = 用户画像",
+	}),
+	content: Type.Optional(
+		Type.String({ description: "要追加的内容（add 时必填）" }),
 	),
-	content: Type.Optional(Type.String({ description: "要追加的内容（add 时必填）" })),
-	old_text: Type.Optional(Type.String({ description: "要匹配的子串（replace/remove 时必填）" })),
-	new_text: Type.Optional(Type.String({ description: "替换后的文本（replace 时必填）" })),
+	old_text: Type.Optional(
+		Type.String({ description: "要匹配的子串（replace/remove 时必填）" }),
+	),
+	new_text: Type.Optional(
+		Type.String({ description: "替换后的文本（replace 时必填）" }),
+	),
 	reasonCode: Type.Union(
 		[
 			Type.Literal(MAIN_MEMORY_REASON_CODES[0]),
@@ -57,6 +63,7 @@ type Params = Static<typeof Params>;
 
 export interface MemoryToolDeps {
 	readonly memoryService: MemoryService;
+	readonly getMemoryCommandContext: () => MemoryCommandContext;
 }
 
 export interface MemoryToolDetails {
@@ -78,7 +85,7 @@ export function createMemoryTool(
 ): AgentTool<typeof Params, MemoryToolDetails> {
 	return {
 		name: "memory",
-		description,
+		description: memoryDescription,
 		label: "记忆管理",
 		parameters: Params,
 		async execute(
@@ -88,7 +95,10 @@ export function createMemoryTool(
 			const command = toCommand(params);
 			if (typeof command === "string") return err(command);
 
-			const result = deps.memoryService.executeMainCommand(command);
+			const result = deps.memoryService.executeMainCommand(
+				command,
+				deps.getMemoryCommandContext(),
+			);
 			if (!result.ok) {
 				return err(result.error.message, result);
 			}
@@ -106,7 +116,10 @@ function ok(
 	message: string,
 	result?: MemoryCommandResult,
 ): AgentToolResult<MemoryToolDetails> {
-	return { content: [{ type: "text", text: message }], details: { message, result } };
+	return {
+		content: [{ type: "text", text: message }],
+		details: { message, result },
+	};
 }
 
 /** 构造错误结果 */
@@ -124,12 +137,20 @@ function err(
 /** 将宽松的 Tool 参数收窄为 MemoryService 命令。 */
 function toCommand(params: Params): MemoryCommand | string {
 	const reason = params.reason?.trim();
-	const metadata = { reasonCode: params.reasonCode, ...(reason ? { reason } : {}) };
+	const metadata = {
+		reasonCode: params.reasonCode,
+		...(reason ? { reason } : {}),
+	};
 
 	switch (params.action) {
 		case "add":
 			if (!params.content) return "add 操作需要 content 参数";
-			return { ...metadata, action: "add", file: params.file, content: params.content };
+			return {
+				...metadata,
+				action: "add",
+				file: params.file,
+				content: params.content,
+			};
 		case "replace":
 			if (!params.old_text || params.new_text === undefined) {
 				return "replace 操作需要 old_text 和 new_text 参数";
@@ -143,7 +164,12 @@ function toCommand(params: Params): MemoryCommand | string {
 			};
 		case "remove":
 			if (!params.old_text) return "remove 操作需要 old_text 参数";
-			return { ...metadata, action: "remove", file: params.file, oldText: params.old_text };
+			return {
+				...metadata,
+				action: "remove",
+				file: params.file,
+				oldText: params.old_text,
+			};
 	}
 }
 

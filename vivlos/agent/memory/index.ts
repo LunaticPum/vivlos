@@ -2,6 +2,8 @@ export { MAIN_MEMORY_REASON_CODES } from "./types.ts";
 export type {
 	MainMemoryReasonCode,
 	MemoryCommand,
+	MemoryCommandContext,
+	MemoryCommandContextController,
 	MemoryCommandError,
 	MemoryCommandErrorCode,
 	MemoryCommandMutation,
@@ -19,6 +21,7 @@ export type {
 	MemoryStoreSnapshot,
 	MemoryUsage,
 } from "./types.ts";
+export { createMemoryCommandContextController } from "./events/context.ts";
 export {
 	createMemorySecurity,
 	type MemorySecurity,
@@ -53,3 +56,10 @@ export {
 	type MemoryEventDraft,
 	type MemoryEventJournal,
 } from "./events/journal.ts";
+export {
+	MEMORY_CONSOLIDATION_BATCH_SIZE,
+	createConsolidationCheckpoint,
+	type ConsolidationCheckpoint,
+	type MemoryConsolidationState,
+	type MemoryConsolidationStatus,
+} from "./events/checkpoint.ts";

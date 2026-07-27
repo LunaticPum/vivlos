@@ -1,6 +1,6 @@
 // #region 主动记忆
 
-export const description = `管理长期记忆（memory.md = 项目/环境笔记，user.md = 用户画像）。
+export const memoryDescription = `管理长期记忆（memory.md = 项目/环境笔记，user.md = 用户画像）。
 内容在 session 启动时冻结进 system prompt，写盘后当前 session 不变，下个 session 才生效。
 
 ## 何时写入
