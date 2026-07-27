@@ -14,8 +14,31 @@ import type { ApiKeyCredential, CredentialStore } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
+import type { ModelRef } from "./types.ts";
+import { log } from "@vivlos/infra/logger/index.ts";
+import { err, ok, type Result } from "@vivlos/shared";
 
 export type { LLMClient, LLMConfig, CustomProviderConfig } from "./types.ts";
+
+export interface ModelResolveError {
+	readonly code: "model_not_found";
+	readonly message: string;
+}
+
+/** 缺少引用时使用当前模型；显式引用不存在时返回错误，不静默回退。 */
+export function resolveModel(
+	llm: Pick<LLMClient, "getModel">,
+	ref: ModelRef | null,
+	current: Model<Api>,
+): Result<Model<Api>, ModelResolveError> {
+	if (!ref) return ok(current);
+	const model = llm.getModel(ref.provider, ref.id);
+	if (model) return ok(model);
+
+	const message = `找不到 Consolidator 模型：${ref.provider}/${ref.id}`;
+	log("error", message, undefined, true);
+	return err({ code: "model_not_found", message });
+}
 
 /**
  * 创建 LLM 客户端。

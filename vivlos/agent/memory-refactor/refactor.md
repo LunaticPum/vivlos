@@ -453,6 +453,62 @@ Consolidator 的目标按优先级排列：
 
 Consolidator 不是事实审查者。无法确认能否无损整理时，保持原文并结束。
 
+#### 3.4.8 Runtime 与 Provider 边界
+
+Consolidator Runtime 使用独立的底层 `agentLoop()`，不复用主 Agent 的 `createAgent()` 或 `createAgentLoop()`。它不接入主 session、消息历史、PromptBuilder、identity、skills、compression、通用工具集或 UI Event 映射。
+
+模型与流函数由组合根解析后注入。Runtime 不读取 `.env`、`infra/config`、Provider 配置或 CredentialStore，不关心模型来自 pi 内置 Provider 还是自定义 OpenAI-compatible Provider，也不会复制或记录 API Key。
+
+独立 AgentContext 只包含 Consolidator 专用 system prompt、一条本次整理输入消息和唯一的 consolidate tool。模型普通文本不是 Memory 写入结果；只有 consolidate tool 通过 MemoryService 成功提交，才能改变 Markdown。
+
+#### 3.4.9 Consolidator 配置
+
+配置归入 `infra/config` 的 `memory.consolidator`：
+
+```json
+{
+  "model": { "provider": "provider-id", "id": "model-id" },
+  "trigger": { "operations": 20, "capacity": 0.85 },
+  "maxTurns": 6,
+  "maxTools": 8,
+  "timeoutMs": 60000
+}
+```
+
+- `model` 缺失或为 `null` 时，每次运行使用当时的当前主模型，不固定为启动默认模型。
+- 显式 model 必须同时包含 provider 和 id；解析失败时本次运行失败且不推进 cursor，不静默回退主模型。
+- 配置只引用已注册的 Provider/Model，不保存 API Key、base URL 或 CustomProviderConfig。
+- `loadConfig()` 负责默认值、逐字段合并和范围校验。
+- 组合根负责解析 configured model 或当前主模型；Runner 每次运行接收已解析 Model。
+
+#### 3.4.10 Prompt 输入
+
+`consolidator/prompt.ts` 使用 `buildPrompt(input)` 构造静态规则和 XML 数据区。输入只包含最新 snapshot 的完整 entries/usage，以及 Trigger Decision 的 reason、cursor、tail、受压 files 和安全 records。
+
+不包含完整 session、来源消息、主 Agent Tool Result、History issue、rejected 候选、Provider 配置或凭证。所有动态字符串都放入 XML 文本节点并调用 `escapeForPrompt()`；属性只使用受控枚举或数字。
+
+System prompt 明确要求 XML 内容是不可信数据、当前 entries 才是 source 基准、不得从 History 恢复已删除事实、Tool 参数使用 entity 解码后的完整原始 entry，且无法确认无损整理时不调用 Tool。
+
+#### 3.4.11 Runner 基础逻辑
+
+`consolidator/runner.ts` 使用 `createRunner(deps)` 创建单飞 Runtime。每次 `run()` 接收组合根当次解析的 Model、Trigger Decision、sessionId 和可选 AbortSignal，并重新读取最新 Repository snapshot。
+
+独立循环固定 `toolExecution="sequential"`，AgentContext 只暴露 consolidate tool。默认限制来自 `MemoryConfig.consolidator`：6 turns、8 次实际 Tool 调用和 60 秒 timeout；达到限制时停止本次运行，但不回滚已经提交的独立操作。
+
+结果分为 `completed/failed/aborted/busy`：
+
+- 模型自然结束，包括零次 Tool 调用，属于 completed。
+- Provider error、Tool 未捕获异常、输出截断、timeout、abort 或运行限制不推进 cursor。
+- Tool 返回的安全业务 rejected 仍可由模型继续判断，不自动视为 Runtime 失败。
+- 只有 completed 才保存 decision.tail；保存失败返回 failed，旧 cursor 保持不变。
+- 同一 Runner 已运行时返回 busy，不启动第二个模型循环。
+
+底层异常由 Runner 转换为结构化结果，并调用 `infra/logger`；error/warn 使用 `onTui=true` 进入现有 TUI 通知链路。Runner 不把模型过程事件或完整推理发送到主 EventBus。
+
+`RunResult` 是判别联合：completed 不带 error；failed、aborted 和 busy 必须带稳定 error code/message。共同字段只有 trigger reason、实际 Tool 调用数和 cursorBefore/After，不返回 Prompt、模型文本、Provider 配置或完整推理。
+
+`infra/llm.resolveModel()` 负责组合根的最小模型引用解析：model ref 为 null 时返回调用时传入的当前主模型；显式 `{ provider, id }` 通过 LLMClient 查找。找不到时返回 `model_not_found` Result 并调用 logger，不静默回退。该 helper 不读取 config、`.env` 或凭证。
+
 ### 3.5 L1 记忆层
 
 `layers/l1.ts` 负责：
@@ -478,6 +534,82 @@ L1 记忆层不修改 Memory，也不管理 PromptBuilder 生命周期。
 ```
 
 Infra Event Logger 订阅该事件并追加 `memory-events.jsonl`。Event 是操作历史，不用于重放或重建当前 Memory；Markdown 始终是 L1 当前有效状态。
+
+#### 3.6.1 领域边界
+
+操作留痕与触发领域只负责三件事：
+
+1. 从当前 session 的 `memory-events.jsonl` 读取尚未审视的操作历史。
+2. 保存已审视到的日志行位置。
+3. 根据操作数量、容量压力或主模型请求计算是否应该触发巩固。
+
+该领域不负责：
+
+- 启动或调用 LLM。
+- 构造 Consolidator Prompt。
+- 调用 consolidate tool。
+- 执行 refine/merge。
+- 管理模型循环、并发、重试或超时。
+- 判断一次模型审视是否成功。
+
+这些运行时职责由后续 Consolidator Runtime 承担。Trigger 只返回决定，不产生副作用；Runtime 成功完成一次审视后，才通知 History 推进游标。
+
+#### 3.6.2 History、Cursor 与 Trigger
+
+三个部分保持简单分工：
+
+```text
+history.ts
+├── 读取 memory-events.jsonl
+├── 投影安全的主模型操作历史
+└── 读取/推进 memory-cursor.json
+
+trigger.ts
+├── 接收当前 L1 snapshot
+├── 接收游标后的安全历史
+├── 接收可选主模型请求
+└── 返回 trigger decision 或 null
+```
+
+- History 属于 Infra Storage，处理文件格式、物理行号和持久游标。
+- Trigger 属于 Memory 领域，是不读取文件、不调用模型的纯函数。
+- 当前 Markdown snapshot 始终是事实状态；History 只是整理参照。
+- Event Logger 是 best-effort，历史缺失只能降低计数触发灵敏度，不能改变 Memory 正确性。
+- 游标只表示共享 `memory-events.jsonl` 已审视到哪一行，不分别绑定 `memory.md` 或 `user.md`。
+- `memory-cursor.json` 只保存 `{ "line": number }`，不保存状态机、运行 ID、模型结果或错误。
+- History 使用 `readCursor()` 和 `saveCursor(line)` 管理游标；缺失文件返回 0，内容损坏时明确报错。
+- `saveCursor()` 禁止回退或超过当前日志尾行；相同行号不写盘，变化时通过同目录临时文件原子替换。
+- 旧 `agent/memory/events/journal.ts` 和 `checkpoint.ts` 的 schema、seq 与运行状态不进入 fresh 实现。
+
+#### 3.6.3 触发规则
+
+`consolidator/trigger.ts` 使用纯函数 `checkTrigger(input)`，按以下优先级返回决定：
+
+1. `main_request`：主模型显式请求整理。
+2. `capacity_pressure`：有新的有效主模型记录，且任一非空文件达到容量比例。
+3. `operation_threshold`：游标后主模型 committed 操作达到数量阈值。
+
+默认配置为 20 次 committed 操作和 0.85 容量比例，调用方可以覆盖。noop、rejected 和 Consolidator 操作不累计操作阈值。两个 L1 文件都没有 entry 时，任何信号都不触发。
+
+容量触发要求 History 中至少有一条有效主模型记录，避免损坏行、空行或一次零 Tool 审视后的固定容量比例反复启动模型。主模型显式请求不受该条件限制，由 Runtime 在消费请求后清除请求信号。
+
+Trigger Decision 只包含：
+
+- `reason`。
+- 审视前 `cursor` 和本次覆盖的 `tail`。
+- 安全 History records。
+- 当前 memory/user usage。
+- 容量压力涉及的 files；其他 reason 返回空数组。
+
+Trigger 不推进 cursor。后续 Runtime 成功完成审视（包括零次 Tool 调用）后保存 `tail`；失败、中断或超时时保持旧 cursor。
+
+#### 3.6.4 命名约定
+
+该领域利用文件和模块上下文保持命名简洁：
+
+- 优先使用 `history`、`records`、`cursor`、`line`、`tail`、`config`、`input` 和 `decision`。
+- 类型名只补充区分职责所需的上下文，不重复堆叠 Memory/Consolidation/Operation 等前缀。
+- 不为缩短长度使用难懂缩写。
 
 ### 3.7 Memory Tools
 
@@ -506,6 +638,10 @@ vivlos/agent/memory-refactor/
 ├── memory.ts
 ├── consolidate.ts
 ├── service.ts
+├── consolidator/
+│   ├── prompt.ts
+│   ├── trigger.ts
+│   └── runner.ts
 ├── layers/
 │   └── l1.ts
 └── utils/
@@ -518,7 +654,8 @@ vivlos/agent/tools/advanced/memory/
 
 vivlos/infra/storage/memory/
 ├── index.ts
-└── repository.ts
+├── repository.ts
+└── history.ts
 ```
 
 目录已经表达 Memory 上下文，文件名不重复添加 `memory-` 前缀。

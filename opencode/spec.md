@@ -8,15 +8,15 @@
 - 仓库：`D:\VSProject\Agent\my_agent`。
 - 当前分支：`memory-refactor`。
 - Memory 领域 0-3 基线提交：`257fc04 feat: 完成 Memory 巩固工具链`。
-- fresh 实现位于 `vivlos/agent/memory-refactor/`，尚未提交，多数文件在 Git 中仍是 untracked。
-- 领域 0、领域 1、领域 2、领域 3 已完成代码和测试。
-- 当前等待用户 review **领域 3：Consolidate Tool**。
-- 不要主动展开领域 4；用户确认领域 3 后，先移除领域 3 Todo 明细，再为领域 4 单独展开 Todo，等用户 review 后执行。
+- fresh 实现位于 `vivlos/agent/memory-refactor/`，领域 0-3 已包含在基线提交中。
+- 领域 0-4 已完成并通过用户 review。
+- 当前进行 **领域 5：Consolidator Runtime**，5.1-5.12 已实现并验证，等待用户 code review。
+- 不要在领域 5 review 通过前展开领域 6。
 
 最近一次验证：
 
 ```text
-bun test          -> 106 pass, 0 fail, 6 files
+bun test          -> 144 pass, 0 fail, 11 files
 bun run typecheck -> passed
 git diff --check  -> passed（仅有 LF/CRLF 提示）
 ```
@@ -40,6 +40,8 @@ git diff --check  -> passed（仅有 LF/CRLF 提示）
 - 不要为了完成一个 Todo 暴露不可用的半成品 API，例如只支持 noop 或只会抛错的 factory。
 - 如果 Todo 之间存在不可分割依赖，先说明并调整边界，不要静默扩大实现范围。
 - 用户重视模块平行、命名直观和代码阅读顺序，优先保持结构对称。
+- 命名保持简洁并利用所在模块的上下文，不刻意堆叠长前缀；同时避免难懂缩写。
+- 底层 error/warn 不要只 throw；优先返回结构化状态并调用 `infra/logger`，需要用户感知时设置 `onTui=true`。不建立复杂错误系统。
 - 不要将未来可能需要的复杂机制提前加入当前简单需求。
 
 ## 3. 产品级约定
@@ -154,7 +156,7 @@ vivlos/agent/tools/advanced/memory/
 └── description.ts
 ```
 
-当前已存在 fresh Consolidate Tool；尚不存在 `consolidator/`、L1 layer 实现和公共 index，不要提前创建。
+当前已存在 fresh Consolidate Tool、`consolidator/prompt.ts`、`trigger.ts` 和 `runner.ts`；尚不存在 L1 layer 实现和公共 index，不要提前创建。
 
 ## 7. 模块平行规则
 
@@ -358,7 +360,92 @@ executeConsolidation(ConsolidationMemoryCommand, context)
 - Service 不直接访问 node:fs/path、PromptBuilder、Tool、Agent Loop。
 - Event ID 统一调用 shared `uid()`。
 
-## 13. 测试规范
+## 13. History、Trigger 与 Runtime
+
+### 13.1 History 与 Cursor
+
+文件：`vivlos/infra/storage/memory/history.ts`。
+
+- `createHistory(sessionDir, sessionId)` 返回绑定 session 的 History。
+- `read(after)` 按 `memory-events.jsonl` 物理行读取，返回 `records/issues/tail`。
+- 只投影 main add/replace/remove；Consolidator 记录验证后忽略。
+- issue 只有 `line+code`，不含坏行、错 session 或候选原文。
+- rejected 记录强制丢弃 before/after。
+- `readCursor()/saveCursor(line)` 管理单一 `memory-cursor.json`。
+- Cursor 格式只有单行 `{ "line": number }`；缺失为 0，禁止回退/越过 tail，临时文件原子替换。
+- History 是 best-effort 整理参考，Markdown 始终是当前状态源。
+
+### 13.2 Trigger
+
+文件：`vivlos/agent/memory-refactor/consolidator/trigger.ts`。
+
+- `checkTrigger(input)` 是无 I/O 纯函数。
+- 优先级：`main_request > capacity_pressure > operation_threshold`。
+- 默认 20 次 main committed 或容量比例 0.85；可配置。
+- noop/rejected 不累计；空 L1 不触发。
+- 容量触发要求至少一条新的有效主模型 record，防止固定高容量反复运行。
+- Decision 包含 reason、cursor/tail、安全 records、usage 和受压 files；不推进 cursor。
+
+### 13.3 Config 与模型解析
+
+`MemoryConfig.consolidator`：
+
+```text
+model: { provider, id } | null
+trigger: { operations: 20, capacity: 0.85 }
+maxTurns: 6
+maxTools: 8
+timeoutMs: 60000
+```
+
+- Config 在 `vivlos/infra/config/index.ts` 做默认值、深层合并和基础范围校验。
+- model 缺失/null 表示每次运行使用当时当前主模型，不固定启动默认模型。
+- `ModelRef` 位于 `infra/llm/types.ts`，不包含 key/baseUrl。
+- `infra/llm.resolveModel(llm, ref, current)`：null 返回 current；显式引用精确查找。
+- 显式模型不存在返回 `model_not_found` Result，调用 logger/TUI，不静默回退。
+- Config/模型解析由后续组合根调用；Runner 不读取 `.env`、config 或 CredentialStore。
+
+### 13.4 Prompt
+
+文件：`vivlos/agent/memory-refactor/consolidator/prompt.ts`。
+
+- `SYSTEM_PROMPT` 固定主模型内容权威和 Consolidator 只优化表达的边界。
+- `buildPrompt({ snapshot, decision })` 返回 system/user。
+- 动态输入只有最新 entries/usage 和安全 decision/history。
+- 所有动态字符串进入 XML 文本节点并调用 `escapeForPrompt()`；属性仅枚举/数字。
+- 不包含完整 session、source 消息、History issue、主 Tool Result、rejected 候选或 Provider 信息。
+- History 只是参考，不能恢复 remove/rejected/before 中当前 entries 不存在的事实。
+
+### 13.5 Runner
+
+文件：`vivlos/agent/memory-refactor/consolidator/runner.ts`。
+
+- `createRunner(deps)` 使用底层 pi `agentLoop()`，不复用主 Agent wrapper。
+- `run()` 每次接收 resolved Model、Decision、sessionId 和可选 signal，并重读最新 snapshot。
+- AgentContext 只有专用 Prompt 和唯一 consolidate Tool；`toolExecution="sequential"`。
+- 默认限制来自 Config：6 turns、8 次实际 Tool 调用、60 秒 timeout。
+- 允许零次或多次独立 refine/merge；前序成功不因后序失败回滚。
+- single-flight：并发第二次调用返回 busy。
+- completed 才保存 decision.tail；failed/aborted/busy/limit 不推进。
+- Provider/Tool/output/cursor/runtime 错误结构化并调用 logger；timeout/error 或 warn 可进入 TUI。
+
+`RunResult` 是判别联合：
+
+- completed：无 error。
+- failed/aborted/busy：必须有稳定 code/message。
+- 共同字段：status、trigger reason、toolCalls、cursorBefore/After。
+- 不返回 Prompt、模型文本、完整推理、Provider 或凭证。
+
+稳定错误码：`busy/cursor_changed/timeout/aborted/output_limit/provider_error/tool_error/run_limit/cursor_save_failed/runtime_error`。
+
+### 13.6 当前测试状态
+
+- 领域 5 新增 `config.test.ts` 6 项、`prompt.test.ts` 5 项、`runner.test.ts` 12 项。
+- Runner 测试使用 pi-ai 官方 faux provider 和 fake Service/History/Repository。
+- 自动测试不读取 `.env`、API Key 或连接真实 Provider。
+- 当前全量基线：144 项，11 files。
+
+## 14. 测试规范
 
 测试文档：`vivlos/tests/docs/memory/测试文档.md`。
 
@@ -382,7 +469,12 @@ vivlos/tests/memory/
 ├── memory.test.ts
 ├── consolidate.test.ts
 ├── service.test.ts
-└── consolidate-tool.test.ts
+├── consolidate-tool.test.ts
+├── history.test.ts
+├── trigger.test.ts
+├── config.test.ts
+├── prompt.test.ts
+└── runner.test.ts
 ```
 
 当前覆盖与数量：
@@ -393,7 +485,12 @@ vivlos/tests/memory/
 - 巩固 Logic：`consolidate.test.ts`，22 项。
 - Service：`service.test.ts`，13 项。
 - Consolidate Tool：`consolidate-tool.test.ts`，9 项。
-- 全量：106 项。
+- History/Cursor：`history.test.ts`，7 项。
+- Trigger：`trigger.test.ts`，8 项。
+- Config/Model：`config.test.ts`，6 项。
+- Prompt：`prompt.test.ts`，5 项。
+- Runner：`runner.test.ts`，12 项。
+- 全量：144 项。
 
 Service 测试重点：
 
@@ -407,7 +504,7 @@ Service 测试重点：
 - refine/merge 独立提交与 beforeEntries。
 - 前序成功、后序失败不回滚。
 
-## 14. 领域进度与后续顺序
+## 15. 领域进度与后续顺序
 
 ### 已完成
 
@@ -428,21 +525,25 @@ Service 测试重点：
 
 - 独立 `createConsolidateTool()`、TypeBox schema、Consolidator 专用描述和安全结果适配已完成。
 - Tool 只允许 refine/merge，不暴露操作 context，不注册到主模型 `createAdvancedTools()`。
-- `consolidate-tool.test.ts` 9 项测试已完成，当前等待用户最终 review。
-
-### 未开始
+- `consolidate-tool.test.ts` 9 项测试已完成并通过用户 review。
 
 领域 4：操作留痕与触发。
 
-- 读取主模型 operation 留痕作为整理参照。
-- 低频操作计数、容量压力、主模型策展请求。
-- 操作留痕不是新增事实来源；当前 Markdown 始终是 source 基准。
+- History/Cursor、Trigger、测试文档和 15 项测试已完成并通过用户 review。
+
+### 进行中
 
 领域 5：Consolidator Runtime。
 
-- Prompt、上下文和受限多次 Tool 调用循环。
-- 输入包含当前 L1、usage/cap、主操作留痕和职责约束。
-- 零次或多次独立 refine/merge；无法无损整理时结束。
+- 5.1-5.3 已通过 review。
+- 5.4 已在 `infra/config` 注册基础配置并通过 review。
+- 5.5-5.7 已通过 review。
+- 5.8-5.9 已通过 review。
+- 5.10 测试规范已通过 review。
+- 5.11 已新增 Config/Model、Prompt、Runner 共 23 项离线测试。
+- 5.12 已通过 144 项全量测试、TypeScript typecheck 和 diff check，当前等待领域 5 code review。
+
+### 未开始
 
 领域 6：运行时集成。
 
@@ -450,28 +551,21 @@ Service 测试重点：
 
 之后单独规划 L1 layer 和公共 index 收敛。
 
-## 15. 工作树注意事项
+## 16. 工作树注意事项
 
-当前工作树不干净。以下内容可能来自旧方案、用户或其他并行工作，禁止擅自回滚：
+领域 0-3 和此前杂项已经提交。当前工作树包含尚未提交的领域 4 和正在 review 的领域 5 增量；如果出现其他并行改动，继续遵守“不擅自回滚”的规则。
 
-- 旧 `vivlos/agent/memory/` 下多处 modified 文件。
-- 未跟踪的 `vivlos/agent/memory/events/checkpoint.ts`。
-- 未跟踪的 `vivlos/agent/memory/events/context.ts`。
-- Agent Loop、Tool、OpenTUI、架构文档等旧方案改动。
-- `vivlos/entries/opentui/components/popups/ApiKeyPopup.tsx` 是无关改动。
-- `.VSCodeCounter/` 是无关未跟踪目录。
-
-fresh Memory 文件多数 untracked，因此普通 `git diff` 不会显示其内容。Review 时使用 `git status --short`、直接 Read 和测试，不要误以为无 diff 就没有改动。
+旧 `vivlos/agent/memory/` 已提交但不属于 fresh 设计来源。实现领域 5 时只从 `memory-refactor/`、fresh Infra 和本文推导。
 
 不要执行 destructive git 命令，不要删除旧改动，不要 commit/push，除非用户明确要求。
 
-## 16. 下一次恢复后的第一条回复
+## 17. 下一次恢复后的第一条回复
 
 压缩后若用户要求继续：
 
 1. 说明已从本文恢复上下文。
-2. 确认领域 3 当前为完成待 review，106 tests/typecheck/diff check 已通过。
-3. 若用户确认领域 3：更新 Todo，移除领域 3 明细并只展开领域 4 Todo。
-4. 不要在同一回复中直接实现领域 4。
+2. 确认领域 5 的 5.1-5.12 已完成，当前基线为 144 tests，等待用户 code review。
+3. 用户确认领域 5 后，收敛 Todo，再单独展开领域 6 设计。
+4. 不要提前实现领域 6。
 
 如果用户指出本文与最新指令冲突，以用户最新指令为准，并同步更新本文。

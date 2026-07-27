@@ -6,6 +6,12 @@ import type {
 	ThinkingLevel,
 } from "@earendil-works/pi-ai";
 
+/** 对已注册模型的无凭证引用。 */
+export interface ModelRef {
+	provider: string;
+	id: string;
+}
+
 /**
  * pi-ai 薄封装 — LLM 客户端接口。
  *

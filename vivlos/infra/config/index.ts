@@ -1,6 +1,9 @@
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getVivlosDir } from "../paths.ts";
+import type { ModelRef } from "../llm/types.ts";
+
+export type { ModelRef } from "../llm/types.ts";
 
 // #region ToolConfig
 
@@ -30,12 +33,27 @@ export interface CompressionConfig {
 
 // #region MemoryConfig
 
+export interface ConsolidatorConfig {
+	/** null 表示每次运行使用当时的当前主模型 */
+	model: ModelRef | null;
+	trigger: {
+		/** 主模型 committed Memory 操作数量阈值 */
+		operations: number;
+		/** memory/user 字符容量触发比例 */
+		capacity: number;
+	};
+	maxTurns: number;
+	maxTools: number;
+	timeoutMs: number;
+}
+
 export interface MemoryConfig {
 	/** Markdown 记忆文件的字符上限 */
 	characterLimit: {
 		memory: number;
 		user: number;
 	};
+	consolidator: ConsolidatorConfig;
 }
 
 // #endregion
@@ -67,6 +85,16 @@ const DEFAULT_CONFIG: VivlosConfig = {
 			memory: 2200,
 			user: 1375,
 		},
+		consolidator: {
+			model: null,
+			trigger: {
+				operations: 20,
+				capacity: 0.85,
+			},
+			maxTurns: 6,
+			maxTools: 8,
+			timeoutMs: 60_000,
+		},
 	},
 };
 
@@ -90,6 +118,8 @@ export function loadConfig(): VivlosConfig {
 		const raw = readFileSync(filePath, "utf-8");
 		const userConfig = JSON.parse(raw) as Partial<VivlosConfig>;
 		const userMemoryLimits = userConfig.memory?.characterLimit;
+		const userConsolidator = userConfig.memory?.consolidator;
+		const defaults = DEFAULT_CONFIG.memory.consolidator;
 		return {
 			tool: {
 				bash: { ...DEFAULT_CONFIG.tool.bash, ...userConfig.tool?.bash },
@@ -106,6 +136,31 @@ export function loadConfig(): VivlosConfig {
 						DEFAULT_CONFIG.memory.characterLimit.user,
 					),
 				},
+				consolidator: {
+					model: modelRef(userConsolidator?.model),
+					trigger: {
+						operations: positiveInteger(
+							userConsolidator?.trigger?.operations,
+							defaults.trigger.operations,
+						),
+						capacity: ratio(
+							userConsolidator?.trigger?.capacity,
+							defaults.trigger.capacity,
+						),
+					},
+					maxTurns: positiveInteger(
+						userConsolidator?.maxTurns,
+						defaults.maxTurns,
+					),
+					maxTools: positiveInteger(
+						userConsolidator?.maxTools,
+						defaults.maxTools,
+					),
+					timeoutMs: positiveInteger(
+						userConsolidator?.timeoutMs,
+						defaults.timeoutMs,
+					),
+				},
 			},
 		};
 	} catch {
@@ -118,6 +173,26 @@ function positiveInteger(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isInteger(value) && value > 0
 		? value
 		: fallback;
+}
+
+function ratio(value: unknown, fallback: number): number {
+	return typeof value === "number" && value > 0 && value <= 1
+		? value
+		: fallback;
+}
+
+function modelRef(value: unknown): ModelRef | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	const model = value as Record<string, unknown>;
+	if (
+		typeof model.provider !== "string" ||
+		!model.provider.trim() ||
+		typeof model.id !== "string" ||
+		!model.id.trim()
+	) {
+		return null;
+	}
+	return { provider: model.provider.trim(), id: model.id.trim() };
 }
 
 /** 确保 config.json 存在，不存在则生成默认配置 */
