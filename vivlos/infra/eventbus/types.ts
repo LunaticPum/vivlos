@@ -121,6 +121,9 @@ export type VivlosEvent =
 			readonly listName: string;
 			readonly taskId: string;
 	  }
+	// ———— memory（session 级 L1 记忆） ————
+	| MemoryOperationEvent
+	| MemoryChangedEvent
 	// ———— offer_choice（TUI 交互选择） ————
 	| {
 			readonly type: "offer_choice:pending";
@@ -152,6 +155,40 @@ export interface TaskItem {
 	readonly status: "pending" | "in_progress" | "completed";
 	readonly createdAt: number;
 	readonly completedAt?: number;
+}
+
+/** Memory 操作终态；用于 best-effort 留痕。 */
+export interface MemoryOperationEvent {
+	readonly type: "memory:operation";
+	readonly eventId: string;
+	readonly timestamp: number;
+	readonly sessionId: string;
+	readonly actor: "main" | "consolidator";
+	readonly action: "add" | "replace" | "remove" | "merge" | "refine";
+	readonly outcome: "committed" | "noop" | "rejected";
+	readonly file: "memory" | "user";
+	readonly reasonCode: string;
+	readonly reason?: string;
+	readonly before?: string;
+	readonly beforeEntries?: readonly string[];
+	readonly after?: string;
+	readonly revisionBefore: string;
+	readonly revisionAfter: string;
+	readonly source?: {
+		readonly sessionId: string;
+		readonly historyLine: number;
+	};
+	readonly errorCode?: string;
+	readonly errorMessage?: string;
+}
+
+/** Memory 内容已变化；用于使当前 session 的 SP 失效。 */
+export interface MemoryChangedEvent {
+	readonly type: "memory:changed";
+	readonly sessionId: string;
+	readonly file: "memory" | "user";
+	readonly revisionBefore: string;
+	readonly revisionAfter: string;
 }
 
 // #endregion
