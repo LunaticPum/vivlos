@@ -78,16 +78,6 @@ export function ensureTasksDir(): string {
 	return ensureDir(getTasksDir());
 }
 
-/** 获取 memories 目录路径（L1 Markdown 记忆） */
-export function getMemoriesDir(): string {
-	return resolve(getVivlosDir(), "memories");
-}
-
-/** 确保 memories 目录存在 */
-export function ensureMemoriesDir(): string {
-	return ensureDir(getMemoriesDir());
-}
-
 /** 获取临时文件目录路径 */
 export function getTempDir(): string {
 	return resolve(getVivlosDir(), "temp");

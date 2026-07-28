@@ -27,24 +27,16 @@ import {
 	ensureConfigDir,
 	ensureSessionsDir,
 	ensureTasksDir,
-	ensureMemoriesDir,
 	getTasksDir,
-	getMemoriesDir,
 } from "@vivlos/infra/paths.ts";
 import { ensureConfig, loadConfig } from "@vivlos/infra/config/index.ts";
 import { checkPiAiVersion } from "@vivlos/infra/version.ts";
+import { createMemoryEventLogger } from "@vivlos/agent/memory-refactor/utils/event-logger.ts";
+import { createMemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
 import { createSessionManager } from "@vivlos/agent/session/index.ts";
-import {
-	createMemoryCommandContextController,
-	createMemoryEventJournal,
-	createMemorySecurity,
-	createMemoryService,
-	createMemorySnapshot,
-	createMemoryStore,
-} from "@vivlos/agent/memory/index.ts";
 import {
 	createBuiltinTools,
 	createAdvancedTools,
@@ -72,7 +64,6 @@ async function main(): Promise<void> {
 	const config = loadConfig();
 	ensureSessionsDir();
 	ensureTasksDir();
-	ensureMemoriesDir();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
 
 	// ── SQLite 持久化层 ──
@@ -129,19 +120,21 @@ async function main(): Promise<void> {
 		skillRegistry,
 	);
 	const sessionManager = createSessionManager();
-	const memoryCommandContext = createMemoryCommandContextController();
-	const memorySecurity = createMemorySecurity();
-	const memoryStore = createMemoryStore(
-		getMemoriesDir(),
-		config.memory.characterLimit,
-	);
-	const memoryService = createMemoryService({
-		store: memoryStore,
-		security: memorySecurity,
-		appendEvent: (draft) =>
-			createMemoryEventJournal(draft.sessionId, sessionManager.dirPath).append(draft),
+	const memoryRuntime = createMemoryRuntime({
+		eventBus,
+		llm,
+		sessionManager,
+		limits: config.memory.characterLimit,
+		config: config.memory.consolidator,
 	});
-	const memorySnapshot = createMemorySnapshot(memoryStore, memorySecurity);
+	const disposeMemoryLogger = createMemoryEventLogger(
+		eventBus,
+		(sessionId) => sessionManager.resolveDir(sessionId) ?? sessionManager.dirPath,
+	);
+	const promptBuilder = createPromptBuilder();
+	eventBus.on("memory:changed", (event) => {
+		if (event.sessionId === sessionManager.id) promptBuilder.invalidate();
+	});
 
 	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
 	const advancedTools = createAdvancedTools({
@@ -149,12 +142,14 @@ async function main(): Promise<void> {
 		getSessionId: () => sessionManager.id,
 		getSessionDir: () => sessionManager.dirPath,
 		tasksDir: getTasksDir(),
-		memoryService,
-		getMemoryCommandContext: () => memoryCommandContext.current(),
+		getMemoryService: () => memoryRuntime.getService(),
+		getMemoryOperationContext: (command, reasonCode, reason) =>
+			memoryRuntime.getOperationContext(command, reasonCode, reason),
+		onMemoryResult: (command, result) =>
+			memoryRuntime.recordMainResult(command, result),
 	});
 	const tools = [...builtinTools, ...advancedTools];
 
-	const promptBuilder = createPromptBuilder();
 	const skillsText = formatSkillsForPrompt(skillRegistry.list());
 	if (skillsText) {
 		promptBuilder.setSkills(skillsText);
@@ -167,8 +162,7 @@ async function main(): Promise<void> {
 		maxTurns: 10,
 		tools,
 		toolsReset,
-		memorySnapshot,
-		memoryCommandContext,
+		memoryRuntime,
 		sessionManager,
 		promptBuilder,
 		thinkingLevel: "medium",
@@ -177,6 +171,7 @@ async function main(): Promise<void> {
 	// ── 退出清理 ──
 	const cleanup = () => {
 		process.stdout.write("\x1b[2J\x1b[H");
+		disposeMemoryLogger();
 		closeDb();
 		process.exit(0);
 	};

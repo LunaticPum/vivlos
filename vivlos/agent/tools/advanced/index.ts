@@ -1,8 +1,10 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type {
-	MemoryCommandContext,
+	MemoryOperationContext,
 	MemoryService,
-} from "@vivlos/agent/memory/types.ts";
+	MemoryServiceResult,
+	MainMemoryCommand,
+} from "@vivlos/agent/memory-refactor/index.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createTodoTool } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";
@@ -25,8 +27,18 @@ export interface AdvancedToolDeps {
 	/** tasks 目录路径（~/.vivlos/tasks） */
 	readonly tasksDir: string;
 	/** 主模型 Memory 命令的统一业务入口 */
-	readonly memoryService: MemoryService;
-	readonly getMemoryCommandContext: () => MemoryCommandContext;
+	readonly getMemoryService?: () => MemoryService;
+	/** 仅保留给未迁移的调用方；新组合根应使用 getMemoryService。 */
+	readonly memoryService?: MemoryService;
+	readonly getMemoryOperationContext?: (
+		command: MainMemoryCommand,
+		reasonCode: string,
+		reason?: string,
+	) => MemoryOperationContext;
+	readonly onMemoryResult?: (
+		command: MainMemoryCommand,
+		result: MemoryServiceResult,
+	) => void;
 }
 
 /**
@@ -40,6 +52,19 @@ export function createAdvancedTools(deps: AdvancedToolDeps): AgentTool<any, any>
 		createTodoTool(deps),
 		createTaskTool(deps),
 		createOfferChoiceTool(deps),
-		createMemoryTool(deps),
+		createMemoryTool({
+			getMemoryService: () => {
+				const service = deps.getMemoryService?.() ?? deps.memoryService;
+				if (!service) throw new Error("Memory Service 未配置");
+				return service;
+			},
+			getMemoryOperationContext: (command, reasonCode, reason) =>
+				deps.getMemoryOperationContext?.(command, reasonCode, reason) ?? {
+					sessionId: deps.getSessionId(),
+					reasonCode,
+					...(reason ? { reason } : {}),
+				},
+			onCapacityExceeded: deps.onMemoryResult,
+		}),
 	].filter(Boolean);
 }

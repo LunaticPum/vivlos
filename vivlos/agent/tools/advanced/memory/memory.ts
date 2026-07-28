@@ -8,18 +8,18 @@
  * - Cap as Feature：超限报错逼策展，不静默截断
  * - Duplicate = Success No-op：LLM 爱 retry，静默去重
  *
- * 存储：~/.vivlos/memories/memory.md + user.md，条目间用 --- 分隔。
+ * 存储：当前 session 目录下的 memory.md + user.md，条目间用 --- 分隔。
  */
 
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory/types.ts";
 import type {
-	MemoryCommand,
-	MemoryCommandContext,
-	MemoryCommandResult,
+	MainMemoryCommand,
+	MemoryOperationContext,
 	MemoryService,
-} from "@vivlos/agent/memory/types.ts";
+	MemoryServiceResult,
+} from "@vivlos/agent/memory-refactor/index.ts";
+import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory-refactor/index.ts";
 import { memoryDescription } from "./description.ts";
 
 // #region Tool 参数
@@ -62,13 +62,21 @@ const Params = Type.Object({
 type Params = Static<typeof Params>;
 
 export interface MemoryToolDeps {
-	readonly memoryService: MemoryService;
-	readonly getMemoryCommandContext: () => MemoryCommandContext;
+	readonly getMemoryService: () => MemoryService;
+	readonly getMemoryOperationContext: (
+		command: MainMemoryCommand,
+		reasonCode: string,
+		reason?: string,
+	) => MemoryOperationContext;
+	readonly onCapacityExceeded?: (
+		command: MainMemoryCommand,
+		result: MemoryServiceResult,
+	) => void;
 }
 
 export interface MemoryToolDetails {
 	readonly message: string;
-	readonly result?: MemoryCommandResult;
+	readonly result?: MemoryServiceResult;
 }
 
 // #endregion
@@ -95,14 +103,15 @@ export function createMemoryTool(
 			const command = toCommand(params);
 			if (typeof command === "string") return err(command);
 
-			const result = deps.memoryService.executeMainCommand(
+			const result = deps.getMemoryService().executeMain(
 				command,
-				deps.getMemoryCommandContext(),
+				deps.getMemoryOperationContext(command, params.reasonCode, params.reason),
 			);
+			deps.onCapacityExceeded?.(command, result);
 			if (!result.ok) {
 				return err(result.error.message, result);
 			}
-			return ok(formatSuccess(result), result);
+			return ok(formatSuccess(command, result), result);
 		},
 	};
 }
@@ -114,7 +123,7 @@ export function createMemoryTool(
 /** 构造成功结果 */
 function ok(
 	message: string,
-	result?: MemoryCommandResult,
+	result?: MemoryServiceResult,
 ): AgentToolResult<MemoryToolDetails> {
 	return {
 		content: [{ type: "text", text: message }],
@@ -125,7 +134,7 @@ function ok(
 /** 构造错误结果 */
 function err(
 	message: string,
-	result?: MemoryCommandResult,
+	result?: MemoryServiceResult,
 ): AgentToolResult<MemoryToolDetails> {
 	const code = result && !result.ok ? `[${result.error.code}] ` : "";
 	return {
@@ -135,18 +144,11 @@ function err(
 }
 
 /** 将宽松的 Tool 参数收窄为 MemoryService 命令。 */
-function toCommand(params: Params): MemoryCommand | string {
-	const reason = params.reason?.trim();
-	const metadata = {
-		reasonCode: params.reasonCode,
-		...(reason ? { reason } : {}),
-	};
-
+function toCommand(params: Params): MainMemoryCommand | string {
 	switch (params.action) {
 		case "add":
 			if (!params.content) return "add 操作需要 content 参数";
 			return {
-				...metadata,
 				action: "add",
 				file: params.file,
 				content: params.content,
@@ -156,7 +158,6 @@ function toCommand(params: Params): MemoryCommand | string {
 				return "replace 操作需要 old_text 和 new_text 参数";
 			}
 			return {
-				...metadata,
 				action: "replace",
 				file: params.file,
 				oldText: params.old_text,
@@ -165,7 +166,6 @@ function toCommand(params: Params): MemoryCommand | string {
 		case "remove":
 			if (!params.old_text) return "remove 操作需要 old_text 参数";
 			return {
-				...metadata,
 				action: "remove",
 				file: params.file,
 				oldText: params.old_text,
@@ -173,7 +173,7 @@ function toCommand(params: Params): MemoryCommand | string {
 	}
 }
 
-function formatSuccess(result: MemoryCommandResult): string {
+function formatSuccess(command: MainMemoryCommand, result: MemoryServiceResult): string {
 	if (!result.ok) return result.error.message;
 	const mutation = result.value;
 	const fileName = mutation.file === "memory" ? "memory.md" : "user.md";
@@ -182,7 +182,7 @@ function formatSuccess(result: MemoryCommandResult): string {
 	if (mutation.status === "noop") {
 		return `内容未变化（静默跳过）${usage}`;
 	}
-	switch (result.command.action) {
+	switch (command.action) {
 		case "add":
 			return `已写入 ${fileName}："${truncate(mutation.after!)}"${usage}`;
 		case "replace":
@@ -190,6 +190,7 @@ function formatSuccess(result: MemoryCommandResult): string {
 		case "remove":
 			return `已从 ${fileName} 删除："${truncate(mutation.before!)}"${usage}`;
 	}
+	return "记忆操作已完成";
 }
 
 /** 截断过长文本用于日志显示 */

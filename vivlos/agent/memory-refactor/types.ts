@@ -38,3 +38,17 @@ export const MEMORY_ACTIONS = [
 export type MemoryAction = (typeof MEMORY_ACTIONS)[number];
 
 // #endregion
+
+// #region 主模型原因
+
+export const MAIN_MEMORY_REASON_CODES = [
+	"explicit_user_request",
+	"explicit_user_forget",
+	"user_correction",
+	"stable_project_decision",
+	"preference_observed",
+] as const;
+
+export type MainMemoryReasonCode = (typeof MAIN_MEMORY_REASON_CODES)[number];
+
+// #endregion

@@ -10,10 +10,7 @@ import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type {
-	MemoryCommandContextController,
-	MemorySnapshot,
-} from "@vivlos/agent/memory/types.ts";
+import type { MemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import {
@@ -38,9 +35,8 @@ export interface CreateAgentLoopParams {
 	/** LLM + EventBus 基础依赖 */
 	readonly deps: AgentLoopDeps;
 
-	/** MemorySnapshot -- session 启动/切换时构造可冻结的 Memory Prompt */
-	readonly memorySnapshot: MemorySnapshot;
-	readonly memoryCommandContext: MemoryCommandContextController;
+	/** 当前 session 的 Memory 运行时 */
+	readonly memoryRuntime: MemoryRuntime;
 	/** SessionManager -- 消息存储管理 */
 	readonly sessionManager: SessionManager;
 	/** PromptBuilder -- system prompt 组装（session 级冻结快照） */
@@ -128,8 +124,9 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			}
 
 			// --- 2. Lazy freeze: SP 未冻结时读 memory + 冻结（session 启动/切换/压缩后首次） ---
+			await params.memoryRuntime.prepare(config.model, config.signal);
 			if (!promptBuilder.isFrozen()) {
-				const memoryBlock = params.memorySnapshot.buildPrompt();
+				const memoryBlock = params.memoryRuntime.buildPrompt();
 				// 空字符串也必须写入，避免 invalidate 后沿用旧 Memory。
 				promptBuilder.setMemory(memoryBlock);
 				promptBuilder.freeze();
@@ -164,13 +161,25 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					);
 				},
 				...params.hooks,
+				prepareNextTurn: async (turnContext) => {
+					const external = await params.hooks?.prepareNextTurn?.(turnContext);
+					const nextModel = external?.model ?? config.model;
+					await params.memoryRuntime.prepare(nextModel, config.signal);
+					if (!promptBuilder.isFrozen()) {
+						promptBuilder.setMemory(params.memoryRuntime.buildPrompt());
+						promptBuilder.freeze();
+					}
+					return {
+						...external,
+						context: {
+							...(external?.context ?? turnContext.context),
+							systemPrompt: promptBuilder.getCached(),
+						},
+					};
+				},
 			};
 
 			let turn = 0;
-			params.memoryCommandContext.begin(
-				sessionManager.id,
-				prompts.map(readMessageId),
-			);
 			try {
 				// --- 6. 启动 agentLoop ---
 				const stream = agentLoop(
@@ -185,7 +194,6 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				for await (const event of stream) {
 					if (event.type === "turn_start") {
 						turn++;
-						params.memoryCommandContext.setTurn(turn);
 					}
 					const vivlosEvents = mapAgentEvent(event, sessionManager.id, turn);
 					for (const ve of vivlosEvents) deps.eventBus.emit(ve);
@@ -215,8 +223,6 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					error,
 				});
 				return { messages: [], turns: turn, error };
-			} finally {
-				params.memoryCommandContext.clear();
 			}
 		},
 
@@ -286,10 +292,6 @@ function ensureMessageId(message: AgentMessage): IdentifiedAgentMessage {
 		return message as IdentifiedAgentMessage;
 	}
 	return { ...message, id: randomUUID() } as IdentifiedAgentMessage;
-}
-
-function readMessageId(message: AgentMessage): string {
-	return (message as IdentifiedAgentMessage).id;
 }
 
 // #endregion

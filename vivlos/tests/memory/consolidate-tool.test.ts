@@ -148,7 +148,6 @@ describe("Consolidate Tool schema", () => {
 			getSessionDir: () => "unused-session-dir",
 			tasksDir: "unused-tasks-dir",
 			memoryService: {} as never,
-			getMemoryCommandContext: () => ({}) as never,
 		});
 		expect(advancedTools.map((advancedTool) => advancedTool.name)).not.toContain(
 			"consolidate",

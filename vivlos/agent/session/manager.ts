@@ -31,6 +31,11 @@ export function createSessionManager(): SessionManager {
 		get name() { return current.header.name; },
 		get filePath() { return current.filePath; },
 		get dirPath() { return dirname(current.filePath); },
+		resolveDir(sessionId: string) {
+			if (sessionId === current.header.id) return dirname(current.filePath);
+			const session = listSessions().find((item) => item.id === sessionId);
+			return session ? dirname(session.filePath) : undefined;
+		},
 
 		getMessages() {
 			return messagesOverride ?? loadMessages(current.filePath);

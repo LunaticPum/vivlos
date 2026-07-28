@@ -14,6 +14,8 @@ export interface SessionManager {
 	readonly filePath: string;
 	/** session 目录路径（filePath 的父目录，todo tool 等按 session 写文件用） */
 	readonly dirPath: string;
+	/** 按 sessionId 查找稳定目录；当前 pending session 也可解析。 */
+	resolveDir(sessionId: string): string | undefined;
 
 	// ── 当前 session 消息 ──
 	getMessages(): readonly Message[];
