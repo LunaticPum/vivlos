@@ -36,7 +36,10 @@ const Params = Type.Object({
 		Type.String({ description: "要追加的内容（add 时必填）" }),
 	),
 	old_text: Type.Optional(
-		Type.String({ description: "要匹配的子串（replace/remove 时必填）" }),
+		Type.String({
+			description:
+				"replace/remove 时必填：当前 Memory 中足够唯一的原文子串",
+		}),
 	),
 	new_text: Type.Optional(
 		Type.String({ description: "替换后的文本（replace 时必填）" }),
@@ -155,7 +158,7 @@ function toCommand(params: Params): MainMemoryCommand | string {
 			};
 		case "replace":
 			if (!params.old_text || params.new_text === undefined) {
-				return "replace 操作需要 old_text 和 new_text 参数";
+				return "replace 操作必须同时提供 old_text 和 new_text，请按当前 Memory 原文补全后重试";
 			}
 			return {
 				action: "replace",
@@ -164,7 +167,9 @@ function toCommand(params: Params): MainMemoryCommand | string {
 				newText: params.new_text,
 			};
 		case "remove":
-			if (!params.old_text) return "remove 操作需要 old_text 参数";
+			if (!params.old_text) {
+				return "remove 操作必须提供 old_text，请从当前 Memory 复制足够唯一的原文片段后重试";
+			}
 			return {
 				action: "remove",
 				file: params.file,

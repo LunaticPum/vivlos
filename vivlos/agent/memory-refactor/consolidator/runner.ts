@@ -8,12 +8,14 @@
 import {
 	agentLoop,
 	type AgentContext,
+	type AgentEvent,
 	type AgentMessage,
 	type AgentLoopConfig,
 	type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
 
+import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
 import type {
 	MemoryRepository,
@@ -36,6 +38,7 @@ export interface RunnerConfig {
 }
 
 export interface RunnerDeps {
+	readonly eventBus: EventBus;
 	readonly stream: StreamFn;
 	readonly repository: MemoryRepository;
 	readonly history: History;
@@ -80,9 +83,15 @@ interface RunResultBase {
 export type RunResult =
 	| (RunResultBase & { readonly status: "completed" })
 	| (RunResultBase & {
-			readonly status: "failed" | "aborted" | "busy";
+			readonly status: "failed" | "aborted";
+			readonly error: RunError;
+	  })
+	| (RunResultBase & {
+			readonly status: "busy";
 			readonly error: RunError;
 	  });
+
+type ActiveRunResult = Exclude<RunResult, { readonly status: "busy" }>;
 
 export interface Runner {
 	run(input: RunInput): Promise<RunResult>;
@@ -106,10 +115,20 @@ export function createRunner(deps: RunnerDeps): Runner {
 			}
 
 			active = true;
+			deps.eventBus.emit({
+				type: "consolidate:started",
+				sessionId: input.sessionId,
+				reason: input.decision.reason,
+			});
 			try {
-				return await runOnce(deps, input);
-			} catch (error) {
-				return fail(input, input.decision.cursor, 0, "runtime_error", error);
+				let result: ActiveRunResult;
+				try {
+					result = await runOnce(deps, input);
+				} catch (error) {
+					result = fail(input, input.decision.cursor, 0, "runtime_error", error);
+				}
+				emitEnded(deps.eventBus, input.sessionId, result);
+				return result;
 			} finally {
 				active = false;
 			}
@@ -121,7 +140,7 @@ export function createRunner(deps: RunnerDeps): Runner {
 
 // #region 单次运行
 
-async function runOnce(deps: RunnerDeps, input: RunInput): Promise<RunResult> {
+async function runOnce(deps: RunnerDeps, input: RunInput): Promise<ActiveRunResult> {
 	validateRun(deps.config, input);
 	const cursor = deps.history.readCursor();
 	if (cursor !== input.decision.cursor) {
@@ -184,8 +203,8 @@ async function runOnce(deps: RunnerDeps, input: RunInput): Promise<RunResult> {
 	};
 
 	const stream = agentLoop(prompts, context, config, signal, deps.stream);
-	for await (const _event of stream) {
-		// Runtime 不把主 Agent 的过程事件映射到 TUI；这里只等待完整结果。
+	for await (const event of stream) {
+		emitToolEvent(deps.eventBus, input.sessionId, event);
 	}
 	const messages = await stream.result();
 	if (signal.aborted || input.signal?.aborted) {
@@ -250,6 +269,42 @@ async function runOnce(deps: RunnerDeps, input: RunInput): Promise<RunResult> {
 
 // #region 辅助
 
+function emitToolEvent(eventBus: EventBus, sessionId: string, event: AgentEvent): void {
+	if (event.type === "tool_execution_start") {
+		eventBus.emit({
+			type: "consolidate:tool_started",
+			sessionId,
+			toolName: event.toolName,
+			callId: event.toolCallId,
+			args: event.args,
+		});
+		return;
+	}
+	if (event.type === "tool_execution_end") {
+		eventBus.emit({
+			type: "consolidate:tool_completed",
+			sessionId,
+			toolName: event.toolName,
+			callId: event.toolCallId,
+			result: event.result,
+			success: !event.isError,
+		});
+	}
+}
+
+function emitEnded(eventBus: EventBus, sessionId: string, result: ActiveRunResult): void {
+	eventBus.emit({
+		type: "consolidate:ended",
+		sessionId,
+		reason: result.reason,
+		status: result.status,
+		toolCalls: result.toolCalls,
+		cursorBefore: result.cursorBefore,
+		cursorAfter: result.cursorAfter,
+		...(result.status === "completed" ? {} : { error: result.error }),
+	});
+}
+
 function validateRun(config: RunnerConfig, input: RunInput): void {
 	if (!input.sessionId.trim()) throw new Error("sessionId 不能为空");
 	for (const [name, value] of [
@@ -304,7 +359,7 @@ function success(
 	toolCalls: number,
 	cursorBefore: number,
 	cursorAfter: number,
-): RunResult {
+): ActiveRunResult {
 	return {
 		status: "completed",
 		reason: input.decision.reason,
@@ -314,6 +369,20 @@ function success(
 	};
 }
 
+function failure(
+	input: RunInput,
+	status: "failed" | "aborted",
+	toolCalls: number,
+	cursor: number,
+	error: RunError,
+): ActiveRunResult;
+function failure(
+	input: RunInput,
+	status: "busy",
+	toolCalls: number,
+	cursor: number,
+	error: RunError,
+): RunResult;
 function failure(
 	input: RunInput,
 	status: "failed" | "aborted" | "busy",
@@ -337,7 +406,7 @@ function fail(
 	toolCalls: number,
 	code: RunErrorCode,
 	error: unknown,
-): RunResult {
+): ActiveRunResult {
 	const cause = error instanceof Error ? error : new Error(String(error));
 	log("error", `Consolidator Runtime 失败：${code}`, cause, true);
 	return failure(input, "failed", toolCalls, cursor, {

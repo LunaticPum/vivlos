@@ -1,6 +1,7 @@
 /** EventBus 各领域事件的总联合。 */
 
 import type { MainAgentEvent } from "./events/main-agent-event.ts";
+import type { ConsolidateEvent } from "./events/consolidate-event.ts";
 import type { MemoryEvent } from "./events/memory-event.ts";
 import type { SessionEvent } from "./events/session-event.ts";
 import type { AppEvent } from "./events/app-event.ts";
@@ -8,12 +9,19 @@ import type { WorkspaceEvent } from "./events/workspace-event.ts";
 
 export type VivlosEvent =
 	| MainAgentEvent
+	| ConsolidateEvent
 	| MemoryEvent
 	| SessionEvent
 	| AppEvent
 	| WorkspaceEvent;
 
 export type { MainAgentEvent } from "./events/main-agent-event.ts";
+export type {
+	ConsolidateEvent,
+	ConsolidateReason,
+	ConsolidateStatus,
+	ConsolidateError,
+} from "./events/consolidate-event.ts";
 export type {
 	MemoryEvent,
 	MemoryOperationEvent,

@@ -70,6 +70,7 @@ export function createMemoryRuntime(deps: MemoryRuntimeDeps): MemoryRuntime {
 		const history = createHistory(deps.sessionManager.dirPath, id);
 		const service = createMemoryService({ repository, eventBus: deps.eventBus });
 		const runner = createRunner({
+			eventBus: deps.eventBus,
 			stream: (model, context, options) =>
 				deps.llm.stream(model, context, {
 					signal: options?.signal,

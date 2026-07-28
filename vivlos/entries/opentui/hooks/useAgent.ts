@@ -21,8 +21,12 @@ export type LogEntry =
 			kind: "tool";
 			callId: string;
 			name: string;
+			source: "main" | "consolidator";
+			args?: unknown;
 			result: string;
 			done: boolean;
+			success?: boolean;
+			runMarker?: boolean;
 			turnIndex: number;
 			createdAt: number;
 	  };
@@ -133,6 +137,42 @@ function updateLastThinking(
 	return log;
 }
 
+function completeTool(
+	log: LogEntry[],
+	callId: string,
+	result: string,
+	success: boolean,
+): LogEntry[] {
+	return log.map((entry) =>
+		entry.kind === "tool" && entry.callId === callId
+			? { ...entry, result, success, done: true }
+			: entry,
+	);
+}
+
+function completeConsolidateRun(
+	log: LogEntry[],
+	result: string,
+	success: boolean,
+): LogEntry[] {
+	for (let index = log.length - 1; index >= 0; index--) {
+		const entry = log[index];
+		if (
+			entry.kind === "tool" &&
+			entry.source === "consolidator" &&
+			entry.runMarker &&
+			!entry.done
+		) {
+			return [
+				...log.slice(0, index),
+				{ ...entry, result, success, done: true },
+				...log.slice(index + 1),
+			];
+		}
+	}
+	return log;
+}
+
 /** 从 Message 数组重建 ConversationTurn[]（用于 session 切换后恢复历史） */
 function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 	const turns: ConversationTurn[] = [];
@@ -146,25 +186,37 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 			if (cur) turns.push(cur);
 			cur = { userInput: text, log: [], finalText: "", status: "complete", turnCount: 0, toolCount: 0 };
 		} else if (msg.role === "assistant" && cur) {
+			const turnIndex = cur.turnCount;
+			cur.turnCount++;
 			cur.finalText = msg.content.filter((c): c is TextContent => c.type === "text").map((c) => c.text).join("");
 			cur.usage = msg.usage;
 			for (const c of msg.content) {
 				if (c.type === "thinking") {
 					const t = (c as unknown as Record<string, string>).thinking ?? "";
-					cur.log.push({ kind: "thinking", text: t, done: true, turnIndex: cur.turnCount, createdAt: msg.timestamp });
+					cur.log.push({ kind: "thinking", text: t, done: true, turnIndex, createdAt: msg.timestamp });
 				}
-				if (c.type === "toolCall") cur.turnCount++;
+				if (c.type === "toolCall") {
+					cur.toolCount++;
+					cur.log.push({
+						kind: "tool",
+						callId: c.id,
+						name: c.name,
+						source: "main",
+						args: c.arguments,
+						result: "",
+						done: false,
+						turnIndex,
+						createdAt: msg.timestamp,
+					});
+				}
 			}
 		} else if (msg.role === "toolResult" && cur) {
-			cur.toolCount++;
-			for (let i = cur.log.length - 1; i >= 0; i--) {
-				const e = cur.log[i]!;
-				if (e.kind === "tool" && !e.done) {
-					e.result = extractToolText(msg);
-					e.done = true;
-					break;
-				}
-			}
+			cur.log = completeTool(
+				cur.log,
+				msg.toolCallId,
+				extractToolText(msg),
+				!msg.isError,
+			);
 		}
 	}
 	if (cur) turns.push(cur);
@@ -184,6 +236,7 @@ export function useAgent(
 
 	// ref 保存当前对话轮次在 conversation turns 数组里的索引
 	const currentIdxRef = useRef(-1);
+	const consolidateRunRef = useRef(0);
 	// 暂存 loop turn 的 usage，conversationTurn 结束时才提交
 	const latestUsageRef = useRef<Usage | undefined>(undefined);
 	useEffect(() => {
@@ -231,6 +284,8 @@ export function useAgent(
 								kind: "tool",
 								callId: e.callId,
 								name: e.toolName,
+								source: "main",
+								args: e.args,
 								result: "",
 								done: false,
 								turnIndex: t.turnCount,
@@ -266,10 +321,86 @@ export function useAgent(
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
-						log: t.log.map((entry) =>
-							entry.kind === "tool" && entry.callId === e.callId
-								? { ...entry, result: text, done: true }
-								: entry,
+						log: completeTool(t.log, e.callId, text, e.success),
+					})),
+				);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("consolidate:started", (e) => {
+				if (e.sessionId !== agent.getSessionId()) return;
+				const callId = `consolidate-run:${++consolidateRunRef.current}`;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: [
+							...t.log,
+							{
+								kind: "tool",
+								callId,
+								name: "consolidate",
+								source: "consolidator",
+								result: "",
+								done: false,
+								runMarker: true,
+								turnIndex: t.turnCount,
+								createdAt: Date.now(),
+							},
+						],
+					})),
+				);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("consolidate:tool_started", (e) => {
+				if (e.sessionId !== agent.getSessionId()) return;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						toolCount: t.toolCount + 1,
+						log: [
+							...t.log,
+							{
+								kind: "tool",
+								callId: e.callId,
+								name: e.toolName,
+								source: "consolidator",
+								args: e.args,
+								result: "",
+								done: false,
+								turnIndex: Math.max(0, t.turnCount - 1),
+								createdAt: Date.now(),
+							},
+						],
+					})),
+				);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("consolidate:tool_completed", (e) => {
+				if (e.sessionId !== agent.getSessionId()) return;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: completeTool(t.log, e.callId, extractToolText(e.result), e.success),
+					})),
+				);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("consolidate:ended", (e) => {
+				if (e.sessionId !== agent.getSessionId()) return;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: completeConsolidateRun(
+							t.log,
+							e.error?.message ?? "",
+							e.status === "completed",
 						),
 					})),
 				);
@@ -374,7 +505,7 @@ export function useAgent(
 		);
 
 		return () => unsubs.forEach((fn) => fn());
-	}, [eventBus]);
+	}, [agent, eventBus]);
 
 	// #endregion
 

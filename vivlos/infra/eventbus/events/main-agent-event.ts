@@ -59,6 +59,7 @@ export type MainAgentEvent =
 			readonly sessionId: string;
 			readonly toolName: string;
 			readonly callId: string;
+			readonly args: unknown;
 	  }
 	| {
 			readonly type: "agent:toolCall_delta";

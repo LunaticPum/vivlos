@@ -113,6 +113,7 @@ export function mapAgentEvent(
 					sessionId,
 					toolName: event.toolName,
 					callId: event.toolCallId,
+					args: event.args,
 				},
 			];
 		case "tool_execution_update":

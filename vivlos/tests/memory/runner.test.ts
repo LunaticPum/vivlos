@@ -27,7 +27,11 @@ import type {
 	MemoryServiceResult,
 	MemoryServiceValue,
 } from "@vivlos/agent/memory-refactor/service.ts";
-import { createEventBus, type VivlosEvent } from "@vivlos/infra/eventbus/index.ts";
+import {
+	createEventBus,
+	type ConsolidateEvent,
+	type VivlosEvent,
+} from "@vivlos/infra/eventbus/index.ts";
 import { initLogger } from "@vivlos/infra/logger/index.ts";
 import type {
 	History,
@@ -56,6 +60,7 @@ interface Harness {
 	readonly streamModels: Model<Api>[];
 	readonly serviceCalls: ServiceCall[];
 	readonly logs: Extract<VivlosEvent, { type: "log" }>[];
+	readonly events: VivlosEvent[];
 	readonly counts: {
 		repositoryReads: number;
 		cursorReads: number;
@@ -252,12 +257,19 @@ function createHarness(options: {
 		);
 	};
 	const eventBus = createEventBus();
+	const events: VivlosEvent[] = [];
+	const emit = eventBus.emit.bind(eventBus);
+	eventBus.emit = (event) => {
+		events.push(event);
+		emit(event);
+	};
 	initLogger(eventBus);
 	const logs: Extract<VivlosEvent, { type: "log" }>[] = [];
 	eventBus.on("log", (event) => {
 		logs.push(event);
 	});
 	const runtime = createRunner({
+		eventBus,
 		stream,
 		repository,
 		history,
@@ -280,6 +292,7 @@ function createHarness(options: {
 		streamModels,
 		serviceCalls,
 		logs,
+		events,
 		counts,
 		getCursor: () => cursor,
 		setCursor: (line) => {
@@ -292,6 +305,12 @@ function createHarness(options: {
 function expectTuiLog(harness: Harness, level: "warn" | "error"): void {
 	expect(harness.logs).toContainEqual(
 		expect.objectContaining({ level, onTui: true }),
+	);
+}
+
+function consolidateEvents(harness: Harness): ConsolidateEvent[] {
+	return harness.events.filter(
+		(event): event is ConsolidateEvent => event.type.startsWith("consolidate:"),
 	);
 }
 
@@ -622,6 +641,161 @@ describe("Consolidator Runner lifecycle", () => {
 		expect(harness.contexts).toHaveLength(3);
 		expect(harness.contexts[1]?.messages).toHaveLength(1);
 		expect(JSON.stringify(harness.contexts[1])).not.toContain("provider failed");
+	});
+
+	it("MEM-RUN-013 每次真实运行发布配对的 started/ended 终态", async () => {
+		const completed = createHarness();
+		const failed = createHarness({
+			responses: [
+				fauxAssistantMessage("", {
+					stopReason: "error",
+					errorMessage: "provider unavailable",
+				}),
+			],
+		});
+		const aborted = createHarness();
+		const controller = new AbortController();
+		controller.abort();
+
+		await completed.runner.run(completed.input);
+		await failed.runner.run(failed.input);
+		await aborted.runner.run({ ...aborted.input, signal: controller.signal });
+
+		expect(consolidateEvents(completed)).toEqual([
+			{
+				type: "consolidate:started",
+				sessionId: SESSION_ID,
+				reason: "operation_threshold",
+			},
+			{
+				type: "consolidate:ended",
+				sessionId: SESSION_ID,
+				reason: "operation_threshold",
+				status: "completed",
+				toolCalls: 0,
+				cursorBefore: 0,
+				cursorAfter: 5,
+			},
+		]);
+		expect(consolidateEvents(failed)).toEqual([
+			expect.objectContaining({ type: "consolidate:started" }),
+			expect.objectContaining({
+				type: "consolidate:ended",
+				status: "failed",
+				cursorBefore: 0,
+				cursorAfter: 0,
+				error: { code: "provider_error", message: "Consolidator Provider 返回错误" },
+			}),
+		]);
+		expect(consolidateEvents(aborted)).toEqual([
+			expect.objectContaining({ type: "consolidate:started" }),
+			expect.objectContaining({
+				type: "consolidate:ended",
+				status: "aborted",
+				error: { code: "aborted", message: "Consolidator 运行已中断" },
+			}),
+		]);
+	});
+
+	it("MEM-RUN-014 只映射串行 Tool start/completed 并保留调用数据", async () => {
+		const harness = createHarness({
+			responses: [
+				fauxAssistantMessage([refineCall(), mergeCall()], { stopReason: "toolUse" }),
+				fauxAssistantMessage("整理完成"),
+			],
+			serviceResults: [
+				committed(),
+				committed({
+					action: "merge",
+					file: "user",
+					before: undefined,
+					beforeEntries: [
+						"User prefers concise answers.",
+						"User prefers direct answers.",
+					],
+					after: "User prefers concise, direct answers.",
+				}),
+			],
+		});
+
+		await harness.runner.run(harness.input);
+
+		const events = consolidateEvents(harness);
+		expect(events.map((event) => event.type)).toEqual([
+			"consolidate:started",
+			"consolidate:tool_started",
+			"consolidate:tool_completed",
+			"consolidate:tool_started",
+			"consolidate:tool_completed",
+			"consolidate:ended",
+		]);
+		expect(events[1]).toEqual({
+			type: "consolidate:tool_started",
+			sessionId: SESSION_ID,
+			toolName: "consolidate",
+			callId: "refine-1",
+			args: {
+				action: "refine",
+				file: "memory",
+				old_entry: "A complete verbose project fact.",
+				new_entry: "A complete project fact.",
+			},
+		});
+		expect(events[2]).toMatchObject({
+			type: "consolidate:tool_completed",
+			sessionId: SESSION_ID,
+			toolName: "consolidate",
+			callId: "refine-1",
+			result: {
+				details: {
+					result: {
+						ok: true,
+						value: { status: "committed", action: "refine" },
+					},
+				},
+			},
+			success: true,
+		});
+		expect(events.at(-1)).toMatchObject({
+			type: "consolidate:ended",
+			status: "completed",
+			toolCalls: 2,
+		});
+	});
+
+	it("MEM-RUN-015 busy 不发布事件且独立 Loop 不泄漏主 Agent 事件", async () => {
+		let release!: () => void;
+		let started!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const running = new Promise<void>((resolve) => {
+			started = resolve;
+		});
+		const harness = createHarness({
+			responses: [
+				async () => {
+					started();
+					await gate;
+					return fauxAssistantMessage("done");
+				},
+			],
+		});
+		const first = harness.runner.run(harness.input);
+		await running;
+		const eventCount = harness.events.length;
+
+		const busy = await harness.runner.run(harness.input);
+
+		expect(busy).toMatchObject({ status: "busy", error: { code: "busy" } });
+		expect(harness.events).toHaveLength(eventCount);
+		release();
+		await first;
+		expect(harness.events.some((event) => event.type.startsWith("agent:"))).toBe(false);
+		expect(consolidateEvents(harness).map((event) => event.type)).toEqual([
+			"consolidate:started",
+			"consolidate:ended",
+		]);
 	});
 });
 
