@@ -1,6 +1,6 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { TextContent } from "@earendil-works/pi-ai";
-import type { VivlosEvent } from "@vivlos/infra/eventbus/types.ts";
+import type { VivlosEvent } from "@vivlos/infra/eventbus/index.ts";
 
 function extractText(message: AgentMessage): string {
 	if (message.role === "user") {

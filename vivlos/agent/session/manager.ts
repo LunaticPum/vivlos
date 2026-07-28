@@ -11,6 +11,7 @@ import {
 	listSessions,
 	deleteSession,
 	renameSession,
+	renameSessionIfUnnamed,
 } from "@vivlos/infra/storage/session/index.ts";
 
 /**
@@ -106,6 +107,24 @@ export function createSessionManager(): SessionManager {
 			}
 			renameSession(current.filePath, name);
 			current = { ...current, header: { ...current.header, name } };
+		},
+
+		renameIfUnnamed(sessionId: string, name: string) {
+			if (sessionId === current.header.id) {
+				if (current.header.name !== null) return false;
+				if (pending) {
+					current = { ...current, header: { ...current.header, name } };
+					return true;
+				}
+				const changed = renameSessionIfUnnamed(current.filePath, name);
+				if (changed) {
+					current = { ...current, header: { ...current.header, name } };
+				}
+				return changed;
+			}
+
+			const target = listSessions().find((item) => item.id === sessionId);
+			return target ? renameSessionIfUnnamed(target.filePath, name) : false;
 		},
 	};
 }

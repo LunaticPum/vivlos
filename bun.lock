@@ -19,6 +19,7 @@
         "openai": "^6.10.0",
         "opentui-spinner": "^0.0.7",
         "react": "^19.2.7",
+        "string-width": "^7.2.0",
         "yaml": "^2.9.0",
       },
       "devDependencies": {

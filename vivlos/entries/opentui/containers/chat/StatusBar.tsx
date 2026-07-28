@@ -3,7 +3,7 @@
  *
  * 两种显示模式：
  *   1. overlay -- 通知/退出/连接状态等，替换整条状态栏
- *   2. session -- 模型 │ token │ 进度 │ id │ 时钟 [│ 状态后缀]
+ *   2. session -- 模型 │ token │ 进度 │ 时钟 [│ 状态后缀]
  */
 
 import { useState, useEffect } from "react";
@@ -148,13 +148,12 @@ export function StatusBar({
 		const d = fg(C.divider)(sep);
 		const segTokens = fg(C.usage)(tokenLabel);
 		const segBar = fg(barColor)(`${bar} ${percent}%`);
-		const segSession = fg(C.usage)(sessionId?.slice(0, 8) ?? "");
 		const segClock = fg(C.clock)(duration);
 
 		if (turnStatus === "aborted") {
-			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${fg(C.divider)("id:")}${segSession}${d}${segClock}${d}${fg(C.warning)("⚠️ 请求已中断")} `;
+			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${segClock}${d}${fg(C.warning)("⚠️ 请求已中断")} `;
 		} else {
-			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${fg(C.divider)("id:")}${segSession}${d}${segClock} `;
+			content = t` ${segModel}${d}${segTokens}${d}${segBar}${d}${segClock} `;
 		}
 	} else {
 		content = t``;

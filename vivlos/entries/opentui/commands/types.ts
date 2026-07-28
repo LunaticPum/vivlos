@@ -2,10 +2,10 @@
  * TUI Slash 命令类型定义
  *
  * 命令通过 CommandContext 回调直接触发 UI 状态变更，
- * 而非返回文本反馈。ChatPanel 创建 ctx 并注入状态回调。
+ * 而非返回文本反馈。Workspace 创建 ctx 并注入状态回调。
  */
 
-/** 命令执行上下文 -- 由 ChatPanel 创建，注入 UI 回调 */
+/** 命令执行上下文 -- 由 Workspace 创建，注入 UI 回调 */
 export interface CommandContext {
 	/** 打开模型选择弹窗 */
 	openModels: () => void;

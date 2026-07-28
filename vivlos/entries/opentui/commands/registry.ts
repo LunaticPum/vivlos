@@ -2,7 +2,7 @@
  * TUI 命令注册表
  *
  * 负责命令的注册、查找和列举。
- * 由 ChatPanel 懒初始化创建，builtin/index.ts 负责注册内置指令。
+ * 由 Workspace 懒初始化创建，builtin/index.ts 负责注册内置指令。
  */
 
 import type { TUICommand } from "./types.ts";

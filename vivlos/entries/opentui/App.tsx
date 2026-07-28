@@ -1,4 +1,4 @@
-import { Chat } from "./containers/chat/ChatPanel";
+import { Workspace } from "./containers/workspace/Workspace";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
@@ -27,8 +27,13 @@ export function App({
 	onExit: () => void;
 }) {
 	return (
-		<box backgroundColor={C.bg} width={"100%"} height={"100%"}>
-			<Chat
+		<box
+			backgroundColor={C.bg}
+			width="100%"
+			height="100%"
+			overflow="hidden"
+		>
+			<Workspace
 				modelLabel={modelLabel}
 				agent={agent}
 				eventBus={eventBus}

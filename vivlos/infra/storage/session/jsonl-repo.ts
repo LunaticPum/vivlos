@@ -141,6 +141,16 @@ export function renameSession(filePath: string, name: string): void {
 	writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
 }
 
+/** 仅在 session 尚未命名时写入名称。 */
+export function renameSessionIfUnnamed(filePath: string, name: string): boolean {
+	const { header, entries } = openSession(filePath);
+	if (header.name !== null) return false;
+	const newHeader: SessionHeader = { ...header, name };
+	const lines = [JSON.stringify(newHeader), ...entries.map((e) => JSON.stringify(e))];
+	writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
+	return true;
+}
+
 /** 追加 Message（自动转为 entry） */
 export function appendMessage(filePath: string, message: Message): void {
 	appendEntry(filePath, toMessageEntry(message));

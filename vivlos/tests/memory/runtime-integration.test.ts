@@ -72,6 +72,7 @@ function session(id: string, directory: string): SessionManager {
 		createNew: () => {},
 		deleteSession: () => {},
 		rename: () => {},
+		renameIfUnnamed: () => false,
 	};
 }
 

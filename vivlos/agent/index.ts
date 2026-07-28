@@ -7,9 +7,15 @@ import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { MemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
 
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
-import { createSessionManager, type SessionManager } from "./session/index.ts";
+import {
+	createSessionManager,
+	generateSessionTitle,
+	readTitleInput,
+	type SessionManager,
+} from "./session/index.ts";
 import { createMaxTurnsHook, type LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
+import { log } from "@vivlos/infra/logger/index.ts";
 
 import type { VivlosAgent } from "./types.ts";
 
@@ -66,6 +72,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		...params.hooks,
 	};
 	const tools = params.tools;
+	const titleTasks = new Set<string>();
 
 	const loop = createAgentLoop({
 		deps: { llm: params.llm, eventBus: params.eventBus },
@@ -75,6 +82,31 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		hooks,
 		tools,
 	});
+	const requestTitle = (sessionId: string, input: string, titleModel: Model<Api>) => {
+		if (titleTasks.has(sessionId)) return;
+		titleTasks.add(sessionId);
+		void generateSessionTitle({
+			llm: params.llm,
+			model: titleModel,
+			input,
+		}).then((name) => {
+			if (sessionManager.renameIfUnnamed(sessionId, name)) {
+				params.eventBus.emit({
+					type: "session:renamed",
+					sessionId,
+					name,
+					source: "auto",
+				});
+			}
+		}).catch((error) => {
+			log(
+				"warn",
+				`Session 自动标题失败: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}).finally(() => {
+			titleTasks.delete(sessionId);
+		});
+	};
 
 	return {
 		async prompt(input: string | AgentMessage[], signal?: AbortSignal): Promise<LoopResult> {
@@ -82,7 +114,23 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 				params.llm.getDefaultProvider(),
 				params.llm.getDefaultModelId(),
 			) ?? model;
-			return loop.run(input, { model: currentModel, maxTurns, reasoning: params.thinkingLevel, signal });
+			const sessionId = sessionManager.id;
+			const titleInput = readTitleInput(input);
+			const shouldTitle = titleInput.length > 0 &&
+				sessionManager.name === null &&
+				sessionManager.getMessages().length === 0;
+			const result = await loop.run(input, {
+				model: currentModel,
+				maxTurns,
+				reasoning: params.thinkingLevel,
+				signal,
+			});
+
+			if (!result.error && shouldTitle) {
+				requestTitle(sessionId, titleInput, currentModel);
+			}
+
+			return result;
 		},
 		async compact() {
 			const currentModel = params.llm.getModel(
@@ -119,7 +167,14 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			sessionManager.deleteSession(sessionId);
 		},
 		renameSession(name: string) {
+			const sessionId = sessionManager.id;
 			sessionManager.rename(name);
+			params.eventBus.emit({
+				type: "session:renamed",
+				sessionId,
+				name,
+				source: "user",
+			});
 		},
 	};
 }

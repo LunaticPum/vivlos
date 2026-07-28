@@ -8,6 +8,11 @@ export type {
 	TaskItem,
 	MemoryOperationEvent,
 	MemoryChangedEvent,
+	MainAgentEvent,
+	MemoryEvent,
+	SessionEvent,
+	AppEvent,
+	WorkspaceEvent,
 } from "./types.ts";
 
 /**

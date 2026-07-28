@@ -3,7 +3,7 @@
  *
  * 用户填写 API 标准(鼠标点击)、Base URL、Model ID、API Key、Context Window，
  * Enter 提交前校验必填字段非空（Ctx 可选）。
- * 提交后由 ChatPanel 走连接验证流程。
+ * 提交后由 Workspace 走连接验证流程。
  */
 
 import { useState, useRef } from "react";

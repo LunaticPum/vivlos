@@ -32,7 +32,7 @@ export interface ProviderManagerResult {
 }
 
 /**
- * Provider 管理 hook -- 从 ChatPanel 抽取的 provider/model 切换逻辑。
+ * Provider 管理 hook -- 由 Workspace 使用的 provider/model 切换逻辑。
  *
  * 职责：
  * - provider 选择（检查凭证 -> 直切 / 弹 apikey / 弹 models）

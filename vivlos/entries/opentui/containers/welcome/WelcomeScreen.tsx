@@ -1,7 +1,7 @@
 /**
  * WelcomeScreen - 欢迎界面
  *
- * conversationTurns 为空时显示，有对话后由 ChatArea 接管。
+ * 由 Workspace 的 welcome/session 状态决定是否显示，不参与会话列表渲染。
  * 居中显示 ASCII 艺术标题 + 环境信息 + 提示。
  */
 

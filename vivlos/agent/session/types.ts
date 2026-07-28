@@ -34,4 +34,6 @@ export interface SessionManager {
 	deleteSession(sessionId: string): void;
 	/** 重命名当前 session */
 	rename(name: string): void;
+	/** 自动标题专用：只在目标 session 尚未命名时写入。 */
+	renameIfUnnamed(sessionId: string, name: string): boolean;
 }

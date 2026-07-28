@@ -1,7 +1,7 @@
 /**
  * 内置指令注册入口
  *
- * 由 ChatPanel 懒初始化时调用，将所有内置 slash 命令注册到 registry。
+ * 由 Workspace 懒初始化时调用，将所有内置 slash 命令注册到 registry。
  */
 
 import type { TUICommandRegistry } from "../registry.ts";
