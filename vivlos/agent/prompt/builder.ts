@@ -9,14 +9,10 @@ const TEMPLATES_DIR = resolve(__dirname, "templates");
 
 /**
  * 从 templates/ 目录加载 MD 文件。
- * 失败时返回 fallback，确保系统可启动。
+ * 模板属于 Agent 的必要行为契约；缺失时直接暴露安装或打包错误。
  */
-function loadTemplate(name: string, fallback: string): string {
-	try {
-		return readFileSync(resolve(TEMPLATES_DIR, name), "utf-8").trim();
-	} catch {
-		return fallback;
-	}
+function loadTemplate(name: string): string {
+	return readFileSync(resolve(TEMPLATES_DIR, name), "utf-8").trim();
 }
 
 /**
@@ -75,12 +71,9 @@ export function createPromptBuilder(
 ): PromptBuilder {
 	const identityTpl =
 		options.identity ??
-		loadTemplate("identity.md", "你是 vivlos，一个个人 AI 助手。");
-	const environmentTpl = loadTemplate(
-		"environment.md",
-		"<runtime>{{runtime}}</runtime>",
-	);
-	const rulesTpl = options.rules ?? loadTemplate("rules.md", "- 回答简洁直接");
+		loadTemplate("identity.md");
+	const environmentTpl = loadTemplate("environment.md");
+	const rulesTpl = options.rules ?? loadTemplate("rules.md");
 
 	let memoryText: string | undefined;
 	let skillsText: string | undefined;

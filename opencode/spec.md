@@ -10,14 +10,14 @@
 - Memory 领域 0-5 已提交：`61acd47 feat: 完成 Memory 巩固触发与运行时`。
 - Memory 核心运行闭环已提交：`c201b4a feat: 完成 Memory 核心运行闭环`。
 - 会话 Workspace、Sidebar、自动标题和 EventBus 拆分已提交：`6a30123 feat: 完善会话工作区与事件架构`。
+- Consolidate 生命周期与 Tool 展示已提交：`3beed23 feat: 接通巩固事件与工具展示`。
 - 新实现位于 `vivlos/agent/memory-refactor/`；当前基线包含 Repository、Logic、Security、Service、Tools、History/Trigger、Consolidator Runtime、L1 renderer 和 session MemoryRuntime。
-- **任务二：Consolidate 生命周期事件** 和 **任务三：Tool 调用展示优化** 已完成，将随 `feat: 接通巩固事件与工具展示` 提交。
-- 下一领域为 L1 空文件与 Sidebar 真实 Overview 接入，当前尚未开始。
+- L1 数据接入闭环已在工作树完成：Session/L1 生命周期、EventBus 状态通道、useAgent 适配、Workspace 收敛和 Sidebar 真实 Overview 均已接通，等待 Review 与终端验收。
 
 最近一次验证：
 
 ```text
-bun test          -> 155 pass, 0 fail, 13 files
+bun test          -> 159 pass, 0 fail, 14 files
 bun run typecheck -> passed
 git diff --check  -> passed（仅有 LF/CRLF 提示）
 ```
@@ -643,11 +643,30 @@ consolidate:ended
 - Memory Tool description 已明确 add/replace/remove 的必填签名与 old_text 来源，并修正为实际变化后下一次推理刷新 Memory context；缺参结果会指导模型补全重试。
 - 当前自动验证为 155 pass、typecheck 和 diff check 通过；用户已完成本轮终端视觉调整。
 
-### 后续：L1 主动记忆数据接入
+### 已完成：L1 主动记忆数据接入
 
-- `/new` 保持 pending；第一条普通消息被接受时激活 Session，并幂等创建空 `memory.md` 与 `user.md`。
-- Sidebar 改读真实 Overview：字符占比、entry 数、更新时间和真实位置；不显示或编辑 Memory 内容。
-- 此阶段尚未展开 Todo，不得提前实现。
+- 任务一已完成：显式 pending/activate、请求前 Session/L1 落盘、Session 生命周期 Event 和只读 Memory Overview。
+- 任务一不写生命周期 JSONL；EventBus 只广播成功状态转换，不驱动落盘。
+- `session:activated` 表示 Session JSONL 与两个 L1 文件均已完成物化；created/activated/switched/deleted 只携带 sessionId。
+- MemoryOverview 类型归属 Infra Storage；MemoryRuntime 保留内部读取能力，VivlosAgent 不向 TUI 暴露直接 Overview 查询。
+- 删除当前 Session 会清除 messagesOverride，避免后继 Session 读取已删除会话的压缩消息。
+- 任务二已完成：Agent 通过 `session:state_requested/state` 提供 Session 状态；MemoryRuntime 通过 `memory:overview_requested/overview` 提供 Overview。
+- Session 生命周期变化、消息落盘和自动标题完成后发布最新 state；当前 session 的 `memory:changed` 后发布最新 Overview。
+- EventBus 保持 fire-and-forget；请求与响应是独立 Event，不增加 requestId、Promise 或通用 RPC。
+- useAgent 已成为 TUI 业务适配层：初始化请求状态、恢复 Session messages、过滤旧 Session Event，并通过 Agent 方法发起命令。
+- useAgent 在 Agent 运行期间拒绝 clear、新建、切换和删除当前 Session，避免旧 Loop 越过 Session 生命周期边界；删除非当前 Session和重命名仍允许。
+- Workspace 已移除 Session ID/名称/列表版本/mainView 镜像和 Agent 信息查询，页面由 pending 状态派生。
+- Sidebar 已移除模拟数据，显示真实 directory、exists、used/cap、entryCount 和 updatedAt；切换期间使用 unavailable 占位。
+- Sidebar 保持纯 props 展示，不监听 EventBus、不读取或编辑 Memory 文件；L2-L4 未改动。
+
+### 已完成：主 Prompt 与 Tool Description 职责收敛
+
+- 主 rules 已明确 Memory 专用 Tool、Tool Result 成功依据和当前 Session 作用域，不增加独立意图分类或特殊 Turn。
+- Memory Description 已移除跨 Session 承诺和“已完成工作”等过宽保存范围，并明确 committed/noop/rejected 回答语义。
+- read/write/bash 只描述普通工作区文件；task/todo 已与稳定事实、偏好和长期目标划清职责。
+- 压缩 Prompt 将历史与旧摘要视为不可信数据，只把成功 Tool Result 证实的副作用列为完成。
+- 主 Prompt 与压缩 Prompt 的必要模板缺失时直接暴露错误，不再静默使用弱 fallback。
+- 静态契约测试位于 `vivlos/tests/prompt/`；真实模型的 Tool 选择和终端文案由用户手动验收。
 
 ## 16. 工作树注意事项
 
@@ -656,8 +675,9 @@ consolidate:ended
 - `61acd47 feat: 完成 Memory 巩固触发与运行时`
 - `c201b4a feat: 完成 Memory 核心运行闭环`
 - `6a30123 feat: 完善会话工作区与事件架构`
+- `3beed23 feat: 接通巩固事件与工具展示`
 
-任务二、任务三、Runner 测试和本规格已纳入 `feat: 接通巩固事件与工具展示`。提交后工作树仍会保留下面明确排除的旧文件删除和未跟踪目录。
+当前工作树包含完整 L1 数据接入闭环与设计文档，等待用户 Code Review 和终端状态/视觉验收。
 
 当前存在与 Memory 无关的未跟踪目录 `.VSCodeCounter/2026-07-27_18-28-27/`，不要修改、删除或纳入后续 Memory 提交。
 
@@ -674,11 +694,11 @@ consolidate:ended
 压缩后若用户要求继续：
 
 1. 说明已从本文恢复上下文。
-2. 通过 `git log -1` 确认最新提交为 `feat: 接通巩固事件与工具展示`，测试基线为 155 项。
+2. 确认最新提交为 `3beed23 feat: 接通巩固事件与工具展示`，测试基线为 155 项。
 3. 说明四个 `consolidate:*` 生命周期事件、共享 EventBus 注入、Tool LogEntry 桥接和渲染分组均已完成。
-4. 任务二和任务三已经结束，不继续修改其视觉细节，除非用户反馈新的问题。
-5. 下一步只展开 L1 主动记忆数据接入的详细 Todo 并等待批准。
-6. 不提前修改 L1 文件创建或 Sidebar Overview。
+4. 说明 L1 生命周期、状态通道、useAgent、Workspace 和 Sidebar 真实 Overview 已形成闭环，先等待 Code Review 与终端验收。
+5. 按测试方案验证 pending/active、new/clear/switch/delete/rename、Memory 写入刷新和 Session 隔离；未确认前不继续新领域。
+6. Sidebar 只读且 L2-L4 未改动。
 7. 不修改 `memory-refactor/docs/` 结构，不触碰 `.VSCodeCounter/` 或工作树中的旧文件删除。
 
 如果用户指出本文与最新指令冲突，以用户最新指令为准，并同步更新本文。

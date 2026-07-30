@@ -16,7 +16,8 @@ type Params = Static<typeof Params>;
 export function createWriteTool(cwd: string): AgentTool<typeof Params, { message: string }> {
 	return {
 		name: "write",
-		description: "写入文件内容。目录不存在时自动创建。",
+		description:
+			"写入普通工作区文件内容，目录不存在时自动创建。不得用于创建或修改 Vivlos Memory；记忆操作使用 memory Tool。",
 		label: "写入文件",
 		parameters: Params,
 		async execute(

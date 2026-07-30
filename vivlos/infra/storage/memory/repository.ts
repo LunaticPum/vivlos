@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 
 import { err, ok, type Result } from "@vivlos/shared";
@@ -30,6 +36,30 @@ export interface MemoryStorageSnapshot {
 	readonly revision: string;
 }
 
+export interface MemoryFileOverview {
+	readonly exists: boolean;
+	readonly path: string;
+	readonly used: number;
+	readonly cap: number;
+	readonly entryCount: number;
+	readonly updatedAt: number | null;
+}
+
+export interface MemoryStorageOverview {
+	readonly directory: string;
+	readonly memory: MemoryFileOverview;
+	readonly user: MemoryFileOverview;
+}
+
+export interface MemoryOverview extends MemoryStorageOverview {
+	readonly sessionId: string;
+}
+
+export interface MemoryFilesActivation {
+	readonly memoryCreated: boolean;
+	readonly userCreated: boolean;
+}
+
 export interface MemoryRepositoryError {
 	readonly code: "invalid_entry" | "capacity_exceeded";
 	readonly message: string;
@@ -42,6 +72,11 @@ export interface MemoryRepository {
 		file: MemoryFile,
 		entries: readonly string[],
 	): Result<MemoryStorageSnapshot, MemoryRepositoryError>;
+}
+
+export interface ManagedMemoryRepository extends MemoryRepository {
+	ensureFiles(): MemoryFilesActivation;
+	readOverview(): MemoryStorageOverview;
 }
 
 // #endregion
@@ -60,7 +95,7 @@ const SEPARATOR_LINE = /^[ \t]*---[ \t]*$/m;
 export function createMemoryRepository(
 	sessionDir: string,
 	limits: MemoryLimits,
-): MemoryRepository {
+): ManagedMemoryRepository {
 	const directory = resolve(sessionDir);
 	const filePath = (file: MemoryFile) => resolve(directory, `${file}.md`);
 	const read = (file: MemoryFile) => readEntries(filePath(file));
@@ -70,6 +105,29 @@ export function createMemoryRepository(
 
 	return {
 		readSnapshot,
+		ensureFiles() {
+			mkdirSync(directory, { recursive: true });
+			return {
+				memoryCreated: ensureFile(filePath("memory")),
+				userCreated: ensureFile(filePath("user")),
+			};
+		},
+		readOverview() {
+			const snapshot = readSnapshot();
+			return {
+				directory,
+				memory: createFileOverview(
+					filePath("memory"),
+					snapshot.entries.memory.length,
+					snapshot.usage.memory,
+				),
+				user: createFileOverview(
+					filePath("user"),
+					snapshot.entries.user.length,
+					snapshot.usage.user,
+				),
+			};
+		},
 
 		write(file, rawEntries) {
 			const entries = normalizeEntries(rawEntries);
@@ -100,6 +158,28 @@ export function createMemoryRepository(
 // #endregion
 
 // #region 文件读取与 Snapshot
+
+function ensureFile(path: string): boolean {
+	if (existsSync(path)) return false;
+	writeFileSync(path, "", { encoding: "utf-8", flag: "wx" });
+	return true;
+}
+
+function createFileOverview(
+	path: string,
+	entryCount: number,
+	usage: MemoryFileUsage,
+): MemoryFileOverview {
+	const exists = existsSync(path);
+	return {
+		exists,
+		path,
+		used: usage.used,
+		cap: usage.cap,
+		entryCount,
+		updatedAt: exists ? statSync(path).mtimeMs : null,
+	};
+}
 
 function readEntries(path: string): string[] {
 	if (!existsSync(path)) return [];

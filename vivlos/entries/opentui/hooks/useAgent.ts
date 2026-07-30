@@ -7,6 +7,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
+import type { MemoryOverview } from "@vivlos/infra/storage/memory/index.ts";
+import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import { log } from "@vivlos/infra/logger/logger.ts";
 
@@ -45,16 +47,29 @@ export interface ConversationTurn {
 	usage?: Usage;
 }
 
+export interface CurrentSessionState {
+	readonly id: string;
+	readonly name: string | null;
+	readonly pending: boolean;
+	readonly messageCount: number;
+}
+
 /**
  * tui hook 结果：将 hook 到的数据封装出来传给组件使用
  */
 export interface UseAgentResult {
 	conversationTurns: ConversationTurn[];
 	loading: boolean;
+	currentSession: CurrentSessionState | null;
+	sessions: readonly SessionMeta[];
+	memoryOverview: MemoryOverview | null;
 	submit: (text: string) => void;
 	abort: () => void;
 	clearConversation: () => void;
 	switchSession: (sessionId: string) => void;
+	deleteSession: (sessionId: string) => void;
+	renameSession: (name: string) => void;
+	compact: VivlosAgent["compact"];
 	/** 创建新 session 并重置 TUI */
 	newSession: () => void;
 }
@@ -231,27 +246,74 @@ export function useAgent(
 ): UseAgentResult {
 	const [conversationTurns, setTurns] = useState<ConversationTurn[]>([]);
 	const [loading, setLoading] = useState(false);
+	const [currentSession, setCurrentSession] = useState<CurrentSessionState | null>(null);
+	const [sessions, setSessions] = useState<readonly SessionMeta[]>([]);
+	const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
 
 	// #region useAgent hook
 
 	// ref 保存当前对话轮次在 conversation turns 数组里的索引
 	const currentIdxRef = useRef(-1);
+	const currentSessionRef = useRef<CurrentSessionState | null>(null);
 	const consolidateRunRef = useRef(0);
 	// 暂存 loop turn 的 usage，conversationTurn 结束时才提交
 	const latestUsageRef = useRef<Usage | undefined>(undefined);
 	useEffect(() => {
 		const unsubs: (() => void)[] = [];
+		const isCurrentSession = (sessionId: string) =>
+			currentSessionRef.current?.id === sessionId;
+
+		unsubs.push(
+			eventBus.on("session:state", (event) => {
+				const previous = currentSessionRef.current;
+				const next: CurrentSessionState = {
+					id: event.state.current.id,
+					name: event.state.current.name,
+					pending: event.state.current.pending,
+					messageCount: event.state.current.messages.length,
+				};
+				const sessionChanged = previous === null || previous.id !== next.id;
+				const activationChanged = previous?.pending !== next.pending;
+
+				currentSessionRef.current = next;
+				setCurrentSession(next);
+				setSessions(event.state.sessions);
+
+				if (sessionChanged) {
+					setTurns(messagesToTurns(event.state.current.messages));
+					setLoading(false);
+					setMemoryOverview(null);
+					currentIdxRef.current = -1;
+					latestUsageRef.current = undefined;
+				}
+				if (sessionChanged || activationChanged) {
+					eventBus.emit({
+						type: "memory:overview_requested",
+						sessionId: next.id,
+					});
+				}
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("memory:overview", (event) => {
+				if (!isCurrentSession(event.overview.sessionId)) return;
+				setMemoryOverview(event.overview);
+			}),
+		);
 
 		// agent 开始运行
 		unsubs.push(
-			eventBus.on("agent:start", () => {
+			eventBus.on("agent:start", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
 				setLoading(true);
 			}),
 		);
 
 		// 新的 ReAct turn 开始 -> 追加一个 thinking 条目
 		unsubs.push(
-			eventBus.on("agent:turn_start", () => {
+			eventBus.on("agent:turn_start", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -274,6 +336,7 @@ export function useAgent(
 		// 工具调用开始 -> 追加 tool 条目
 		unsubs.push(
 			eventBus.on("agent:toolCall_start", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -300,6 +363,7 @@ export function useAgent(
 		// 工具调用流式结果
 		unsubs.push(
 			eventBus.on("agent:toolCall_delta", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				const text = extractToolText(e.partialResult);
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
@@ -317,6 +381,7 @@ export function useAgent(
 		// 工具调用结束
 		unsubs.push(
 			eventBus.on("agent:toolCall_end", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				const text = extractToolText(e.result);
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
@@ -329,7 +394,7 @@ export function useAgent(
 
 		unsubs.push(
 			eventBus.on("consolidate:started", (e) => {
-				if (e.sessionId !== agent.getSessionId()) return;
+				if (!isCurrentSession(e.sessionId)) return;
 				const callId = `consolidate-run:${++consolidateRunRef.current}`;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
@@ -355,7 +420,7 @@ export function useAgent(
 
 		unsubs.push(
 			eventBus.on("consolidate:tool_started", (e) => {
-				if (e.sessionId !== agent.getSessionId()) return;
+				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -381,7 +446,7 @@ export function useAgent(
 
 		unsubs.push(
 			eventBus.on("consolidate:tool_completed", (e) => {
-				if (e.sessionId !== agent.getSessionId()) return;
+				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -393,7 +458,7 @@ export function useAgent(
 
 		unsubs.push(
 			eventBus.on("consolidate:ended", (e) => {
-				if (e.sessionId !== agent.getSessionId()) return;
+				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -410,6 +475,7 @@ export function useAgent(
 		// thinking 流式更新 -> 同时从增量 delta 消息或快照 snapshot 中提取 thinking 文本，确保 thinking 文本完整
 		unsubs.push(
 			eventBus.on("agent:thinking_delta", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				const text = extractThinkingFromSnapshot(e.messageSnapshot) || e.delta;
 				if (!text) return;
 
@@ -424,7 +490,8 @@ export function useAgent(
 
 		// thinking 结束 -> 标记最后一个 thinking 为 done
 		unsubs.push(
-			eventBus.on("agent:thinking_end", () => {
+			eventBus.on("agent:thinking_end", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -441,6 +508,7 @@ export function useAgent(
 		// 文本流式更新 -> 实时写入 finalText（打字机效果） + 确保 Thinking 被正确关闭
 		unsubs.push(
 			eventBus.on("agent:message_delta", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
@@ -458,6 +526,7 @@ export function useAgent(
 	// loop turn 结束 -> 暂存 usage 到 ref，不触发重渲染
 	unsubs.push(
 		eventBus.on("agent:message_complete", (e) => {
+			if (!isCurrentSession(e.sessionId)) return;
 			if (e.usage) latestUsageRef.current = e.usage;
 		}),
 	);
@@ -465,6 +534,7 @@ export function useAgent(
 	// conversationTurn 结束 -> 提交最终 usage + 写入最终回复
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				setLoading(false);
 
 				// setTurns 异步执行，先捕获 idx 和 usage 避免重置后找不到
@@ -487,6 +557,7 @@ export function useAgent(
 		// 消费底层 Loop run 捕获的异常
 		unsubs.push(
 			eventBus.on("agent:error", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
 				setLoading(false);
 
 				const isAborted = e.error.message.toLowerCase().includes("abort");
@@ -504,12 +575,13 @@ export function useAgent(
 			}),
 		);
 
+		eventBus.emit({ type: "session:state_requested" });
 		return () => unsubs.forEach((fn) => fn());
 	}, [agent, eventBus]);
 
 	// #endregion
 
-	// #region 两个 Callback
+	// #region Callbacks
 	const abortRef = useRef<AbortController | null>(null);
 
 	const submit = useCallback(
@@ -569,26 +641,57 @@ export function useAgent(
 
 	/** 清空当前会话（仅清TUI，不删JSONL消息） */
 	const clearConversation = useCallback(() => {
+		if (loading) {
+			log("warn", "Agent 运行期间不能清空当前会话", undefined, true);
+			return;
+		}
 		setTurns([]);
 		setLoading(false);
 		currentIdxRef.current = -1;
-	}, []);
+	}, [loading]);
 
-	/** 切换 session 并恢复对话历史 */
+	/** 发起 session 切换；界面状态由 session:state 更新。 */
 	const switchSession = useCallback((sessionId: string) => {
+		if (loading) {
+			log("warn", "Agent 运行期间不能切换 Session", undefined, true);
+			return;
+		}
 		agent.switchSession(sessionId);
-		setTurns(messagesToTurns(agent.getMessages()));
-		setLoading(false);
-		currentIdxRef.current = -1;
-	}, [agent]);
+	}, [agent, loading]);
 
-	/** 创建新 session 并重置 TUI */
+	/** 发起新建 session；界面状态由 session:state 更新。 */
 	const newSession = useCallback(() => {
+		if (loading) {
+			log("warn", "Agent 运行期间不能新建 Session", undefined, true);
+			return;
+		}
 		agent.createNewSession();
-		setTurns([]);
-		setLoading(false);
-		currentIdxRef.current = -1;
+	}, [agent, loading]);
+	const deleteSession = useCallback((sessionId: string) => {
+		if (loading && currentSessionRef.current?.id === sessionId) {
+			log("warn", "Agent 运行期间不能删除当前 Session", undefined, true);
+			return;
+		}
+		agent.deleteSession(sessionId);
+	}, [agent, loading]);
+	const renameSession = useCallback((name: string) => {
+		agent.renameSession(name);
 	}, [agent]);
+	const compact = useCallback(() => agent.compact(), [agent]);
 
-	return { conversationTurns, loading, submit, abort, clearConversation, switchSession, newSession };
+	return {
+		conversationTurns,
+		loading,
+		currentSession,
+		sessions,
+		memoryOverview,
+		submit,
+		abort,
+		clearConversation,
+		switchSession,
+		deleteSession,
+		renameSession,
+		compact,
+		newSession,
+	};
 }

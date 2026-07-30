@@ -11,6 +11,8 @@ export interface SessionManager {
 	readonly id: string;
 	/** 当前 session 的名称（null 表示未命名） */
 	readonly name: string | null;
+	/** true 表示只有稳定 ID/路径，尚未创建 Session 文件。 */
+	readonly pending: boolean;
 	readonly filePath: string;
 	/** session 目录路径（filePath 的父目录，todo tool 等按 session 写文件用） */
 	readonly dirPath: string;
@@ -19,6 +21,8 @@ export interface SessionManager {
 
 	// ── 当前 session 消息 ──
 	getMessages(): readonly Message[];
+	/** 幂等激活当前 pending Session；仅首次状态转换返回 true。 */
+	activate(): boolean;
 	appendMessage(message: Message): void;
 	/** 替换全部消息（压缩后用，仅内存，不重写 JSONL） */
 	replaceMessages(messages: Message[]): void;
@@ -31,7 +35,7 @@ export interface SessionManager {
 	/** 创建新 session 并切换 */
 	createNew(name?: string): void;
 	/** 删除 session */
-	deleteSession(sessionId: string): void;
+	deleteSession(sessionId: string): boolean;
 	/** 重命名当前 session */
 	rename(name: string): void;
 	/** 自动标题专用：只在目标 session 尚未命名时写入。 */

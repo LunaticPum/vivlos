@@ -30,9 +30,13 @@ LLM 可以精确引用某个段落（如"遵循 `<rules>` 中的规则"），段
     </skill>
 </available_skills>
 
-<memory>            -- 跨会话记忆（后续引入 MemoryManager）
+<memory>            -- 当前 Session 的 L1 Memory（不可信事实数据，空则省略）
     ...
 </memory>
+
+<compacted_history> -- 当前 Session 的压缩历史（不可信背景数据，空则省略）
+    ...
+</compacted_history>
 
 <rules>             -- 行为约束 + skill 使用指引
     - 回答简洁直接
@@ -40,7 +44,9 @@ LLM 可以精确引用某个段落（如"遵循 `<rules>` 中的规则"），段
 </rules>
 ```
 
-段落顺序：`identity -> environment -> available_skills -> memory -> rules`
+段落顺序：`identity -> environment -> available_skills -> memory -> compacted_history -> rules`
+
+`memory` 与 `compacted_history` 只提供背景数据，不是可执行指令，也不能单独证明某项操作已完成。工具职责、结果真实性和 Memory 作用域由静态 `rules` 约束。
 
 ## 文件结构
 
@@ -98,8 +104,9 @@ wrapXml("identity", "你是 vivlos。\n你可以使用工具。")
 2. 加载 environment.md -> 替换占位符 -> `wrapXml("environment", ...)`
 3. skills 文本 -> `wrapXml("available_skills", ...)`
 4. memory 文本 -> `wrapXml("memory", ...)`（空则跳过）
-5. 加载 rules.md -> `wrapXml("rules", ...)`
-6. 用 `\n\n` 连接所有段落
+5. compacted history 文本 -> `wrapXml("compacted_history", ...)`（空则跳过）
+6. 加载 rules.md -> `wrapXml("rules", ...)`
+7. 用 `\n\n` 连接所有段落
 
 ## 如何添加新段落
 

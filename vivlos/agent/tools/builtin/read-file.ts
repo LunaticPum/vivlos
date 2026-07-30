@@ -24,7 +24,7 @@ export function createReadTool(cwd: string): AgentTool<typeof Params, { message:
 	return {
 		name: "read",
 		description:
-			"读取文件内容。支持 offset（起始行）和 limit（最大行数）。大文件自动截断。",
+			"读取普通工作区文件内容。支持 offset（起始行）和 limit（最大行数），大文件自动截断。不得用于访问 Vivlos Memory；记忆内容已由 system prompt 提供。",
 		label: "读取文件",
 		parameters: Params,
 		async execute(

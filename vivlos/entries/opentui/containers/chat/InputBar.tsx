@@ -17,7 +17,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type {
 	BorderCharacters,
 	TextareaRenderable,
-	CursorChangeEvent,
 	ContentChangeEvent,
 	ScrollBoxRenderable,
 } from "@opentui/core";
@@ -50,6 +49,10 @@ const inputBorder: BorderCharacters = {
 const MAX_LINES = 4;
 const MAX_HISTORY = 6;
 const MAX_SUGGESTIONS = 5;
+
+function visualLineCount(textarea: TextareaRenderable): number {
+	return textarea.editorView.getTotalVirtualLineCount();
+}
 
 export interface InputBarProps {
 	/** 提交文本（非指令时触发） */
@@ -87,10 +90,6 @@ export function InputBar({
 	const historyRef = useRef<string[]>([]);
 	const historyIdxRef = useRef(-1);
 	const draftRef = useRef("");
-
-	// ── 光标位置 ──
-	const cursorLineRef = useRef(0);
-	const lineCountRef = useRef(1);
 
 	// ── textarea 实例 ──
 	const textareaRef = useRef<TextareaRenderable>(null);
@@ -136,25 +135,24 @@ export function InputBar({
 		setSelectedSuggestionIdx(0);
 	}, [inputText]);
 
-	// ── 内容变化：实时同步草稿 + 更新行数 ──
+	const syncContentLines = useCallback(() => {
+		const ta = textareaRef.current;
+		if (!ta) return;
+		setContentLines(Math.min(Math.max(visualLineCount(ta), 1), MAX_LINES));
+	}, []);
+
+	// ── 内容变化：实时同步草稿 + 更新视觉行数 ──
 	const handleContentChange = useCallback((_event: ContentChangeEvent) => {
 		const ta = textareaRef.current;
 		if (!ta) return;
-		const lines = ta.lineCount;
-		lineCountRef.current = lines;
-		setContentLines(Math.min(lines, MAX_LINES));
+		syncContentLines();
 		setInputText(ta.plainText);
 
 		// 草稿模式下实时同步（包括空状态）
 		if (historyIdxRef.current === -1) {
 			draftRef.current = ta.plainText;
 		}
-	}, []);
-
-	// ── 光标变化：记录当前行号 ──
-	const handleCursorChange = useCallback((event: CursorChangeEvent) => {
-		cursorLineRef.current = event.line;
-	}, []);
+	}, [syncContentLines]);
 
 	// ── 历史消息切换 ──
 	const switchHistory = useCallback((direction: "up" | "down") => {
@@ -169,7 +167,6 @@ export function InputBar({
 			// 从草稿切到历史前，草稿已经由 handleContentChange 实时同步过了
 			historyIdxRef.current += 1;
 			ta.setText(history[historyIdxRef.current]!);
-			lineCountRef.current = ta.lineCount;
 			ta.setCursor(0, 0);
 		} else {
 			// 已在草稿，不处理
@@ -181,8 +178,7 @@ export function InputBar({
 			} else {
 				ta.setText(history[historyIdxRef.current]!);
 			}
-			lineCountRef.current = ta.lineCount;
-			const lastLine = lineCountRef.current - 1;
+			const lastLine = ta.lineCount - 1;
 			ta.setCursor(lastLine, 0);
 			ta.gotoLineTextEnd();
 		}
@@ -196,7 +192,6 @@ export function InputBar({
 		const cmd = slashSuggestions[selectedSuggestionIdx] ?? slashSuggestions[0]!;
 		const completed = `/${cmd.name}`;
 		ta.setText(completed);
-		lineCountRef.current = 1;
 		ta.setCursor(0, completed.length);
 		ta.gotoLineTextEnd();
 		setInputText(completed);
@@ -244,11 +239,16 @@ export function InputBar({
 		}
 
 		if (key.name === "up") {
-			if (cursorLineRef.current === 0) {
+			const ta = textareaRef.current;
+			if (ta && ta.scrollY + ta.visualCursor.visualRow === 0) {
 				switchHistory("up");
 			}
 		} else if (key.name === "down") {
-			if (cursorLineRef.current === lineCountRef.current - 1) {
+			const ta = textareaRef.current;
+			if (
+				ta &&
+				ta.scrollY + ta.visualCursor.visualRow >= visualLineCount(ta) - 1
+			) {
 				switchHistory("down");
 			}
 		} else if (key.ctrl && key.name === "c") {
@@ -288,7 +288,6 @@ export function InputBar({
 		ta.clear();
 		setContentLines(1);
 		setInputText("");
-		lineCountRef.current = 1;
 
 		onSubmit(text);
 	}, [onSubmit]);
@@ -297,24 +296,33 @@ export function InputBar({
 	const boxHeight = Math.min(contentLines + 2, MAX_LINES + 2);
 
 	return (
-		<>
-			{/* slash 命令补全提示框 -- 无边框，像输入框向上延伸 */}
+		<box width="100%" height={boxHeight} position="relative">
+			{/* slash 命令补全提示框 -- 覆盖 StatusBar，不参与布局高度 */}
 			{slashSuggestions.length > 0 && (
 				<box
 					position="absolute"
-					bottom={boxHeight + 1}
-					left={2}
-					right={2}
+					bottom={boxHeight}
+					left={0}
+					right={0}
 					zIndex={50}
+					width="100%"
 					backgroundColor={C.suggestionBg}
 					flexDirection="column"
 				>
 					<scrollbox
 						ref={suggestionScrollRef}
 						height={Math.min(slashSuggestions.length, MAX_SUGGESTIONS)}
+						backgroundColor={C.suggestionBg}
 					>
 						{slashSuggestions.map((cmd, i) => (
-							<box key={cmd.name} id={`sugg-${i}`} flexDirection="row" paddingX={1}>
+							<box
+								key={cmd.name}
+								id={`sugg-${i}`}
+								width="100%"
+								flexDirection="row"
+								paddingX={1}
+								backgroundColor={C.suggestionBg}
+							>
 								<box width={14}>
 									<text fg={i === selectedSuggestionIdx ? C.border : C.text}>
 										{` /${cmd.name}`}
@@ -331,20 +339,23 @@ export function InputBar({
 			<box
 				height={boxHeight}
 				width="100%"
-				border={["top", "bottom", "left"]}
+				border={["top", "bottom"]}
 				customBorderChars={inputBorder}
 				borderColor={C.border}
 				flexDirection="row"
-				paddingX={1}
+				paddingRight={1}
 			>
+				<text width={1} height={1} fg={C.border}>❯</text>
+				<box width={1} />
 				<textarea
 					ref={textareaRef}
 					focused={!popupActive}
+					showCursor={!popupActive}
 					flexGrow={1}
 					placeholder="输入消息... (Ctrl+Enter 换行)"
 					placeholderColor={C.subtext}
 					textColor={C.text}
-					wrapMode="none"
+					wrapMode="char"
 					keyBindings={[
 						{ name: "return", ctrl: true, action: "newline" },
 						{ name: "return", action: "submit" },
@@ -352,10 +363,10 @@ export function InputBar({
 						{ name: "kpenter", action: "submit" },
 					]}
 					onContentChange={handleContentChange}
-					onCursorChange={handleCursorChange}
+					onSizeChange={syncContentLines}
 					onSubmit={handleSubmit}
 				/>
 			</box>
-		</>
+		</box>
 	);
 }

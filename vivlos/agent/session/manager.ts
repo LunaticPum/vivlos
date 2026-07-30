@@ -1,5 +1,4 @@
 import type { Message } from "@earendil-works/pi-ai";
-import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type { SessionManager } from "./types.ts";
 import {
@@ -18,8 +17,8 @@ import {
  * 创建基于 JSONL 文件的 SessionManager。
  *
  * 延迟创建：启动时产生 pending sessionId（不写文件）。
- * 第一条消息写入时通过 ensureSession 创建文件。
- * 无消息的 pending session 不会产生 JSONL 文件。
+ * 第一条模型请求前显式 activate；appendMessage 仍以同一入口保证不变量。
+ * 从未提交请求的 pending session 不会产生 JSONL 文件。
  */
 export function createSessionManager(): SessionManager {
 	let current = createSession();
@@ -27,9 +26,17 @@ export function createSessionManager(): SessionManager {
 	// 压缩后的消息覆盖（null = 从磁盘读）
 	let messagesOverride: Message[] | null = null;
 
+	const activate = (): boolean => {
+		if (!pending) return false;
+		ensureSession(current.header, current.filePath);
+		pending = false;
+		return true;
+	};
+
 	return {
 		get id() { return current.header.id; },
 		get name() { return current.header.name; },
+		get pending() { return pending; },
 		get filePath() { return current.filePath; },
 		get dirPath() { return dirname(current.filePath); },
 		resolveDir(sessionId: string) {
@@ -41,13 +48,10 @@ export function createSessionManager(): SessionManager {
 		getMessages() {
 			return messagesOverride ?? loadMessages(current.filePath);
 		},
+		activate,
 
 		appendMessage(message: Message) {
-			// 首次写消息时激活 session（创建文件）
-			if (pending && !existsSync(current.filePath)) {
-				ensureSession(current.header, current.filePath);
-				pending = false;
-			}
+			activate();
 			repoAppend(current.filePath, message);
 			if (messagesOverride) {
 				messagesOverride.push(message);
@@ -81,10 +85,11 @@ export function createSessionManager(): SessionManager {
 		deleteSession(sessionId: string) {
 			const sessions = listSessions();
 			const target = sessions.find((s) => s.id === sessionId);
-			if (!target) return;
+			if (!target) return false;
 			deleteSession(target.filePath);
 			// 删的是当前 session 时切到最近的或新建
 			if (target.id === current.header.id) {
+				messagesOverride = null;
 				if (pending) {
 					current = createSession();
 				} else {
@@ -98,6 +103,7 @@ export function createSessionManager(): SessionManager {
 					}
 				}
 			}
+			return true;
 		},
 
 		rename(name: string) {

@@ -42,11 +42,6 @@ function truncate(s: string, max: number): string {
 	return s.length > max ? `${s.slice(0, max)}...` : s;
 }
 
-const memoryPreview = {
-	memory: { used: 1716, cap: 2200, updatedAt: Date.now() - 2 * 60_000 },
-	user: { used: 396, cap: 1375, updatedAt: Date.now() - 8 * 60_000 },
-} as const;
-
 // #region Types
 
 export interface WorkspaceProps {
@@ -67,8 +62,6 @@ type PopupState =
 	| "apikey"
 	| "custom"
 	| "sessions";
-
-type MainView = "welcome" | "session";
 
 // #endregion
 
@@ -92,26 +85,19 @@ export function Workspace({
 		abort,
 		clearConversation,
 		switchSession,
+		deleteSession,
+		renameSession,
+		compact,
 		newSession: useNewSession,
+		currentSession,
+		sessions,
+		memoryOverview,
 	} = useAgent(agent, eventBus);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
 	const [showHelp, setShowHelp] = useState(false);
 	const [memoryActive, setMemoryActive] = useState(false);
-	// sessions 弹窗删除后递增，触发列表重渲染
-	const [sessionsVersion, setSessionsVersion] = useState(0);
-	const [currentSessionId, setCurrentSessionId] = useState(
-		agent.getSessionId(),
-	);
-	const currentSessionIdRef = useRef(currentSessionId);
-	currentSessionIdRef.current = currentSessionId;
-	const [currentSessionName, setCurrentSessionName] = useState(
-		agent.getSessionName(),
-	);
-	const [mainView, setMainView] = useState<MainView>(() =>
-		agent.getMessages().length === 0 ? "welcome" : "session",
-	);
 	const [compressing, setCompressing] = useState(false);
 	const { notification } = useNotification(eventBus);
 	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
@@ -130,13 +116,6 @@ export function Workspace({
 			offEnd();
 		};
 	}, [eventBus]);
-
-	useEffect(() => eventBus.on("session:renamed", (event) => {
-		setSessionsVersion((value) => value + 1);
-		if (event.sessionId === currentSessionIdRef.current) {
-			setCurrentSessionName(event.name);
-		}
-	}), [eventBus]);
 
 	// #endregion
 
@@ -167,33 +146,29 @@ export function Workspace({
 		registerBuiltinCommands(registryRef.current);
 	}
 	const registry = registryRef.current;
+	const hasCompletedConversation = conversationTurns.some(
+		(t) => t.status === "complete",
+	);
 
 	const handleClear = useCallback(() => {
 		clearConversation();
-		setMainView("session");
 	}, [clearConversation]);
 
 	const handleNew = useCallback(() => {
-		if (agent.listSessions().length >= 10) {
+		if (sessions.length >= 10) {
 			log("warn", "已达 10 个会话上限，请删除或压缩旧会话", undefined, true);
 			return;
 		}
 		useNewSession();
 		setMemoryActive(false);
-		setCurrentSessionId(agent.getSessionId());
-		setCurrentSessionName(agent.getSessionName());
-		setMainView("welcome");
-	}, [agent, useNewSession]);
+	}, [sessions.length, useNewSession]);
 
 	const handleSession = useCallback(
 		(id: string) => {
 			switchSession(id);
 			setMemoryActive(false);
-			setCurrentSessionId(id);
-			setCurrentSessionName(agent.getSessionName());
-			setMainView("session");
 		},
-		[agent, switchSession],
+		[switchSession],
 	);
 
 	const cmdCtx = useMemo<CommandContext>(
@@ -217,17 +192,15 @@ export function Workspace({
 			},
 			clearConversation: handleClear,
 			newSession: handleNew,
-			renameSession: (name: string) => {
-				agent.renameSession(name);
-			},
+			renameSession,
 			switchToSession: handleSession,
 			compact: async () => {
-				const messages = agent.getMessages();
-				if (messages.length === 0) {
+				const messageCount = currentSession?.messageCount ?? 0;
+				if (messageCount === 0) {
 					log("warn", "无对话内容可压缩", undefined, true);
 					return;
 				}
-				if (!messages.some((m) => m.role === "assistant")) {
+				if (!hasCompletedConversation) {
 					log(
 						"warn",
 						"首轮对话无法压缩，至少完成一轮对话后使用",
@@ -237,13 +210,13 @@ export function Workspace({
 					return;
 				}
 				const { protectLastN } = loadConfig().compression;
-				if (messages.length < protectLastN * 2) {
+				if (messageCount < protectLastN * 2) {
 					log("warn", "对话过短，无需压缩", undefined, true);
 					return;
 				}
 				log("warn", "正在压缩上下文...", undefined, true);
 				try {
-					const result = await agent.compact();
+					const result = await compact();
 					if (result.noOp) {
 						log("warn", "无可压缩内容", undefined, true);
 					} else {
@@ -264,14 +237,21 @@ export function Workspace({
 				}
 			},
 		}),
-		[agent, handleClear, handleNew, handleSession],
+		[
+			compact,
+			currentSession?.messageCount,
+			handleClear,
+			handleNew,
+			handleSession,
+			hasCompletedConversation,
+			renameSession,
+		],
 	);
 
 	const handleSubmit = useCallback(
 		(text: string) => {
 			const result = checkCommand(text, registry, cmdCtx);
 			if (!result.handled) {
-				setMainView("session");
 				submit(text);
 				return;
 			}
@@ -287,10 +267,6 @@ export function Workspace({
 
 	// #region 派生显示状态
 
-	const hasCompletedConversation = conversationTurns.some(
-		(t) => t.status === "complete",
-	);
-
 	// 取最后一个有 usage 的 ConversationTurn（新 turn 开始时仍显示上一轮对话的上下文大小）
 	const lastTurnWithUsage = [...conversationTurns]
 		.reverse()
@@ -300,9 +276,17 @@ export function Workspace({
 			? conversationTurns[conversationTurns.length - 1]
 			: undefined;
 	const lastStatus = lastTurn?.status;
+	const currentSessionId = currentSession?.id ?? "";
+	const durationResetKey = currentSession
+		? `${currentSession.id}:${currentSession.pending ? "pending" : "active"}`
+		: "none";
+	const currentMemoryOverview = memoryOverview?.sessionId === currentSessionId
+		? memoryOverview
+		: null;
 	const welcomeVisible =
-		mainView === "welcome" && conversationTurns.length === 0;
-	const sessionName = currentSessionName ?? (
+		(currentSession === null || currentSession.pending) &&
+		conversationTurns.length === 0;
+	const sessionName = currentSession?.name ?? (
 		conversationTurns.length === 0 ? "无对话记录" : "未命名会话"
 	);
 
@@ -345,7 +329,7 @@ export function Workspace({
 						exitPending,
 						notification,
 						showSession: conversationTurns.length > 0,
-						sessionId: currentSessionId,
+						durationResetKey,
 						usage: lastTurnWithUsage?.usage,
 						contextWindow: llm.getModel(
 							llm.getDefaultProvider(),
@@ -391,9 +375,10 @@ export function Workspace({
 					preview={{
 						sessionName,
 						sessionId: currentSessionId,
-						path: `.vivlos/sessions/${currentSessionId}`,
+						path: currentMemoryOverview?.directory ?? null,
 						cwd: process.cwd(),
-						...memoryPreview,
+						memory: currentMemoryOverview?.memory ?? null,
+						user: currentMemoryOverview?.user ?? null,
 					}}
 				/>
 			)}
@@ -476,8 +461,6 @@ export function Workspace({
 					zIndex={100}
 				>
 					{(() => {
-						void sessionsVersion; // 删除后重渲染
-						const sessions = agent.listSessions();
 						const current = sessions.find((s) => s.id === currentSessionId);
 						const others = sessions.filter((s) => s.id !== currentSessionId);
 						const toItem = (s: (typeof sessions)[number]): SelectionItem => ({
@@ -496,10 +479,7 @@ export function Workspace({
 									setPopupState("none");
 								}}
 								onClose={() => setPopupState("none")}
-								onDelete={(id) => {
-									agent.deleteSession(id);
-									setSessionsVersion((v) => v + 1);
-								}}
+								onDelete={deleteSession}
 							/>
 						);
 					})()}

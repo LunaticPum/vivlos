@@ -11,7 +11,7 @@ import { toMessageEntry, toMessage } from "./types.ts";
  * JSONL Session 仓储。
  *
  * 每个 session = .vivlos/sessions/{时间戳}_{id}/ 目录，内含 history.jsonl。
- * 延迟创建：第一条消息写入时才生成目录和文件，之前只有 pending ID。
+ * 延迟创建：Session 激活时才生成目录和文件，之前只有 pending ID。
  */
 
 /** 生成可读的目录名时间戳 */
@@ -26,7 +26,7 @@ function sessionDirName(header: SessionHeader): string {
 
 /**
  * 创建 pending session（不写文件）。
- * 只有第一条消息通过 ensureSession 才会实际创建文件，
+ * 只有 SessionManager.activate 才会实际创建文件，
  * 这样不会产生空 session 的 JSONL 文件。
  */
 export function createSession(name?: string | null): { header: SessionHeader; filePath: string } {
@@ -44,8 +44,7 @@ export function createSession(name?: string | null): { header: SessionHeader; fi
 
 /**
  * 确保 session 文件存在。
- * 由 SessionManager.appendMessage 调用，
- * 只在首次写入消息时才创建文件。
+ * 由 SessionManager.activate 调用；appendMessage 也会通过 activate 兜底。
  */
 export function ensureSession(header: SessionHeader, filePath: string): void {
 	if (existsSync(filePath)) return;

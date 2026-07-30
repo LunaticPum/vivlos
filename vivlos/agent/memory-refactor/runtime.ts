@@ -12,7 +12,9 @@ import type { ConsolidatorConfig } from "@vivlos/infra/config/index.ts";
 import {
 	createMemoryRepository,
 	type MemoryLimits,
-	type MemoryRepository,
+	type ManagedMemoryRepository,
+	type MemoryFilesActivation,
+	type MemoryOverview,
 } from "@vivlos/infra/storage/memory/index.ts";
 import { createHistory, type History } from "@vivlos/infra/storage/memory/history.ts";
 import { resolveModel } from "@vivlos/infra/llm/provider.ts";
@@ -32,7 +34,7 @@ export interface MemoryRuntimeDeps {
 
 interface SessionState {
 	readonly id: string;
-	readonly repository: MemoryRepository;
+	readonly repository: ManagedMemoryRepository;
 	readonly history: History;
 	readonly service: MemoryService;
 	readonly runner: Runner;
@@ -42,6 +44,8 @@ interface SessionState {
 
 export interface MemoryRuntime {
 	readonly sessionId: string;
+	activate(): MemoryFilesActivation;
+	getOverview(): MemoryOverview;
 	getService(): MemoryService;
 	buildPrompt(): string;
 	getOperationContext(
@@ -96,11 +100,31 @@ export function createMemoryRuntime(deps: MemoryRuntimeDeps): MemoryRuntime {
 		};
 		return state;
 	};
+	const readOverview = (): MemoryOverview => ({
+		sessionId: deps.sessionManager.id,
+		...currentState().repository.readOverview(),
+	});
+	const publishOverview = () => {
+		deps.eventBus.emit({
+			type: "memory:overview",
+			overview: readOverview(),
+		});
+	};
+	deps.eventBus.on("memory:overview_requested", (event) => {
+		if (event.sessionId === deps.sessionManager.id) publishOverview();
+	});
+	deps.eventBus.on("memory:changed", (event) => {
+		if (event.sessionId === deps.sessionManager.id) publishOverview();
+	});
 
 	return {
 		get sessionId() {
 			return deps.sessionManager.id;
 		},
+		activate() {
+			return currentState().repository.ensureFiles();
+		},
+		getOverview: readOverview,
 		getService() {
 			return currentState().service;
 		},

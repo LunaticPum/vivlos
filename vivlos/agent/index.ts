@@ -82,6 +82,21 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		hooks,
 		tools,
 	});
+	const publishSessionState = () => {
+		params.eventBus.emit({
+			type: "session:state",
+			state: {
+				current: {
+					id: sessionManager.id,
+					name: sessionManager.name,
+					pending: sessionManager.pending,
+					messages: [...sessionManager.getMessages()],
+				},
+				sessions: sessionManager.listSessions(),
+			},
+		});
+	};
+	params.eventBus.on("session:state_requested", publishSessionState);
 	const requestTitle = (sessionId: string, input: string, titleModel: Model<Api>) => {
 		if (titleTasks.has(sessionId)) return;
 		titleTasks.add(sessionId);
@@ -97,6 +112,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 					name,
 					source: "auto",
 				});
+				publishSessionState();
 			}
 		}).catch((error) => {
 			log(
@@ -119,6 +135,19 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			const shouldTitle = titleInput.length > 0 &&
 				sessionManager.name === null &&
 				sessionManager.getMessages().length === 0;
+			const sessionActivated = sessionManager.activate();
+			const memoryActivation = params.memoryRuntime.activate();
+			if (
+				sessionActivated ||
+				memoryActivation.memoryCreated ||
+				memoryActivation.userCreated
+			) {
+				params.eventBus.emit({
+					type: "session:activated",
+					sessionId,
+				});
+				publishSessionState();
+			}
 			const result = await loop.run(input, {
 				model: currentModel,
 				maxTurns,
@@ -129,6 +158,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			if (!result.error && shouldTitle) {
 				requestTitle(sessionId, titleInput, currentModel);
 			}
+			publishSessionState();
 
 			return result;
 		},
@@ -156,15 +186,36 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 			params.memoryRuntime.reset();
 			loop.resetCompaction();
 			params.toolsReset?.();
+			params.eventBus.emit({
+				type: "session:switched",
+				sessionId: sessionManager.id,
+			});
+			publishSessionState();
 		},
 		createNewSession(name?: string) {
 			sessionManager.createNew(name);
 			params.memoryRuntime.reset();
 			loop.resetCompaction();
 			params.toolsReset?.();
+			params.eventBus.emit({
+				type: "session:created",
+				sessionId: sessionManager.id,
+			});
+			publishSessionState();
 		},
 		deleteSession(sessionId: string) {
-			sessionManager.deleteSession(sessionId);
+			const previousSessionId = sessionManager.id;
+			if (!sessionManager.deleteSession(sessionId)) return;
+			if (sessionManager.id !== previousSessionId) {
+				params.memoryRuntime.reset();
+				loop.resetCompaction();
+				params.toolsReset?.();
+			}
+			params.eventBus.emit({
+				type: "session:deleted",
+				sessionId,
+			});
+			publishSessionState();
 		},
 		renameSession(name: string) {
 			const sessionId = sessionManager.id;
@@ -175,6 +226,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 				name,
 				source: "user",
 			});
+			publishSessionState();
 		},
 	};
 }

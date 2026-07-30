@@ -8,6 +8,8 @@ export type {
 	TaskItem,
 	MemoryOperationEvent,
 	MemoryChangedEvent,
+	MemoryOverviewRequestedEvent,
+	MemoryOverviewEvent,
 	MainAgentEvent,
 	ConsolidateEvent,
 	ConsolidateReason,
@@ -15,6 +17,7 @@ export type {
 	ConsolidateError,
 	MemoryEvent,
 	SessionEvent,
+	SessionStateSnapshot,
 	AppEvent,
 	WorkspaceEvent,
 } from "./types.ts";

@@ -44,7 +44,7 @@ export interface StatusBarProps {
 	exitPending?: boolean;
 	notification?: { message: string; color?: string } | null;
 	showSession?: boolean;
-	sessionId?: string;
+	durationResetKey?: string;
 	usage?: Usage;
 	contextWindow?: number;
 }
@@ -111,11 +111,11 @@ export function StatusBar({
 	exitPending = false,
 	notification = null,
 	showSession = true,
-	sessionId,
+	durationResetKey,
 	usage,
 	contextWindow,
 }: StatusBarProps) {
-	const duration = useSessionDuration(sessionId);
+	const duration = useSessionDuration(durationResetKey);
 	const { bar, percent, tokenLabel, barColor } = useContextBar(
 		usage,
 		contextWindow,

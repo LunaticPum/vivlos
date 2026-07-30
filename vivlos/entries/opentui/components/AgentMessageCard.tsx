@@ -129,7 +129,6 @@ export function AgentMessageCard({
 					fg={C.text}
 				/>
 			) : null}
-
 		</box>
 	);
 }
@@ -146,6 +145,7 @@ interface RenderLine {
 	segments: RenderSegment[];
 	markdown?: boolean;
 	streaming?: boolean;
+	singleLine?: boolean;
 }
 type LogLines = [RenderLine, ...RenderLine[]];
 type ThinkingEntry = Extract<LogEntry, { kind: "thinking" }>;
@@ -157,7 +157,7 @@ type RenderItem =
 /** Thinking 和 ToolGroup 都转换为 [主行, ...子文本行]。 */
 function thinkingToLines(entry: ThinkingEntry, spin: string): LogLines {
 	const durMs = entry.done
-		? entry.durationMs ?? 0
+		? (entry.durationMs ?? 0)
 		: Date.now() - entry.createdAt;
 	const durStr = durMs > 0 ? ` ${(durMs / 1000).toFixed(1)}s` : "";
 	const main: RenderLine = {
@@ -211,11 +211,12 @@ function toolGroupToLines(
 	const failed = entries.some((entry) => entry.done && entry.success === false);
 	const name = entries[0]?.name ?? "tool";
 	const dedicated = name === "memory" || name === "consolidate";
-	const displayName = name === "memory"
-		? "Memory"
-		: name === "consolidate"
-			? "Consolidate"
-			: name;
+	const displayName =
+		name === "memory"
+			? "Memory"
+			: name === "consolidate"
+				? "Consolidate"
+				: name;
 	const prefix = running ? spin : failed ? "✗" : "✓";
 	const statusColor = failed
 		? C.abort
@@ -256,25 +257,28 @@ function formatToolAction(entry: ToolEntry): RenderLine | undefined {
 	let value = "";
 
 	if (entry.name === "memory" && action && fileName) {
-		value = action === "add"
-			? stringValue(args?.content)
-			: action === "replace"
-				? stringValue(args?.new_text)
-				: action === "remove"
-					? stringValue(args?.old_text)
-					: "";
+		value =
+			action === "add"
+				? stringValue(args?.content)
+				: action === "replace"
+					? stringValue(args?.new_text)
+					: action === "remove"
+						? stringValue(args?.old_text)
+						: "";
 	}
 	if (entry.name === "consolidate" && action && fileName) {
 		value = stringValue(args?.new_entry);
 	}
 	if (action && fileName && value) {
+		const accent = entry.name === "memory" ? C.thinking : C.bright;
 		return {
+			singleLine: entry.name === "memory",
 			segments: [
-				{ text: action, color: C.bright },
+				{ text: action, color: accent },
 				{ text: ` ${fileName} `, color: C.text },
-				{ text: '"', color: C.bright },
+				{ text: '"', color: accent },
 				{ text: escapedContent(value), color: C.subtext },
-				{ text: '"', color: C.bright },
+				{ text: '"', color: accent },
 				...(entry.success === false && entry.result
 					? [{ text: `: ${entry.result}`, color: C.subtext }]
 					: []),
@@ -288,7 +292,7 @@ function formatToolAction(entry: ToolEntry): RenderLine | undefined {
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object"
-		? value as Record<string, unknown>
+		? (value as Record<string, unknown>)
 		: undefined;
 }
 
@@ -324,15 +328,25 @@ function renderSub(sub: RenderLine[], key: React.Key) {
 					fg={C.subtext}
 				/>
 			) : (
-				sub.map((line, j) => (
-					<box key={j} flexDirection="row">
-						{line.segments.map((segment, index) => (
-							<text key={index} fg={segment.color}>
-								{segment.text}
-							</text>
-						))}
-					</box>
-				))
+				sub.map((line, j) =>
+					line.singleLine ? (
+						<text key={j} width="100%" height={1} wrapMode="none" truncate>
+							{line.segments.map((segment, index) => (
+								<span key={index} fg={segment.color}>
+									{segment.text}
+								</span>
+							))}
+						</text>
+					) : (
+						<box key={j} flexDirection="row">
+							{line.segments.map((segment, index) => (
+								<text key={index} fg={segment.color}>
+									{segment.text}
+								</text>
+							))}
+						</box>
+					),
+				)
 			)}
 		</box>
 	);
@@ -358,9 +372,10 @@ function CompactLog({
 	return (
 		<box flexDirection="column">
 			{items.map((item, i) => {
-				const [main, ...sub] = item.kind === "thinking"
-					? thinkingToLines(item.entry, active ? spin : "✓")
-					: toolGroupToLines(item.entries, active ? spin : "✓", false);
+				const [main, ...sub] =
+					item.kind === "thinking"
+						? thinkingToLines(item.entry, active ? spin : "✓")
+						: toolGroupToLines(item.entries, active ? spin : "✓", false);
 				const isThinking = item.kind === "thinking";
 				const prevIsThinking = i > 0 && items[i - 1]?.kind === "thinking";
 				const isTool = item.kind === "tool";
@@ -371,16 +386,20 @@ function CompactLog({
 
 				return (
 					<box
-						key={item.kind === "thinking"
-							? `thinking-${item.index}`
-							: `tool-${item.entries[0]!.callId}`}
+						key={
+							item.kind === "thinking"
+								? `thinking-${item.index}`
+								: `tool-${item.entries[0]!.callId}`
+						}
 						flexDirection="column"
 					>
 						{needSpacer && <box height={1} />}
 						<box
 							flexDirection="row"
 							onMouseDown={
-								isThinking && hasSub ? () => onToggleThinking(item.index) : undefined
+								isThinking && hasSub
+									? () => onToggleThinking(item.index)
+									: undefined
 							}
 						>
 							{main.segments.map((seg, j) => (
@@ -398,7 +417,13 @@ function CompactLog({
 }
 
 /** expanded 视图：完整展示，按 turn 分组 + 分隔线 */
-function ExpandedLog({ log, bottomTitle }: { log: LogEntry[]; bottomTitle: string }) {
+function ExpandedLog({
+	log,
+	bottomTitle,
+}: {
+	log: LogEntry[];
+	bottomTitle: string;
+}) {
 	const groups = new Map<number, LogEntry[]>();
 	for (const entry of log) {
 		const idx = entry.turnIndex;
@@ -412,12 +437,14 @@ function ExpandedLog({ log, bottomTitle }: { log: LogEntry[]; bottomTitle: strin
 					<box key={turnIdx} flexDirection="column">
 						<text fg={C.borderInner}>{`───── Turn ${turnIdx + 1} ─────`}</text>
 						{groupLogEntries(groups.get(turnIdx)!).flatMap((item) => {
-							const [main, ...sub] = item.kind === "thinking"
-								? thinkingToLines(item.entry, "✓")
-								: toolGroupToLines(item.entries, "✓", true);
-							const key = item.kind === "thinking"
-								? `thinking-${item.index}`
-								: `tool-${item.entries[0]!.callId}`;
+							const [main, ...sub] =
+								item.kind === "thinking"
+									? thinkingToLines(item.entry, "✓")
+									: toolGroupToLines(item.entries, "✓", true);
+							const key =
+								item.kind === "thinking"
+									? `thinking-${item.index}`
+									: `tool-${item.entries[0]!.callId}`;
 							return [
 								<box key={`${turnIdx}-${key}-main`} flexDirection="row">
 									{main.segments.map((seg, j) => (

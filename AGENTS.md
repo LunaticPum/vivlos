@@ -39,7 +39,7 @@ vivlos/
 │   ├── loop/                # agent loop（封装 pi agentLoop + vivlos hook）
 │   ├── tools/               # 工具注册表 + 调度（registry + toolset 分组）
 │   ├── prompt/              # 系统提示构建器（动态拼装片段）
-│   ├── memory/              # 跨会话持久化记忆
+│   ├── memory-refactor/     # 当前 Session 的 L1 Memory 运行时
 │   ├── session/             # 会话管理（封装 pi session repo）
 │   ├── skills/              # skill 加载 + 注入
 │   └── types.ts

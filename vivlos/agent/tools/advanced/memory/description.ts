@@ -1,17 +1,17 @@
 // #region 主动记忆
 
-export const memoryDescription = `管理长期记忆（memory.md = 项目/环境笔记，user.md = 用户画像）。
+export const memoryDescription = `管理当前 Session 的 L1 Memory（memory.md = 项目/环境笔记，user.md = 用户画像）。
 实际写盘变更后，下一次模型推理会读取更新后的 Memory context。
 
 ## 何时写入
-Save: 偏好 / 环境 / 事实 / 纠正 / 约定 / 已完成工作 / 用户显式要求"记住"
-Skip: 琐碎问题 / 可搜索的事实 / 原始数据 / session 特有的随机内容
+Save: 稳定的项目环境、事实、决策、约定、用户偏好、明确纠正，以及用户显式要求"记住"的长期信息
+Skip: 当前任务进度、已完成操作、琐碎问题、可搜索的公共事实、原始数据和临时内容
 
 ## 操作
 - add: 必须提供 file + content + reasonCode；追加条目，重复内容静默 no-op，超 cap 报错
 - replace: 必须提供 file + old_text + new_text + reasonCode；old_text 使用唯一 substring 匹配，多条命中报错
 - remove: 必须提供 file + old_text + reasonCode；old_text 使用唯一 substring 匹配，多条命中报错
-- 无 read：内容已在 system prompt 中
+- 无 read：当前内容已在 system prompt 中，不使用通用 read/write/bash 访问 Vivlos Memory
 
 ## 规则
 - 每条记忆应是一条完整、独立的事实或偏好
@@ -21,7 +21,8 @@ Skip: 琐碎问题 / 可搜索的事实 / 原始数据 / session 特有的随机
 - 调用前按 action 检查必填参数；replace/remove 的 old_text 必须来自当前 Memory 中足够唯一的原文片段
 - reason 可选，只写简短、可审计的原因，不要写完整推理
 - 超 cap 时优先 replace 精简已有条目，不得为了腾空间擅自 remove
-- 写入的条目会进每个未来 session 的 SP，谨慎写入`;
+- Tool Result 显示已写入/替换/删除时才表示 committed；内容未变化表示 noop；错误表示 rejected，必须如实告知用户
+- 写入内容只进入当前 Session 的 L1 Memory，不会被其他或未来 Session 自动继承`;
 
 // #endregion
 

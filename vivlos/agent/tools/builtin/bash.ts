@@ -132,7 +132,7 @@ export function createBashTool(cwd: string): AgentTool<typeof Params, { message:
 
 	return {
 		name: "bash",
-		description: "执行 shell 命令并返回 stdout。timeout 超时后终止命令。输出超过 256K 字符自动截断。临时文件请保存到 $TMPDIR 目录（.vivlos/temp/）。",
+		description: "执行项目开发所需的 shell 命令并返回 stdout。不得用于访问或修改 Vivlos Memory；记忆操作使用 memory Tool。timeout 超时后终止命令，输出超过 256K 字符自动截断。临时文件请保存到 $TMPDIR 目录（.vivlos/temp/）。",
 		label: "运行命令",
 		parameters: Params,
 		async execute(

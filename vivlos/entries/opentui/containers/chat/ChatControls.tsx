@@ -22,7 +22,7 @@ export interface ChatControlsProps {
 
 export function ChatControls({ status, input, info }: ChatControlsProps) {
 	return (
-		<box paddingX={2} flexShrink={0}>
+		<box paddingX={2} flexShrink={0} position="relative" zIndex={50}>
 			<StatusBar {...status} />
 			<InputBar {...input} />
 			<InfoBar {...info} />

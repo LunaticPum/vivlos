@@ -21,18 +21,20 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 // #region Types
 
 export interface FilePreview {
+	readonly exists: boolean;
 	readonly used: number;
 	readonly cap: number;
+	readonly entryCount: number;
 	readonly updatedAt: number | null;
 }
 
 export interface SidebarPreview {
 	readonly sessionName: string;
 	readonly sessionId: string;
-	readonly path: string;
+	readonly path: string | null;
 	readonly cwd: string;
-	readonly memory: FilePreview;
-	readonly user: FilePreview;
+	readonly memory: FilePreview | null;
+	readonly user: FilePreview | null;
 }
 
 export interface SidebarProps {
@@ -216,13 +218,15 @@ function MemoryCard({
 			{layer === 1 && (
 				<>
 					<box width="100%" flexDirection="row">
-						<text fg={colors.text.muted}>Storage </text>
+						<text fg={colors.text.muted}>Storage</text>
+						<box flexGrow={1} />
 						<text fg={colors.text.secondary}>Session Markdown</text>
 					</box>
 					<box width="100%" flexDirection="row">
-						<text fg={colors.text.muted}>Location </text>
+						<text fg={colors.text.muted}>Location</text>
+						<box flexGrow={1} />
 						<text fg={colors.text.secondary}>
-							{trimPath(preview.path, CONTENT_WIDTH - 13)}
+							{preview.path ? ".vivlos/sessions" : "unavailable"}
 						</text>
 					</box>
 					<box height={1} />
@@ -243,29 +247,53 @@ function moveLayer(current: Layer, step: -1 | 1): Layer {
 
 // #region File Usage
 
-function FileRow({ name, file }: { name: string; file: FilePreview }) {
+function FileRow({ name, file }: { name: string; file: FilePreview | null }) {
+	if (file === null) {
+		return (
+			<box flexDirection="column">
+				<box width="100%" flexDirection="row">
+					<text fg={colors.text.primary}>{name}</text>
+					<box flexGrow={1} />
+					<text fg={colors.text.muted}>--</text>
+				</box>
+				<box width="100%" flexDirection="row">
+					<box width={BAR_WIDTH} flexDirection="row">
+						<text fg={colors.bg.surface1}>{"░".repeat(BAR_WIDTH)}</text>
+					</box>
+					<text fg={colors.text.muted}>{" --%"}</text>
+					<box flexGrow={1} />
+					<text fg={colors.text.muted}>--/--</text>
+				</box>
+			</box>
+		);
+	}
 	const percent = file.cap > 0
 		? Math.min(100, Math.max(0, Math.round((file.used / file.cap) * 100)))
 		: 0;
 	const filled = Math.round((percent / 100) * BAR_WIDTH);
-	const color = percent >= 85
-		? colors.semantic.error
-		: percent >= 70
-			? colors.semantic.warning
-			: colors.semantic.success;
+	const color = !file.exists
+		? colors.text.muted
+		: percent >= 85
+			? colors.semantic.error
+			: percent >= 70
+				? colors.semantic.warning
+				: colors.semantic.success;
 	const usage = `${formatChars(file.used)}/${formatChars(file.cap)}`;
+	const status = file.exists ? formatAge(file.updatedAt) : "not ready";
 
 	return (
 		<box flexDirection="column">
 			<box width="100%" flexDirection="row">
 				<text fg={colors.text.primary}>{name}</text>
 				<box flexGrow={1} />
-				<text fg={colors.text.muted}>{formatAge(file.updatedAt)}</text>
+				<text fg={colors.text.muted}>{status}</text>
 			</box>
 			<box width="100%" flexDirection="row">
-				<text fg={color}>{"█".repeat(filled)}</text>
-				<text fg={colors.bg.surface1}>{"░".repeat(BAR_WIDTH - filled)}</text>
-				<text fg={color}>{` ${String(percent).padStart(3)}%`}</text>
+				<box width={BAR_WIDTH} flexDirection="row">
+					<text fg={color}>{"█".repeat(filled)}</text>
+					<text fg={colors.bg.surface1}>{"░".repeat(BAR_WIDTH - filled)}</text>
+				</box>
+				<text fg={color}>{` ${percent}%`}</text>
 				<box flexGrow={1} />
 				<text fg={colors.text.secondary}>{usage}</text>
 			</box>

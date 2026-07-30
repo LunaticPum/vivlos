@@ -1,6 +1,9 @@
 export { createL1, buildL1Prompt } from "./layers/l1.ts";
 export { createMemoryRuntime } from "./runtime.ts";
-export type { MemoryRuntime, MemoryRuntimeDeps } from "./runtime.ts";
+export type {
+	MemoryRuntime,
+	MemoryRuntimeDeps,
+} from "./runtime.ts";
 export { createMemoryService } from "./service.ts";
 export type {
 	MemoryService,

@@ -23,8 +23,10 @@
 - `memory.md`：项目、环境、决策和长期事实。
 - `user.md`：用户偏好、画像和沟通方式。
 - 新 session 不加载其他 session 的 L1 Memory。
-- 新 session 默认没有 `memory.md` 和 `user.md`。
-- 首次发生有效写入时才创建对应文件。
+- `/new` 产生的 pending session 不创建目录或文件。
+- 第一条模型请求被接受后激活 session，并幂等创建空 `memory.md` 和 `user.md`。
+- `session:activated` 表示 `history.jsonl` 和两个 L1 文件均已准备完成；补齐已有 session 缺失的 L1 文件也属于完成物化。
+- 文件初始化不属于内容变化，不发布 `memory:changed` 或触发 Consolidator。
 - 用户需要复用 L1 时，可以手动复制这两个文件作为另一个 session 的初始文件；Memory 模块不负责自动同步。
 
 ### 2.2 当前没有多文件加载
@@ -184,6 +186,14 @@ Repository 位于 `infra/storage/memory/repository.ts`，负责当前 session �
 - 字符用量和上限检查。
 - 内容 revision 计算。
 - 文件不存在和空文件处理。
+- 幂等初始化两个 L1 文件。
+- 提供不含条目正文的 path/usage/entryCount/updatedAt 只读 Overview。
+
+Overview 公共类型属于 `infra/storage/memory`。MemoryRuntime 负责读取并组合当前 sessionId；TUI 不通过 VivlosAgent 直接查询。MemoryRuntime 响应 `memory:overview_requested`，并在当前 session 的 `memory:changed` 后发布 `memory:overview`。
+
+Session 当前状态同样通过 EventBus 提供：Agent 响应 `session:state_requested`，并在生命周期变化、消息落盘和自动标题完成后发布 `session:state`。请求与响应是两条独立 Event，不把 EventBus 改造成等待返回值的 RPC。
+
+TUI 统一由 `useAgent` 适配这些状态 Event。Workspace 只消费当前 Session、Session 列表和 Memory Overview；Sidebar 只接收展示 props，不监听 EventBus、不读取文件。Overview 切换期间使用 unavailable 占位，不能保留其他 Session 的数据或回退模拟值。
 
 Repository 不判断 actor 权限，不扫描 prompt injection，不决定 add/merge/refine 的业务语义。
 

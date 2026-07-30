@@ -26,8 +26,13 @@ export type {
 	MemoryEvent,
 	MemoryOperationEvent,
 	MemoryChangedEvent,
+	MemoryOverviewRequestedEvent,
+	MemoryOverviewEvent,
 } from "./events/memory-event.ts";
-export type { SessionEvent } from "./events/session-event.ts";
+export type {
+	SessionEvent,
+	SessionStateSnapshot,
+} from "./events/session-event.ts";
 export type { AppEvent } from "./events/app-event.ts";
 export type {
 	WorkspaceEvent,
