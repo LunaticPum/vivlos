@@ -1,702 +1,128 @@
-# Memory Refactor 协作与恢复规格
+# Vivlos 协作与恢复规格
 
-> 上下文压缩或新 Agent 接手后，先完整阅读本文，再读取 `vivlos/agent/memory/docs/refactor.md` 和当前领域文件。
+> 本文是跨领域工作的稳定入口。领域架构、实施历史和可变状态放入对应 Domain Spec，不堆积在本文。
 
-## 1. 当前恢复点
+## 1. 文档职责
 
-- 日期：2026-07-28。
-- 仓库：`D:\VSProject\Agent\my_agent`。
-- 当前主线分支：`master`；Memory 功能由 `memory-refactor` 快进合入。
-- Memory 领域 0-5 已提交：`61acd47 feat: 完成 Memory 巩固触发与运行时`。
-- Memory 核心运行闭环已提交：`c201b4a feat: 完成 Memory 核心运行闭环`。
-- 会话 Workspace、Sidebar、自动标题和 EventBus 拆分已提交：`6a30123 feat: 完善会话工作区与事件架构`。
-- Consolidate 生命周期与 Tool 展示已提交：`3beed23 feat: 接通巩固事件与工具展示`。
-- 当前实现位于 `vivlos/agent/memory/`；基线包含 Repository、Logic、Security、Service、Tools、History/Trigger、Consolidator Runtime、L1 renderer 和 session MemoryRuntime。
-- L1 数据接入闭环已在工作树完成：Session/L1 生命周期、EventBus 状态通道、useAgent 适配、Workspace 收敛和 Sidebar 真实 Overview 均已接通，等待 Review 与终端验收。
+阅读顺序：
 
-最近一次验证：
+1. 本文：通用协作、范围、测试、工作树和恢复规则。
+2. 当前 Domain Spec：领域设计、历史决策、进度和恢复点。
+3. 当前代码、Git 状态和测试：最终事实来源。
 
-```text
-bun test          -> 159 pass, 0 fail, 14 files
-bun run typecheck -> passed
-git diff --check  -> passed（仅有 LF/CRLF 提示）
-```
+当前 Domain Spec：
 
-## 2. 必须遵守的协作流程
+- Memory：[`opencode/memory_spec.md`](./memory_spec.md)
+- Memory 当前设计：[`vivlos/agent/memory/docs/refactor.md`](../vivlos/agent/memory/docs/refactor.md)
 
-用户要求按领域逐步推进，不允许一次展开全部实现：
+领域文档统一命名为 `opencode/<domain>_spec.md`。只有需要跨上下文持续恢复的领域才创建 Domain Spec。
 
-1. 先定义大领域和顺序。
+## 2. 指令优先级
+
+发生冲突时按以下顺序处理：
+
+1. 用户最新明确指令。
+2. 用户对当前 Todo 或设计的批准范围。
+3. 当前 Domain Spec 的领域约束。
+4. 本文的通用规则。
+5. 旧文档、历史计划和过期恢复信息。
+
+发现文档与最新指令或代码不一致时，以最新指令和当前事实为准，并在本轮允许范围内同步文档。
+
+## 3. 领域化协作
+
+1. 先定义大领域、顺序和依赖，不一次展开全部实现。
 2. 开始某个领域前，只展开该领域的详细 Todo。
-3. 用户 review Todo 并明确同意后，才执行代码。
-4. 用户可能只批准 Todo 的一部分；严格停在指定编号。
-5. 写完该部分后停下，交给用户 review，不自动进入下一部分。
-6. 领域完成且用户确认后，从 Todo 中移除该领域明细，再规划下一个领域。
-7. **编写任何测试脚本前，必须先创建或更新对应测试文档。**
-8. 测试文档 review 通过后，才写测试脚本。
+3. 用户 Review Todo 并明确批准后，才执行对应实现。
+4. 用户可以只批准部分 Todo；严格停在批准边界。
+5. Todo 之间存在不可分割依赖时，先说明并调整边界，不静默扩大范围。
+6. 完成批准内容和验证后停止，交给用户 Review，不自动进入下一领域。
+7. 领域完成并得到确认后，收起其详细 Todo，再规划下一领域。
 
-实践经验：
+纯问题分析、方案讨论和 Code Review 不代表实现授权。用户明确要求修改、执行、提交或推送时，才进行对应操作。
 
-- 不要在设计 review 前实现代码。此前曾过早实现复杂 `consolidateEntries()`，后来整体删除。
-- 不要为了完成一个 Todo 暴露不可用的半成品 API，例如只支持 noop 或只会抛错的 factory。
-- 如果 Todo 之间存在不可分割依赖，先说明并调整边界，不要静默扩大实现范围。
-- 用户重视模块平行、命名直观和代码阅读顺序，优先保持结构对称。
-- 命名保持简洁并利用所在模块的上下文，不刻意堆叠长前缀；同时避免难懂缩写。
-- 底层 error/warn 不要只 throw；优先返回结构化状态并调用 `infra/logger`，需要用户感知时设置 `onTui=true`。不建立复杂错误系统。
-- 不要将未来可能需要的复杂机制提前加入当前简单需求。
+## 4. 实施与范围控制
 
-## 3. 产品级约定
+- 修改前先读取当前文件和相邻模块，不从旧实现或过期文档猜测。
+- 优先现有架构、命名、工具和模块边界；选择最小正确改动。
+- 不为了未来可能需要的能力提前加入复杂框架、兼容层或半成品 API。
+- 不暴露只能 noop、固定报错或尚不可用的公共入口。
+- 新抽象必须消除真实复杂度、重复或明确匹配现有模式。
+- 底层预期失败优先返回结构化状态并记录日志；需要用户感知时使用现有 TUI 通知路径。
+- 不顺带重构、格式化或清理与当前 Todo 无关的代码和文档。
+- 发现范围外问题时记录并报告，不自行扩展当前任务。
 
-### 3.1 当前只实现 Session-local L1
+## 5. 测试与验证
 
-每个 session 独立拥有：
+编写或修改测试脚本前：
 
-```text
-.vivlos/sessions/<timestamp>_<sessionId>/
-├── history.jsonl
-├── memory.md
-├── user.md
-└── memory-events.jsonl
-```
+1. 创建或更新对应测试文档。
+2. 说明测试目标、边界、场景和不覆盖内容。
+3. 等待用户 Review 并批准测试文档。
+4. 只实现已批准的测试脚本。
 
-- `memory.md`：项目、环境、决策和长期事实。
-- `user.md`：用户偏好、画像和沟通方式。
-- 新 session 不自动加载其他 session 的 L1。
-- 文件懒创建；首次有效写入才创建。
-- L2-L4 不在当前范围，不预留复杂 Provider 框架。
+用户明确要求跳过测试文档步骤时，以该次最新指令为准。
 
-### 3.2 实际变化后立即刷新 SP
+验证范围随风险调整，通常包括：
 
-```text
-Memory 写盘成功
--> revision 实际变化
--> 发布 memory:changed
--> 当前 session SP 失效
--> 下一次 LLM 推理前重建 L1 SP
-```
+- 相关定向测试。
+- 全量测试。
+- TypeScript typecheck。
+- `git diff --check`。
+- 必要的依赖、路径或残留引用扫描。
+- 用户要求保留的终端、视觉或真实模型手动验收。
 
-- noop/rejected/失败不刷新。
-- 删除最后一条使文件变空仍属于实际变化。
-- 最终 changed 必须以 Repository 返回的 revision 是否变化为准，而不是只相信 Logic 声明。
+无法运行的验证必须明确说明，不能用“应该通过”代替结果。
 
-## 4. 主模型与 Consolidator 的责任边界
+## 6. 工作树与 Git
 
-核心原则：
+- 默认工作树可能包含用户或其他 Agent 的改动。
+- 不恢复、覆盖、删除或暂存自己未创建的无关改动。
+- 同一文件存在其他改动时，先读取并在其基础上工作。
+- 不使用 `git reset --hard`、`git checkout --` 等破坏性命令，除非用户明确批准。
+- commit、push、merge、分支删除和 PR 必须得到明确授权。
+- 提交前检查 `git status`、暂存差异、最近提交风格和敏感信息。
+- 只暂存当前任务文件；提交失败时修复后创建新提交，不擅自 amend。
+- 合并前确认工作树干净、祖先关系明确，并优先使用可预测的非交互命令。
 
-```text
-主模型决定“记什么”
-Consolidator 优化“怎么存”
-```
+## 7. 上下文恢复
 
-主模型是内容权威：
+上下文压缩或新 Agent 接手后：
 
-- `add`：保存新事实。
-- `replace`：根据用户纠正更新事实片段。
-- `remove`：根据用户要求遗忘事实。
+1. 阅读本文和最新用户消息。
+2. 运行 `git status --short --branch`，确认分支和工作树。
+3. 查看近期 Git 日志，确认已提交边界。
+4. 读取当前 Domain Spec 和其指向的设计文档。
+5. 搜索并读取当前领域的组合根、公共出口和关键实现。
+6. 核对测试基线，不盲信文档中的历史数量。
+7. 恢复当前 Todo，只保留一个实际执行中的事项。
+8. 向用户简要说明恢复点、活动任务、阻塞和下一步。
 
-Consolidator 只是低频 L1 维护器：
+不要从旧路径、已删除模块或历史方案恢复当前架构。Domain Spec 中的 rejected/被否决设计，除非用户明确改变需求，否则不得重新引入。
 
-- `refine`：压缩或澄清一个完整 entry。
-- `merge`：合并同一文件中的多个完整 entries。
+## 8. Domain Spec 内容
 
-Consolidator 禁止：
+Domain Spec 可以记录：
 
-- add/replace/remove。
-- 推断新事实或用户偏好。
-- 纠正事实、判断事实过时、恢复已删除内容。
-- 改变 entry 的 memory/user 归属。
-- 根据常识扩写或覆盖主模型最近操作。
+- 领域目标和责任边界。
+- 当前架构、数据流和目录。
+- 已确认的产品语义。
+- 被否决方案及原因。
+- 领域进度、提交和验证历史。
+- 工作树注意事项和恢复入口。
 
-没有可安全整理的内容时，Consolidator 不调用工具并结束；不存在 noop action，noop 只是操作 outcome。
+Domain Spec 不替代当前代码和 Git 状态。完成合并、重命名或架构迁移后，应清理会误导后续恢复的过期路径和状态。
 
-## 5. 被否决的巩固设计
+## 9. 状态报告
 
-不要恢复以下方案，除非用户未来明确改变需求：
+工作中的更新只报告有意义的信息：发现、边界、风险、阻塞、开始编辑和验证结果。
 
-- `ConsolidationPlan`。
-- 独立 `ConsolidationValidator`。
-- evidenceEventIds/baseRevision/consolidationId/receipt/planHash。
-- 跨 memory/user 的 `applyBatch()` 或批量事务。
-- 巩固 add/noop。
-- 多操作原子回滚。
-- 单 entries 批处理 `consolidateEntries()`。
-- 批末隐式 `Set` 去重。
+完成报告至少说明：
 
-这些机制曾用于“证据支持的新事实、跨文件原子批次、幂等恢复”等更大需求，但当前需求只是模型触发后连续执行独立 refine/merge，因此属于过度设计。
+- 实际完成内容。
+- 关键行为或边界变化。
+- 测试和静态检查结果。
+- 未完成项或手动验收项。
+- 是否提交、推送或仍有工作树改动。
 
-当前语义是：每个 refine/merge 独立读取最新 snapshot、独立提交；前一个成功而后一个失败时，前一个结果保留。
-
-## 6. 当前目标目录
-
-```text
-vivlos/agent/memory/
-├── refactor.md
-├── index.ts                    # 最后阶段创建/收敛
-├── types.ts
-├── security.ts
-├── memory.ts
-├── consolidate.ts
-├── service.ts
-├── consolidator/               # 后续领域
-│   ├── prompt.ts
-│   ├── trigger.ts
-│   └── runner.ts
-├── layers/
-│   └── l1.ts
-└── utils/
-    └── event-logger.ts
-
-vivlos/infra/storage/memory/
-├── index.ts
-├── repository.ts
-└── history.ts                  # 操作留痕领域再设计
-
-vivlos/agent/tools/advanced/memory/
-├── memory.ts
-├── consolidate.ts
-└── description.ts
-```
-
-当前已存在 Consolidate Tool、`consolidator/prompt.ts`、`trigger.ts`、`runner.ts`、L1 renderer、session Runtime 和公共 `index.ts`。
-
-## 7. 模块平行规则
-
-用户明确要求 `memory.ts` 与 `consolidate.ts` 看起来平行：
-
-```text
-memory.ts
-├── 主动记忆命令
-├── 领域结果
-├── 统一入口 applyMainCommand
-├── Add / Replace / Remove
-└── 唯一匹配
-
-consolidate.ts
-├── 记忆巩固命令
-├── 领域结果
-├── 统一入口 applyConsolidationCommand
-├── Refine / Merge
-└── 精确匹配
-```
-
-- `MainMemoryCommand` 必须定义在 `memory.ts`。
-- `ConsolidationMemoryCommand` 必须定义在 `consolidate.ts`。
-- `service.ts` 导入两个 command 和两个 apply 入口，不重新定义或实现领域 dispatcher。
-- Event ID 使用 `@vivlos/shared` 的 `uid()`，不要直接使用 `randomUUID()`。
-- 中文注释要解释边界；文件使用 `// #region xxx` 组织。
-
-## 8. 主动记忆 Logic
-
-文件：`vivlos/agent/memory/memory.ts`。
-
-公开内容：
-
-- `MainMemoryCommand`。
-- `MemoryLogicValue/Error/Result`。
-- `applyMainCommand()`。
-- `addEntry()`、`replaceEntry()`、`removeEntry()`。
-
-共同规则：
-
-- 输入参数在入口 trim。
-- 不读取文件、不扫描 Security、不检查 cap、不发 Event。
-- 不修改输入 entries。
-- committed 返回新数组；noop 返回原数组引用；error 不返回部分状态。
-
-Add：
-
-- 空 content -> `invalid_input`。
-- 精确重复 -> noop。
-- 其他 -> 末尾追加。
-
-Replace/Remove 的 `findUniqueMatch()`：
-
-- 在所有 entry 文本内部定位 oldText **局部子串**。
-- 返回 `entryIndex + offset`。
-- 0 次 -> `not_found`。
-- 超过 1 次 -> `ambiguous_match`。
-- 同一 entry 内重复或重叠出现也算 ambiguous。
-- Replace 最终目标若等于另一现有 entry：移除旧 entry，保留已有目标。
-- Remove 删除命中子串所在的完整 entry。
-
-## 9. 巩固 Logic
-
-文件：`vivlos/agent/memory/consolidate.ts`。
-
-公开内容：
-
-- `RefineCommand`、`MergeCommand`、`ConsolidationCommand`、`ConsolidationMemoryCommand`。
-- `ConsolidationLogicValue/Error/Result`。
-- `applyConsolidationCommand()`。
-
-`findExactSource()` 与主动匹配不同：
-
-- 使用完整字符串相等定位一个 source entry。
-- 不做子串匹配，不返回 offset。
-- 完整 source 出现 0 次 -> `not_found`。
-- 完整 source 出现多次 -> `ambiguous_match`。
-- Exact source 也是轻量 stale guard：主模型已修改 entry 时，旧巩固操作应失败而非覆盖新状态。
-
-Refine：
-
-- oldEntry/newEntry trim 后不能为空。
-- oldEntry 必须精确且唯一。
-- 内容相同 -> noop 和原 entries 引用。
-- newEntry 已存在于其他 entry -> `duplicate_target`。
-- `newEntry.length > oldEntry.length` -> `not_reduced`。
-- 允许等长措辞整理；成功在原位置替换。
-
-Merge：
-
-- oldEntries 至少 2 条，trim 后非空且互不重复。
-- 每个 source 必须精确且唯一。
-- newEntry 已存在于未参与 entry -> `duplicate_target`。
-- `newEntry.length >= sources 内容长度总和` -> `not_reduced`。
-- newEntry 可以等于某个 source，只要合并后确实压缩其他 source。
-- before 按当前文件顺序记录，不按命令参数顺序。
-- newEntry 放在最早 source 位置，未引用 entries 保持原值和相对顺序。
-
-代码无法证明自然语言“事实并集不丢失”，该责任由后续 Consolidator Prompt 约束。
-
-## 10. Security
-
-文件：`vivlos/agent/memory/security.ts`。
-
-无状态纯函数：
-
-- `scanContent()`：扫描最终完整候选。
-- `checkPermission()`：actor/action 白名单。
-- `escapeForPrompt()`：XML 文本结构转义。
-
-扫描类别：
-
-- Markdown `---` 分隔符注入。
-- Prompt injection。
-- 模型角色/控制标记。
-- API Key、密码、私钥、token。
-- 不可见 Unicode/方向控制字符。
-
-权限矩阵：
-
-```text
-main         -> add / replace / remove
-consolidator -> refine / merge
-```
-
-`MEMORY_ACTIONS` 当前只有 add/replace/remove/merge/refine；noop 已移除。
-
-## 11. Repository 与 Event
-
-Repository：`vivlos/infra/storage/memory/repository.ts`。
-
-- 绑定单个 sessionDir。
-- `readSnapshot()` 同时返回 memory/user entries、usage 和 combined SHA-256 revision。
-- `write(file, entries)` 只写一个文件。
-- 格式：entry 间 `\n---\n`，非空文件结尾一个 `\n`，空文件真正为空。
-- 读取兼容 LF/CRLF。
-- 写前规范化、分隔符检查、cap 检查。
-- expected business failure 使用 Result；文件系统 I/O 可抛出。
-
-EventBus 当前两类事件：
-
-- `memory:operation`：每个 committed/noop/rejected 终态。
-- `memory:changed`：只在实际 revision 改变时。
-
-`MemoryOperationEvent` 已增加可选 `beforeEntries`，用于 merge 多 source 留痕。Rejected Event 不得包含 before/beforeEntries/after 或不安全候选。
-
-Event Logger：`utils/event-logger.ts`。
-
-- best-effort 订阅 operation 并追加 session `memory-events.jsonl`。
-- 写日志失败不回滚成功 Markdown，不改变 Tool Result。
-- Event 不是当前 Memory 状态源；Markdown 才是。
-
-## 12. Memory Service
-
-文件：`vivlos/agent/memory/service.ts`。
-
-公开契约：
-
-- `MemoryOperationContext`：sessionId、reasonCode、可选 reason/source。
-- `MemoryServiceValue/Error/Result`。
-- `MemoryService`。
-- `MemoryServiceDependencies`。
-- `createMemoryService()`。
-
-两个强类型入口：
-
-```text
-executeMain(MainMemoryCommand, context)
-executeConsolidation(ConsolidationMemoryCommand, context)
-```
-
-共同链路：
-
-```text
-读取最新 snapshot
--> checkPermission
--> 对应 apply 纯 Logic
--> Logic error: rejected
--> noop: 不扫描、不写盘，发布 operation(noop)
--> changed: scanContent(final after)
--> Security error: rejected
--> Repository.write(single file)
--> Repository Result error: rejected
--> 根据实际 revision 生成 committed/noop
--> 发布 operation
--> 只有 actual changed 才发布 memory:changed
-```
-
-结果约定：
-
-- `MemoryServiceValue` 是判别联合，只允许 `committed/true` 或 `noop/false`。
-- 成功包含 actor/action/file、before 或 beforeEntries、after、最新 usage、revisionBefore/After。
-- 预期失败包含 code/message、actor/action/file、当前 usage、相同 revisionBefore/After，可选 violations。
-- Security rejected 的 Event 和 error 不携带候选原文。
-- read/write I/O 抛错不 catch，不伪装成业务 rejected。
-- 前序独立操作成功、后序失败时不回滚前序操作。
-
-实现细节约束：
-
-- Service 不实现领域 dispatcher；导入 `applyMainCommand` 与 `applyConsolidationCommand`。
-- Service 不直接访问 node:fs/path、PromptBuilder、Tool、Agent Loop。
-- Event ID 统一调用 shared `uid()`。
-
-## 13. History、Trigger 与 Runtime
-
-### 13.1 History 与 Cursor
-
-文件：`vivlos/infra/storage/memory/history.ts`。
-
-- `createHistory(sessionDir, sessionId)` 返回绑定 session 的 History。
-- `read(after)` 按 `memory-events.jsonl` 物理行读取，返回 `records/issues/tail`。
-- 只投影 main add/replace/remove；Consolidator 记录验证后忽略。
-- issue 只有 `line+code`，不含坏行、错 session 或候选原文。
-- rejected 记录强制丢弃 before/after。
-- `readCursor()/saveCursor(line)` 管理单一 `memory-cursor.json`。
-- Cursor 格式只有单行 `{ "line": number }`；缺失为 0，禁止回退/越过 tail，临时文件原子替换。
-- History 是 best-effort 整理参考，Markdown 始终是当前状态源。
-
-### 13.2 Trigger
-
-文件：`vivlos/agent/memory/consolidator/trigger.ts`。
-
-- `checkTrigger(input)` 是无 I/O 纯函数。
-- 优先级：`main_request > capacity_pressure > operation_threshold`。
-- 默认 20 次 main committed 或容量比例 0.85；可配置。
-- noop/rejected 不累计；空 L1 不触发。
-- 容量触发要求至少一条新的有效主模型 record，防止固定高容量反复运行。
-- Decision 包含 reason、cursor/tail、安全 records、usage 和受压 files；不推进 cursor。
-
-### 13.3 Config 与模型解析
-
-`MemoryConfig.consolidator`：
-
-```text
-model: { provider, id } | null
-trigger: { operations: 20, capacity: 0.85 }
-maxTurns: 6
-maxTools: 8
-timeoutMs: 60000
-```
-
-- Config 在 `vivlos/infra/config/index.ts` 做默认值、深层合并和基础范围校验。
-- model 缺失/null 表示每次运行使用当时当前主模型，不固定启动默认模型。
-- `ModelRef` 位于 `infra/llm/types.ts`，不包含 key/baseUrl。
-- `infra/llm.resolveModel(llm, ref, current)`：null 返回 current；显式引用精确查找。
-- 显式模型不存在返回 `model_not_found` Result，调用 logger/TUI，不静默回退。
-- Config/模型解析由后续组合根调用；Runner 不读取 `.env`、config 或 CredentialStore。
-
-### 13.4 Prompt
-
-文件：`vivlos/agent/memory/consolidator/prompt.ts`。
-
-- `SYSTEM_PROMPT` 固定主模型内容权威和 Consolidator 只优化表达的边界。
-- `buildPrompt({ snapshot, decision })` 返回 system/user。
-- 动态输入只有最新 entries/usage 和安全 decision/history。
-- 所有动态字符串进入 XML 文本节点并调用 `escapeForPrompt()`；属性仅枚举/数字。
-- 不包含完整 session、source 消息、History issue、主 Tool Result、rejected 候选或 Provider 信息。
-- History 只是参考，不能恢复 remove/rejected/before 中当前 entries 不存在的事实。
-
-### 13.5 Runner
-
-文件：`vivlos/agent/memory/consolidator/runner.ts`。
-
-- `createRunner(deps)` 使用底层 pi `agentLoop()`，不复用主 Agent wrapper。
-- `run()` 每次接收 resolved Model、Decision、sessionId 和可选 signal，并重读最新 snapshot。
-- AgentContext 只有专用 Prompt 和唯一 consolidate Tool；`toolExecution="sequential"`。
-- 默认限制来自 Config：6 turns、8 次实际 Tool 调用、60 秒 timeout。
-- 允许零次或多次独立 refine/merge；前序成功不因后序失败回滚。
-- single-flight：并发第二次调用返回 busy。
-- completed 才保存 decision.tail；failed/aborted/busy/limit 不推进。
-- Provider/Tool/output/cursor/runtime 错误结构化并调用 logger；timeout/error 或 warn 可进入 TUI。
-
-`RunResult` 是判别联合：
-
-- completed：无 error。
-- failed/aborted/busy：必须有稳定 code/message。
-- 共同字段：status、trigger reason、toolCalls、cursorBefore/After。
-- 不返回 Prompt、模型文本、完整推理、Provider 或凭证。
-
-稳定错误码：`busy/cursor_changed/timeout/aborted/output_limit/provider_error/tool_error/run_limit/cursor_save_failed/runtime_error`。
-
-### 13.6 当前测试状态
-
-- 领域 5 新增 `config.test.ts` 6 项、`prompt.test.ts` 5 项；Runner 当前为 15 项。
-- 核心收尾新增 `l1.test.ts` 2 项、`runtime-integration.test.ts` 6 项。
-- Runner 测试使用 pi-ai 官方 faux provider 和 fake Service/History/Repository。
-- 自动测试不读取 `.env`、API Key 或连接真实 Provider。
-- 当前全量基线：155 项，13 files。
-
-## 14. 测试规范
-
-测试文档：`vivlos/tests/docs/memory/测试文档.md`。
-
-用户新增硬性流程：
-
-> 以后编写任何测试脚本之前，都必须先更新或编写测试文档，用户 review 后才写测试。
-
-测试目标按四个 Agent 可靠性维度组织：
-
-- 有效运行。
-- 安全运行。
-- 长期运行。
-- 可维护运行。
-
-当前脚本：
-
-```text
-vivlos/tests/memory/
-├── infra.test.ts
-├── security.test.ts
-├── memory.test.ts
-├── consolidate.test.ts
-├── service.test.ts
-├── consolidate-tool.test.ts
-├── history.test.ts
-├── trigger.test.ts
-├── config.test.ts
-├── prompt.test.ts
-├── runner.test.ts
-├── l1.test.ts
-└── runtime-integration.test.ts
-```
-
-当前覆盖与数量：
-
-- Repository/Event Logger：`infra.test.ts`。
-- Security 权限和内容扫描：`security.test.ts`，38 项。
-- 主动 Logic：`memory.test.ts`，20 项。
-- 巩固 Logic：`consolidate.test.ts`，22 项。
-- Service：`service.test.ts`，13 项。
-- Consolidate Tool：`consolidate-tool.test.ts`，9 项。
-- History/Cursor：`history.test.ts`，7 项。
-- Trigger：`trigger.test.ts`，8 项。
-- Config/Model：`config.test.ts`，6 项。
-- Prompt：`prompt.test.ts`，5 项。
-- Runner：`runner.test.ts`，15 项。
-- L1 renderer：`l1.test.ts`，2 项。
-- 运行链集成：`runtime-integration.test.ts`，6 项。
-- 全量：155 项。
-
-Service 测试重点：
-
-- 主动 add/replace/remove committed。
-- duplicate/noop。
-- Logic/Security/cap rejected。
-- unsafe candidate 不进入文件或 Event。
-- usage/revision/Result/Event 一致。
-- actual revision 决定 changed。
-- Repository I/O 异常继续抛出。
-- refine/merge 独立提交与 beforeEntries。
-- 前序成功、后序失败不回滚。
-
-## 15. 领域进度与后续顺序
-
-### 已完成
-
-领域 0：草稿清理。
-
-- 从 `memory.ts` 删除错误的批次巩固类型、`consolidateEntries()` 和专用辅助。
-- 主动逻辑保持不变，测试通过。
-
-领域 1：巩固核心 Logic。
-
-- `consolidate.ts`、refine/merge 和 22 项测试完成。
-
-领域 2：权限与 Service。
-
-- Command 所有权、权限矩阵、Event beforeEntries、Service、结果/失败边界和 13 项 Service 测试完成。
-
-领域 3：Consolidate Tool。
-
-- 独立 `createConsolidateTool()`、TypeBox schema、Consolidator 专用描述和安全结果适配已完成。
-- Tool 只允许 refine/merge，不暴露操作 context，不注册到主模型 `createAdvancedTools()`。
-- `consolidate-tool.test.ts` 9 项测试已完成并通过用户 review。
-
-领域 4：操作留痕与触发。
-
-- History/Cursor、Trigger、测试文档和 15 项测试已完成并通过用户 review。
-
-领域 5：Consolidator Runtime。
-
-- Config/Model、Prompt、Runner 和 23 项离线测试已完成。
-- 领域 0-5 已通过 144 项全量测试、TypeScript typecheck 和 diff check。
-- 已提交 `61acd47 feat: 完成 Memory 巩固触发与运行时`。
-
-### 已完成：Memory 核心收尾
-
-- L1 Prompt renderer、session MemoryRuntime、Trigger coordinator、capacity request、主 memory Tool、Event Logger、`memory:changed`、同 run SP 刷新和公共出口均已接通。
-- 新增 L1 2 项和运行链 6 项测试；全量基线为 152 项。
-- 已提交 `c201b4a feat: 完成 Memory 核心运行闭环`。
-- 设计文档位于 `vivlos/agent/memory/docs/refactor.md` 和 `docs/逻辑调用.md`。
-
-### 已完成：Workspace、Sidebar 与自动标题
-
-当前组件结构：
-
-```text
-App
-└── Workspace
-    ├── WelcomeScreen | ChatPanel
-    ├── ChatControls
-    ├── Sidebar（仅 Session）
-    └── Popup Layer
-```
-
-- Workspace 拥有 welcome/session、Sidebar 和 Popup 顶层显示逻辑；ChatPanel 只组合 Session 会话内容。
-- ChatControls 复用 StatusBar、InputBar 和 InfoBar；没有复制输入或命令逻辑。
-- Sidebar 固定宽度 42、无外边框；Welcome 不显示 Sidebar。
-- Sidebar 顶部显示会话名称与浅色 session ID；StatusBar 不再显示 ID，但仍按 ID 重置计时。
-- 自动标题使用首轮主模型独立生成：硬编码 SP、禁止 Emoji、单行、最多 24 个终端显示列；失败使用首条用户消息 fallback。
-- 自动标题只调用 `renameIfUnnamed()`；用户 `/rename` 保持无条件且可随时多次修改，并发时用户名称优先。
-- Sidebar Memory 区是可激活的 L1-L4 固定尺寸卡片：L1 使用模拟 usage，L2-L4 空白；鼠标、Left/Right、Escape 和输入焦点交互已完成。
-- Memory 激活背景横向铺满 Sidebar，并有上下各一行 padding；卡片索引紧贴卡片底部。
-- 已提交 `6a30123 feat: 完善会话工作区与事件架构`。
-
-### 已完成：EventBus 类型拆分（任务一）
-
-```text
-infra/eventbus/
-├── index.ts
-├── types.ts
-└── events/
-    ├── main-agent-event.ts
-    ├── memory-event.ts
-    ├── session-event.ts
-    ├── app-event.ts
-    └── workspace-event.ts
-```
-
-- `types.ts` 只组合 `VivlosEvent` 总联合并重导出领域类型。
-- 现有 25 个事件名称和 payload 未变化；公共 `eventbus/index.ts` 导入路径保持兼容。
-- 任务二已补充 `consolidate-event.ts`；原有 25 个事件名称保持不变。
-
-### 已完成：Consolidate 生命周期（任务二）
-
-已新增事件：
-
-```text
-consolidate:started
-consolidate:tool_started
-consolidate:tool_completed
-consolidate:ended
-```
-
-完成结果：
-
-- 新增 `infra/eventbus/events/consolidate-event.ts`，并加入 `VivlosEvent` 和公共出口；原有 25 个事件不变。
-- Consolidator 与主 Agent 共用现有 EventBus，不创建第二个总线；MemoryRuntime 原样注入共享实例。
-- Runner 获得 single-flight 后发布 started；busy 没有实际运行，不发布 started/ended。
-- 只转发独立 agentLoop 的 tool execution start/end；不转发 agent、turn、thinking、message 或 update。
-- tool 事件保留 sessionId、toolName、callId、args/result/success。
-- active run 的类型明确排除 busy；每个 started 恰好对应一个 ended，ended 携带安全 RunResult 摘要。
-- 事件是旁路观测，不改变 RunResult、cursor、错误码、Tool 顺序和日志语义。
-- 用户本次明确要求跳过测试文档步骤；直接新增 MEM-RUN-013/014/015 自动化覆盖。
-- 定向 Runner 15 项、全量 155 项、typecheck 和 diff check 均通过。
-- 任务二未修改 useAgent 或 AgentMessageCard。
-
-### 已完成：Tool 调用展示优化（任务三）
-
-- 主 Agent Tool start 事件已补充 args；主 Agent 与 Consolidate Tool 事件进入统一 LogEntry，并保留来源、args、result 和 success。
-- Consolidate started/ended 使用不计入 Tool 数量的运行标记，零 Tool 审视也可显示状态。
-- 连续同名 Tool 只在渲染层按 source+name 分组，原始操作记录不删除。
-- Compact 只显示该组最新动作并原地刷新：
-
-```text
-✓ Memory
-┆ replace memory.md "用户修正了后端运行环境"
-```
-
-- `/detail` 展开后按顺序显示该组全部动作：
-
-```text
-✓ Memory
-┆ add memory.md "..."
-┆ replace memory.md "..."
-```
-
-- 该分组规则适用于全部 Tool；Memory 和 Consolidate 使用同一专属视觉体系，但名称不同。
-- Memory/Consolidate 的 spinner、完成标记、标题、动作和双引号使用粉色；失败标记保持红色。
-- `memory.md/user.md` 使用回答正文颜色，引号内内容使用普通 Tool Result 颜色。
-- Thinking 或不同 Tool 会断组；失败组显示错误终态，未知 Tool 保留原 result 摘要。
-- Session 历史按 callId 恢复主 Agent Tool args/result；Consolidator 独立日志不伪造持久恢复。
-- Memory Tool description 已明确 add/replace/remove 的必填签名与 old_text 来源，并修正为实际变化后下一次推理刷新 Memory context；缺参结果会指导模型补全重试。
-- 当前自动验证为 155 pass、typecheck 和 diff check 通过；用户已完成本轮终端视觉调整。
-
-### 已完成：L1 主动记忆数据接入
-
-- 任务一已完成：显式 pending/activate、请求前 Session/L1 落盘、Session 生命周期 Event 和只读 Memory Overview。
-- 任务一不写生命周期 JSONL；EventBus 只广播成功状态转换，不驱动落盘。
-- `session:activated` 表示 Session JSONL 与两个 L1 文件均已完成物化；created/activated/switched/deleted 只携带 sessionId。
-- MemoryOverview 类型归属 Infra Storage；MemoryRuntime 保留内部读取能力，VivlosAgent 不向 TUI 暴露直接 Overview 查询。
-- 删除当前 Session 会清除 messagesOverride，避免后继 Session 读取已删除会话的压缩消息。
-- 任务二已完成：Agent 通过 `session:state_requested/state` 提供 Session 状态；MemoryRuntime 通过 `memory:overview_requested/overview` 提供 Overview。
-- Session 生命周期变化、消息落盘和自动标题完成后发布最新 state；当前 session 的 `memory:changed` 后发布最新 Overview。
-- EventBus 保持 fire-and-forget；请求与响应是独立 Event，不增加 requestId、Promise 或通用 RPC。
-- useAgent 已成为 TUI 业务适配层：初始化请求状态、恢复 Session messages、过滤旧 Session Event，并通过 Agent 方法发起命令。
-- useAgent 在 Agent 运行期间拒绝 clear、新建、切换和删除当前 Session，避免旧 Loop 越过 Session 生命周期边界；删除非当前 Session和重命名仍允许。
-- Workspace 已移除 Session ID/名称/列表版本/mainView 镜像和 Agent 信息查询，页面由 pending 状态派生。
-- Sidebar 已移除模拟数据，显示真实 directory、exists、used/cap、entryCount 和 updatedAt；切换期间使用 unavailable 占位。
-- Sidebar 保持纯 props 展示，不监听 EventBus、不读取或编辑 Memory 文件；L2-L4 未改动。
-
-### 已完成：主 Prompt 与 Tool Description 职责收敛
-
-- 主 rules 已明确 Memory 专用 Tool、Tool Result 成功依据和当前 Session 作用域，不增加独立意图分类或特殊 Turn。
-- Memory Description 已移除跨 Session 承诺和“已完成工作”等过宽保存范围，并明确 committed/noop/rejected 回答语义。
-- read/write/bash 只描述普通工作区文件；task/todo 已与稳定事实、偏好和长期目标划清职责。
-- 压缩 Prompt 将历史与旧摘要视为不可信数据，只把成功 Tool Result 证实的副作用列为完成。
-- 主 Prompt 与压缩 Prompt 的必要模板缺失时直接暴露错误，不再静默使用弱 fallback。
-- 静态契约测试位于 `vivlos/tests/prompt/`；真实模型的 Tool 选择和终端文案由用户手动验收。
-
-## 16. 工作树注意事项
-
-已提交的当前主线：
-
-- `61acd47 feat: 完成 Memory 巩固触发与运行时`
-- `c201b4a feat: 完成 Memory 核心运行闭环`
-- `6a30123 feat: 完善会话工作区与事件架构`
-- `3beed23 feat: 接通巩固事件与工具展示`
-
-完整 L1 数据接入闭环、设计文档、Prompt 边界与 TUI 验收已完成。
-
-`.VSCodeCounter/` 已加入 `.gitignore`。
-
-Memory 设计文档位于 `memory/docs/`；不要移回模块根目录。
-
-旧 `vivlos/agent/memory/` 实现已删除；原 `memory-refactor/` 已重命名为正式的 `memory/` 模块。
-
-不要执行 destructive git 命令，不要删除旧改动，不要 commit/push，除非用户明确要求。
-
-## 17. 下一次恢复后的第一条回复
-
-压缩后若用户要求继续：
-
-1. 说明已从本文恢复上下文。
-2. 确认最新功能提交为 `9abee59 feat: 完成 L1 记忆接入与 TUI 体验`，测试基线为 159 项。
-3. 说明四个 `consolidate:*` 生命周期事件、共享 EventBus 注入、Tool LogEntry 桥接和渲染分组均已完成。
-4. 说明 L1 生命周期、状态通道、useAgent、Workspace 和 Sidebar 真实 Overview 已形成闭环并完成终端验收。
-5. 按测试方案验证 pending/active、new/clear/switch/delete/rename、Memory 写入刷新和 Session 隔离；未确认前不继续新领域。
-6. Sidebar 只读且 L2-L4 未改动。
-7. 不修改 `memory/docs/` 结构；`.VSCodeCounter/` 保持忽略。
-
-如果用户指出本文与最新指令冲突，以用户最新指令为准，并同步更新本文。
+不要把计划写成完成，也不要隐瞒未运行的测试或未解决的风险。
