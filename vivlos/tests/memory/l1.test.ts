@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildL1Prompt } from "@vivlos/agent/memory-refactor/index.ts";
+import { buildL1Prompt } from "@vivlos/agent/memory/index.ts";
 import type { MemoryStorageSnapshot } from "@vivlos/infra/storage/memory/index.ts";
 
 function snapshot(

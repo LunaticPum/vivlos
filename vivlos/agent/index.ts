@@ -4,7 +4,7 @@ import type { Model, Api, ThinkingLevel } from "@earendil-works/pi-ai";
 
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
-import type { MemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
+import type { MemoryRuntime } from "@vivlos/agent/memory/index.ts";
 
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
 import {

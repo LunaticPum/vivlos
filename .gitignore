@@ -18,6 +18,7 @@ packages/
 # IDE
 .vscode/
 .idea/
+.VSCodeCounter/
 
 # OS
 .DS_Store

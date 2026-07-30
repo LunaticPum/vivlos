@@ -12,12 +12,12 @@ import {
 	escapeForPrompt,
 	scanContent,
 	type SecurityViolationCode,
-} from "@vivlos/agent/memory-refactor/security.ts";
+} from "@vivlos/agent/memory/security.ts";
 import {
 	MEMORY_ACTIONS,
 	type MemoryAction,
 	type MemoryActor,
-} from "@vivlos/agent/memory-refactor/types.ts";
+} from "@vivlos/agent/memory/types.ts";
 
 /** 将违规结果收窄为稳定 code，避免测试依赖展示文案。 */
 function violationCodes(content: string): SecurityViolationCode[] {

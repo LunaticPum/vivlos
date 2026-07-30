@@ -1,277 +1,399 @@
-import type { MemorySecurity, MemorySecurityViolation } from "./security.ts";
+/**
+ * Memory Service。
+ *
+ * Service 是主动记忆和巩固记忆访问 Security、Repository 与 EventBus 的
+ * 唯一编排入口。所有预期业务失败都在写盘前终止并发布 rejected 留痕。
+ */
+
+import {
+	applyConsolidationCommand,
+	type ConsolidationLogicError,
+	type ConsolidationMemoryCommand,
+} from "./consolidate.ts";
+import {
+	applyMainCommand,
+	type MainMemoryCommand,
+	type MemoryLogicError,
+} from "./memory.ts";
+import {
+	checkPermission,
+	scanContent,
+	type SecurityViolation,
+	type SecurityViolationCode,
+} from "./security.ts";
+import type { MemoryAction, MemoryActor } from "./types.ts";
+
 import type {
-	MemoryCommand,
-	MemoryCommandContext,
-	MemoryCommandErrorCode,
-	MemoryCommandResult,
-	MemoryMutation,
-	MemoryService,
-	MemoryStore,
-	MemoryStoreSnapshot,
-} from "./types.ts";
-import type { MemoryEventDraft } from "./events/journal.ts";
-import type { MemoryEvent } from "./events/types.ts";
+	EventBus,
+	MemoryOperationEvent,
+} from "@vivlos/infra/eventbus/index.ts";
+import type {
+	MemoryFile,
+	MemoryFileUsage,
+	MemoryRepository,
+	MemoryRepositoryError,
+	MemoryStorageSnapshot,
+} from "@vivlos/infra/storage/memory/repository.ts";
+import { err, ok, type Result, uid } from "@vivlos/shared";
 
-// #region Service 主入口
+// #region 操作上下文
 
-export interface MemoryServiceDependencies {
-	readonly store: MemoryStore;
-	readonly security: MemorySecurity;
-	readonly appendEvent: (draft: MemoryEventDraft) => MemoryEvent;
-}
-
-/** 创建主模型 Memory 命令的统一业务入口。 */
-export function createMemoryService({
-	store,
-	security,
-	appendEvent,
-}: MemoryServiceDependencies): MemoryService {
-	return {
-		executeMainCommand(rawCommand, context) {
-			validateCommandContext(context);
-			const command = normalizeCommand(rawCommand);
-			const before = store.readSnapshot();
-			const finish = (result: MemoryCommandResult): MemoryCommandResult => {
-				appendEvent(toEventDraft(result, context));
-				return result;
-			};
-
-			const operationViolation = security.validateOperation({
-				actor: "main",
-				action: command.action,
-				reasonCode: command.reasonCode,
-			})[0];
-			if (operationViolation) {
-				return finish(rejectedViolation(command, operationViolation, before.revision));
-			}
-
-			const reasonViolation = validateReason(command.reason, security);
-			if (reasonViolation) {
-				return finish(rejectedViolation(command, reasonViolation, before.revision));
-			}
-
-			const candidate = candidateFor(command, before);
-			if (candidate !== null) {
-				const contentViolation = security.scanCandidate(candidate)[0];
-				if (contentViolation) {
-					return finish(rejectedViolation(command, contentViolation, before.revision));
-				}
-			}
-
-			const mutation = executeStoreCommand(store, command);
-			if (!mutation.ok) {
-				return finish(rejected(
-					command,
-					mutation.error.code,
-					mutation.error.message,
-					before.revision,
-				));
-			}
-
-			const after = store.readSnapshot();
-			return finish(
-				committed(command, mutation.value, before.revision, after.revision),
-			);
-		},
+/** 调用方提供的 session、原因和来源上下文。 */
+export interface MemoryOperationContext {
+	readonly sessionId: string;
+	readonly reasonCode: string;
+	readonly reason?: string;
+	readonly source?: {
+		readonly sessionId: string;
+		readonly historyLine: number;
 	};
 }
 
 // #endregion
 
-// #region 命令规范化与校验
+// #region 结果
 
-function normalizeCommand(command: MemoryCommand): MemoryCommand {
-	const reason = command.reason?.trim();
-	const metadata = {
-		reasonCode: command.reasonCode,
-		...(reason ? { reason } : {}),
-	};
-	switch (command.action) {
-		case "add":
-			return { ...metadata, action: "add", file: command.file, content: command.content.trim() };
-		case "replace":
-			return {
-				...metadata,
-				action: "replace",
-				file: command.file,
-				oldText: command.oldText.trim(),
-				newText: command.newText.trim(),
-			};
-		case "remove":
-			return { ...metadata, action: "remove", file: command.file, oldText: command.oldText.trim() };
-	}
+interface MemoryServiceValueBase {
+	readonly actor: MemoryActor;
+	readonly action: MemoryAction;
+	readonly file: MemoryFile;
+	readonly before?: string;
+	readonly beforeEntries?: readonly string[];
+	readonly after?: string;
+	readonly usage: MemoryFileUsage;
+	readonly revisionBefore: string;
+	readonly revisionAfter: string;
 }
 
-function validateReason(
-	reason: string | undefined,
-	security: MemorySecurity,
-): MemorySecurityViolation | null {
-	if (!reason) return null;
-	if (reason.length > 200) {
-		return {
-			type: "invalid_input",
-			code: "reason_too_long",
-			message: "reason 不能超过 200 个字符",
-		};
-	}
-	return security.scanCandidate(reason)[0] ?? null;
-}
-
-function validateCommandContext(context: MemoryCommandContext): void {
-	if (!context.sessionId.trim() || !context.turnId.trim()) {
-		throw new Error("MemoryCommandContext 需要非空的 sessionId 和 turnId");
-	}
-	if (
-		context.sourceMessageIds.length === 0 ||
-		context.sourceMessageIds.some((id) => !id.trim())
-	) {
-		throw new Error("MemoryCommandContext 需要至少一个非空 sourceMessageId");
-	}
-}
-
-/** add 扫描完整条目；replace 在唯一命中时扫描替换后的完整条目。 */
-function candidateFor(
-	command: MemoryCommand,
-	snapshot: MemoryStoreSnapshot,
-): string | null {
-	switch (command.action) {
-		case "add":
-			return command.content;
-		case "replace": {
-			const matches = snapshot.entries[command.file].filter((entry) =>
-				entry.includes(command.oldText),
-			);
-			if (!command.oldText || matches.length !== 1) return command.newText;
-			return matches[0]!.replace(command.oldText, command.newText).trim();
-		}
-		case "remove":
-			return null;
-	}
-}
-
-// #endregion
-
-// #region Store 调用
-
-function executeStoreCommand(store: MemoryStore, command: MemoryCommand) {
-	switch (command.action) {
-		case "add":
-			return store.add(command.file, command.content);
-		case "replace":
-			return store.replace(command.file, command.oldText, command.newText);
-		case "remove":
-			return store.remove(command.file, command.oldText);
-	}
-}
-
-// #endregion
-
-// #region 领域结果
-
-function committed(
-	command: MemoryCommand,
-	mutation: MemoryMutation,
-	revisionBefore: string,
-	revisionAfter: string,
-): MemoryCommandResult {
-	return {
-		ok: true,
-		command,
-		revisionBefore,
-		revisionAfter,
-		value: {
-			status: mutation.status === "written" ? "committed" : "noop",
-			file: mutation.file,
-			before: mutation.before,
-			after: mutation.after,
-			usage: mutation.usage,
-		},
-	};
-}
-
-function rejectedViolation(
-	command: MemoryCommand,
-	violation: MemorySecurityViolation,
-	revision: string,
-): MemoryCommandResult {
-	return rejected(
-		command,
-		errorCodeFor(violation),
-		violation.message,
-		revision,
+/** Service 成功终态；status 与 changed 在类型上保持一致。 */
+export type MemoryServiceValue = MemoryServiceValueBase &
+	(
+		| { readonly status: "committed"; readonly changed: true }
+		| { readonly status: "noop"; readonly changed: false }
 	);
+
+export type MemoryServiceErrorCode =
+	| MemoryLogicError["code"]
+	| ConsolidationLogicError["code"]
+	| SecurityViolationCode
+	| MemoryRepositoryError["code"];
+
+/** 预期失败终态；携带当前状态，但不返回原始不安全候选。 */
+export interface MemoryServiceError {
+	readonly code: MemoryServiceErrorCode;
+	readonly message: string;
+	readonly actor: MemoryActor;
+	readonly action: MemoryAction;
+	readonly file: MemoryFile;
+	readonly usage: MemoryFileUsage;
+	readonly revisionBefore: string;
+	readonly revisionAfter: string;
+	readonly violations?: readonly SecurityViolation[];
 }
 
-function rejected(
-	command: MemoryCommand,
-	code: MemoryCommandErrorCode,
-	message: string,
-	revision: string,
-): MemoryCommandResult {
+export type MemoryServiceResult = Result<
+	MemoryServiceValue,
+	MemoryServiceError
+>;
+
+// #endregion
+
+// #region Service 与依赖
+
+export interface MemoryService {
+	executeMain(
+		command: MainMemoryCommand,
+		context: MemoryOperationContext,
+	): MemoryServiceResult;
+	executeConsolidation(
+		command: ConsolidationMemoryCommand,
+		context: MemoryOperationContext,
+	): MemoryServiceResult;
+}
+
+/** createMemoryService 后续实现所需的最小依赖。 */
+export interface MemoryServiceDependencies {
+	readonly repository: MemoryRepository;
+	readonly eventBus: EventBus;
+}
+
+// #endregion
+
+// #region 工厂
+
+/** 创建绑定 Repository 与 EventBus 的 Memory Service。 */
+export function createMemoryService(
+	dependencies: MemoryServiceDependencies,
+): MemoryService {
 	return {
-		ok: false,
+		executeMain(command, context) {
+			const snapshot = dependencies.repository.readSnapshot();
+			const permission = checkPermission("main", command.action);
+			if (permission) {
+				return rejectOperation(
+					dependencies,
+					"main",
+					command,
+					context,
+					snapshot,
+					permission,
+				);
+			}
+
+			const logicResult = applyMainCommand(
+				snapshot.entries[command.file],
+				command,
+			);
+			if (!logicResult.ok) {
+				return rejectOperation(
+					dependencies,
+					"main",
+					command,
+					context,
+					snapshot,
+					logicResult.error,
+				);
+			}
+
+			return finalizeOperation(
+				dependencies,
+				"main",
+				command,
+				context,
+				snapshot,
+				{
+					changed: logicResult.value.changed,
+					entries: logicResult.value.entries,
+					before: logicResult.value.before,
+					after: logicResult.value.after,
+				},
+			);
+		},
+
+		executeConsolidation(command, context) {
+			const snapshot = dependencies.repository.readSnapshot();
+			const permission = checkPermission("consolidator", command.action);
+			if (permission) {
+				return rejectOperation(
+					dependencies,
+					"consolidator",
+					command,
+					context,
+					snapshot,
+					permission,
+				);
+			}
+
+			const logicResult = applyConsolidationCommand(
+				snapshot.entries[command.file],
+				command,
+			);
+			if (!logicResult.ok) {
+				return rejectOperation(
+					dependencies,
+					"consolidator",
+					command,
+					context,
+					snapshot,
+					logicResult.error,
+				);
+			}
+
+			return finalizeOperation(
+				dependencies,
+				"consolidator",
+				command,
+				context,
+				snapshot,
+				{
+					changed: logicResult.value.changed,
+					entries: logicResult.value.entries,
+					before:
+						command.action === "refine"
+							? logicResult.value.before[0]
+							: undefined,
+					beforeEntries:
+						command.action === "merge" ? logicResult.value.before : undefined,
+					after: logicResult.value.after,
+				},
+			);
+		},
+	};
+}
+
+// #endregion
+
+interface PreparedOperation {
+	readonly changed: boolean;
+	readonly entries: readonly string[];
+	readonly before?: string;
+	readonly beforeEntries?: readonly string[];
+	readonly after?: string;
+}
+
+// #region 终态提交
+
+function finalizeOperation(
+	dependencies: MemoryServiceDependencies,
+	actor: MemoryActor,
+	command: MainMemoryCommand | ConsolidationMemoryCommand,
+	context: MemoryOperationContext,
+	snapshot: MemoryStorageSnapshot,
+	prepared: PreparedOperation,
+): MemoryServiceResult {
+	if (!prepared.changed) {
+		const value = createServiceValue(
+			actor,
+			command,
+			snapshot,
+			snapshot,
+			prepared,
+		);
+		emitOperation(dependencies.eventBus, context, value);
+		return ok(value);
+	}
+
+	if (prepared.after !== undefined) {
+		const violations = scanContent(prepared.after);
+		if (violations.length > 0) {
+			return rejectOperation(
+				dependencies,
+				actor,
+				command,
+				context,
+				snapshot,
+				violations[0]!,
+				violations,
+			);
+		}
+	}
+
+	const writeResult = dependencies.repository.write(
+		command.file,
+		prepared.entries,
+	);
+	if (!writeResult.ok) {
+		return rejectOperation(
+			dependencies,
+			actor,
+			command,
+			context,
+			snapshot,
+			writeResult.error,
+		);
+	}
+
+	const value = createServiceValue(
+		actor,
 		command,
-		revisionBefore: revision,
-		revisionAfter: revision,
-		error: { code, message },
-	};
-}
-
-function errorCodeFor(violation: MemorySecurityViolation): MemoryCommandErrorCode {
-	switch (violation.type) {
-		case "invalid_input":
-			return "invalid_input";
-		case "unsafe_content":
-			return "unsafe_content";
-		case "forbidden_operation":
-			return "forbidden_operation";
+		snapshot,
+		writeResult.value,
+		prepared,
+	);
+	emitOperation(dependencies.eventBus, context, value);
+	if (value.changed) {
+		dependencies.eventBus.emit({
+			type: "memory:changed",
+			sessionId: context.sessionId,
+			file: command.file,
+			revisionBefore: snapshot.revision,
+			revisionAfter: writeResult.value.revision,
+		});
 	}
+	return ok(value);
 }
 
-function toEventDraft(
-	result: MemoryCommandResult,
-	context: MemoryCommandContext,
-): MemoryEventDraft {
-	const base = {
+// #endregion
+
+// #region 结果与 Event
+
+function createServiceValue(
+	actor: MemoryActor,
+	command: MainMemoryCommand | ConsolidationMemoryCommand,
+	beforeSnapshot: MemoryStorageSnapshot,
+	afterSnapshot: MemoryStorageSnapshot,
+	prepared: PreparedOperation,
+): MemoryServiceValue {
+	const common: MemoryServiceValueBase = {
+		actor,
+		action: command.action,
+		file: command.file,
+		before: prepared.before,
+		beforeEntries: prepared.beforeEntries,
+		after: prepared.after,
+		usage: afterSnapshot.usage[command.file],
+		revisionBefore: beforeSnapshot.revision,
+		revisionAfter: afterSnapshot.revision,
+	};
+	if (beforeSnapshot.revision === afterSnapshot.revision) {
+		return { ...common, status: "noop", changed: false };
+	}
+	return { ...common, status: "committed", changed: true };
+}
+
+function emitOperation(
+	eventBus: EventBus,
+	context: MemoryOperationContext,
+	value: MemoryServiceValue,
+): void {
+	eventBus.emit({
+		type: "memory:operation",
+		eventId: uid(),
+		timestamp: Date.now(),
 		sessionId: context.sessionId,
-		turnId: context.turnId,
-		actor: "main" as const,
-		file: result.command.file,
-		sourceMessageIds: [...context.sourceMessageIds],
-	};
+		actor: value.actor,
+		action: value.action,
+		outcome: value.status,
+		file: value.file,
+		reasonCode: context.reasonCode,
+		reason: context.reason,
+		before: value.before,
+		beforeEntries: value.beforeEntries,
+		after: value.after,
+		revisionBefore: value.revisionBefore,
+		revisionAfter: value.revisionAfter,
+		source: context.source,
+	});
+}
 
-	if (!result.ok) {
-		return {
-			...base,
-			action: "reject",
-			reasonCode:
-				result.error.code === "unsafe_content"
-					? "security_rejection"
-					: "invalid_operation",
-			reason: result.error.message.slice(0, 200),
-			status: "rejected",
-		};
-	}
-	if (result.value.status === "noop") {
-		return {
-			...base,
-			action: "duplicate",
-			reasonCode: "duplicate_suppression",
-			...(result.command.reason ? { reason: result.command.reason } : {}),
-			before: result.value.before,
-			after: result.value.after,
-			status: "noop",
-		};
-	}
-	return {
-		...base,
-		action: result.command.action,
-		reasonCode: result.command.reasonCode,
-		...(result.command.reason ? { reason: result.command.reason } : {}),
-		before: result.value.before,
-		after: result.value.after,
-		status: "committed",
+function rejectOperation(
+	dependencies: MemoryServiceDependencies,
+	actor: MemoryActor,
+	command: MainMemoryCommand | ConsolidationMemoryCommand,
+	context: MemoryOperationContext,
+	snapshot: MemoryStorageSnapshot,
+	error: { readonly code: MemoryServiceErrorCode; readonly message: string },
+	violations?: readonly SecurityViolation[],
+): MemoryServiceResult {
+	const event: MemoryOperationEvent = {
+		type: "memory:operation",
+		eventId: uid(),
+		timestamp: Date.now(),
+		sessionId: context.sessionId,
+		actor,
+		action: command.action,
+		outcome: "rejected",
+		file: command.file,
+		reasonCode: context.reasonCode,
+		reason: context.reason,
+		revisionBefore: snapshot.revision,
+		revisionAfter: snapshot.revision,
+		source: context.source,
+		errorCode: error.code,
+		errorMessage: error.message,
 	};
+	dependencies.eventBus.emit(event);
+	return err({
+		code: error.code,
+		message: error.message,
+		actor,
+		action: command.action,
+		file: command.file,
+		usage: snapshot.usage[command.file],
+		revisionBefore: snapshot.revision,
+		revisionAfter: snapshot.revision,
+		violations,
+	});
 }
 
 // #endregion

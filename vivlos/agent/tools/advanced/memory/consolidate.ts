@@ -7,13 +7,13 @@
 
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { ConsolidationMemoryCommand } from "@vivlos/agent/memory-refactor/consolidate.ts";
+import type { ConsolidationMemoryCommand } from "@vivlos/agent/memory/consolidate.ts";
 import type {
 	MemoryOperationContext,
 	MemoryService,
 	MemoryServiceResult,
 	MemoryServiceValue,
-} from "@vivlos/agent/memory-refactor/service.ts";
+} from "@vivlos/agent/memory/service.ts";
 import { err, ok, type Result } from "@vivlos/shared";
 import { consolidateDescription } from "./description.ts";
 

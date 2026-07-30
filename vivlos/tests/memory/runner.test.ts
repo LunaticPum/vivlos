@@ -19,14 +19,14 @@ import {
 	createRunner,
 	type RunInput,
 	type RunnerConfig,
-} from "@vivlos/agent/memory-refactor/consolidator/runner.ts";
-import type { TriggerDecision } from "@vivlos/agent/memory-refactor/consolidator/trigger.ts";
+} from "@vivlos/agent/memory/consolidator/runner.ts";
+import type { TriggerDecision } from "@vivlos/agent/memory/consolidator/trigger.ts";
 import type {
 	MemoryOperationContext,
 	MemoryService,
 	MemoryServiceResult,
 	MemoryServiceValue,
-} from "@vivlos/agent/memory-refactor/service.ts";
+} from "@vivlos/agent/memory/service.ts";
 import {
 	createEventBus,
 	type ConsolidateEvent,

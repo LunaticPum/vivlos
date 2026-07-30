@@ -1,65 +1,19 @@
-export { MAIN_MEMORY_REASON_CODES } from "./types.ts";
+export { createL1, buildL1Prompt } from "./layers/l1.ts";
+export { createMemoryRuntime } from "./runtime.ts";
 export type {
-	MainMemoryReasonCode,
-	MemoryCommand,
-	MemoryCommandContext,
-	MemoryCommandContextController,
-	MemoryCommandError,
-	MemoryCommandErrorCode,
-	MemoryCommandMutation,
-	MemoryCommandReason,
-	MemoryCommandResult,
-	MemoryFile,
-	MemoryLimits,
-	MemoryMutation,
-	MemoryMutationResult,
+	MemoryRuntime,
+	MemoryRuntimeDeps,
+} from "./runtime.ts";
+export { createMemoryService } from "./service.ts";
+export type {
 	MemoryService,
-	MemorySnapshot,
-	MemoryStore,
-	MemoryStoreError,
-	MemoryStoreErrorCode,
-	MemoryStoreSnapshot,
-	MemoryUsage,
-} from "./types.ts";
-export { createMemoryCommandContextController } from "./events/context.ts";
-export {
-	createMemorySecurity,
-	type MemorySecurity,
-	type MemorySecurityAction,
-	type MemorySecurityActor,
-	type MemorySecurityOperation,
-	type MemorySecurityViolation,
-	type MemorySecurityViolationCode,
-	type MemorySecurityViolationType,
-} from "./security.ts";
-export {
-	createMemoryService,
-	type MemoryServiceDependencies,
+	MemoryServiceDependencies,
+	MemoryServiceResult,
+	MemoryServiceValue,
+	MemoryServiceError,
+	MemoryOperationContext,
 } from "./service.ts";
-export { createMemorySnapshot } from "./snapshot.ts";
-export { createMemoryStore } from "./store.ts";
-export {
-	MEMORY_ACTIONS,
-	MEMORY_ACTORS,
-	MEMORY_EVENT_SCHEMA_VERSION,
-	MEMORY_EVENT_STATUSES,
-	MEMORY_REASON_CODES,
-	type MemoryAction,
-	type MemoryActor,
-	type MemoryEvent,
-	type MemoryEventSchemaVersion,
-	type MemoryEventStatus,
-	type MemoryReasonCode,
-} from "./events/types.ts";
-export {
-	createMemoryEventJournal,
-	type MemoryEventDraft,
-	type MemoryEventJournal,
-} from "./events/journal.ts";
-export {
-	MEMORY_CONSOLIDATION_BATCH_SIZE,
-	createConsolidationCheckpoint,
-	type ConsolidationCheckpoint,
-	type MemoryConsolidationState,
-	type MemoryConsolidationStatus,
-} from "./events/checkpoint.ts";
+export type { MainMemoryCommand } from "./memory.ts";
+export type { ConsolidationMemoryCommand } from "./consolidate.ts";
+export { MAIN_MEMORY_REASON_CODES } from "./types.ts";
+export type { MainMemoryReasonCode } from "./types.ts";

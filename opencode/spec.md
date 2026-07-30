@@ -1,17 +1,17 @@
 # Memory Refactor 协作与恢复规格
 
-> 上下文压缩或新 Agent 接手后，先完整阅读本文，再读取 `vivlos/agent/memory-refactor/docs/refactor.md` 和当前领域文件。不要从旧 `vivlos/agent/memory/` 推断新实现。
+> 上下文压缩或新 Agent 接手后，先完整阅读本文，再读取 `vivlos/agent/memory/docs/refactor.md` 和当前领域文件。
 
 ## 1. 当前恢复点
 
 - 日期：2026-07-28。
 - 仓库：`D:\VSProject\Agent\my_agent`。
-- 当前分支：`memory-refactor`。
+- 当前主线分支：`master`；Memory 功能由 `memory-refactor` 快进合入。
 - Memory 领域 0-5 已提交：`61acd47 feat: 完成 Memory 巩固触发与运行时`。
 - Memory 核心运行闭环已提交：`c201b4a feat: 完成 Memory 核心运行闭环`。
 - 会话 Workspace、Sidebar、自动标题和 EventBus 拆分已提交：`6a30123 feat: 完善会话工作区与事件架构`。
 - Consolidate 生命周期与 Tool 展示已提交：`3beed23 feat: 接通巩固事件与工具展示`。
-- 新实现位于 `vivlos/agent/memory-refactor/`；当前基线包含 Repository、Logic、Security、Service、Tools、History/Trigger、Consolidator Runtime、L1 renderer 和 session MemoryRuntime。
+- 当前实现位于 `vivlos/agent/memory/`；基线包含 Repository、Logic、Security、Service、Tools、History/Trigger、Consolidator Runtime、L1 renderer 和 session MemoryRuntime。
 - L1 数据接入闭环已在工作树完成：Session/L1 生命周期、EventBus 状态通道、useAgent 适配、Workspace 收敛和 Sidebar 真实 Overview 均已接通，等待 Review 与终端验收。
 
 最近一次验证：
@@ -129,7 +129,7 @@ Consolidator 禁止：
 ## 6. 当前目标目录
 
 ```text
-vivlos/agent/memory-refactor/
+vivlos/agent/memory/
 ├── refactor.md
 ├── index.ts                    # 最后阶段创建/收敛
 ├── types.ts
@@ -187,7 +187,7 @@ consolidate.ts
 
 ## 8. 主动记忆 Logic
 
-文件：`vivlos/agent/memory-refactor/memory.ts`。
+文件：`vivlos/agent/memory/memory.ts`。
 
 公开内容：
 
@@ -221,7 +221,7 @@ Replace/Remove 的 `findUniqueMatch()`：
 
 ## 9. 巩固 Logic
 
-文件：`vivlos/agent/memory-refactor/consolidate.ts`。
+文件：`vivlos/agent/memory/consolidate.ts`。
 
 公开内容：
 
@@ -260,7 +260,7 @@ Merge：
 
 ## 10. Security
 
-文件：`vivlos/agent/memory-refactor/security.ts`。
+文件：`vivlos/agent/memory/security.ts`。
 
 无状态纯函数：
 
@@ -312,7 +312,7 @@ Event Logger：`utils/event-logger.ts`。
 
 ## 12. Memory Service
 
-文件：`vivlos/agent/memory-refactor/service.ts`。
+文件：`vivlos/agent/memory/service.ts`。
 
 公开契约：
 
@@ -378,7 +378,7 @@ executeConsolidation(ConsolidationMemoryCommand, context)
 
 ### 13.2 Trigger
 
-文件：`vivlos/agent/memory-refactor/consolidator/trigger.ts`。
+文件：`vivlos/agent/memory/consolidator/trigger.ts`。
 
 - `checkTrigger(input)` 是无 I/O 纯函数。
 - 优先级：`main_request > capacity_pressure > operation_threshold`。
@@ -408,7 +408,7 @@ timeoutMs: 60000
 
 ### 13.4 Prompt
 
-文件：`vivlos/agent/memory-refactor/consolidator/prompt.ts`。
+文件：`vivlos/agent/memory/consolidator/prompt.ts`。
 
 - `SYSTEM_PROMPT` 固定主模型内容权威和 Consolidator 只优化表达的边界。
 - `buildPrompt({ snapshot, decision })` 返回 system/user。
@@ -419,7 +419,7 @@ timeoutMs: 60000
 
 ### 13.5 Runner
 
-文件：`vivlos/agent/memory-refactor/consolidator/runner.ts`。
+文件：`vivlos/agent/memory/consolidator/runner.ts`。
 
 - `createRunner(deps)` 使用底层 pi `agentLoop()`，不复用主 Agent wrapper。
 - `run()` 每次接收 resolved Model、Decision、sessionId 和可选 signal，并重读最新 snapshot。
@@ -548,7 +548,7 @@ Service 测试重点：
 - L1 Prompt renderer、session MemoryRuntime、Trigger coordinator、capacity request、主 memory Tool、Event Logger、`memory:changed`、同 run SP 刷新和公共出口均已接通。
 - 新增 L1 2 项和运行链 6 项测试；全量基线为 152 项。
 - 已提交 `c201b4a feat: 完成 Memory 核心运行闭环`。
-- 设计文档位于 `vivlos/agent/memory-refactor/docs/refactor.md` 和 `docs/逻辑调用.md`。
+- 设计文档位于 `vivlos/agent/memory/docs/refactor.md` 和 `docs/逻辑调用.md`。
 
 ### 已完成：Workspace、Sidebar 与自动标题
 
@@ -677,15 +677,13 @@ consolidate:ended
 - `6a30123 feat: 完善会话工作区与事件架构`
 - `3beed23 feat: 接通巩固事件与工具展示`
 
-当前工作树包含完整 L1 数据接入闭环与设计文档，等待用户 Code Review 和终端状态/视觉验收。
+完整 L1 数据接入闭环、设计文档、Prompt 边界与 TUI 验收已完成。
 
-当前存在与 Memory 无关的未跟踪目录 `.VSCodeCounter/2026-07-27_18-28-27/`，不要修改、删除或纳入后续 Memory 提交。
+`.VSCodeCounter/` 已加入 `.gitignore`。
 
-用户已把 `memory-refactor/refactor.md` 和 `逻辑调用.md` 移到 `memory-refactor/docs/`；不要移回根目录。
+Memory 设计文档位于 `memory/docs/`；不要移回模块根目录。
 
-工作树仍存在旧 `vivlos/agent/memory/` 文件删除和根路径 `memory-refactor/refactor.md` 删除。这些删除没有进入最近两次提交；不要恢复、删除、暂存或提交，除非用户明确要求。
-
-旧 `vivlos/agent/memory/` 不属于当前设计来源；只从 `memory-refactor/`、现有 Infra 和本文推导，不恢复其架构。
+旧 `vivlos/agent/memory/` 实现已删除；原 `memory-refactor/` 已重命名为正式的 `memory/` 模块。
 
 不要执行 destructive git 命令，不要删除旧改动，不要 commit/push，除非用户明确要求。
 
@@ -694,11 +692,11 @@ consolidate:ended
 压缩后若用户要求继续：
 
 1. 说明已从本文恢复上下文。
-2. 确认最新提交为 `3beed23 feat: 接通巩固事件与工具展示`，测试基线为 155 项。
+2. 确认最新功能提交为 `9abee59 feat: 完成 L1 记忆接入与 TUI 体验`，测试基线为 159 项。
 3. 说明四个 `consolidate:*` 生命周期事件、共享 EventBus 注入、Tool LogEntry 桥接和渲染分组均已完成。
-4. 说明 L1 生命周期、状态通道、useAgent、Workspace 和 Sidebar 真实 Overview 已形成闭环，先等待 Code Review 与终端验收。
+4. 说明 L1 生命周期、状态通道、useAgent、Workspace 和 Sidebar 真实 Overview 已形成闭环并完成终端验收。
 5. 按测试方案验证 pending/active、new/clear/switch/delete/rename、Memory 写入刷新和 Session 隔离；未确认前不继续新领域。
 6. Sidebar 只读且 L2-L4 未改动。
-7. 不修改 `memory-refactor/docs/` 结构，不触碰 `.VSCodeCounter/` 或工作树中的旧文件删除。
+7. 不修改 `memory/docs/` 结构；`.VSCodeCounter/` 保持忽略。
 
 如果用户指出本文与最新指令冲突，以用户最新指令为准，并同步更新本文。

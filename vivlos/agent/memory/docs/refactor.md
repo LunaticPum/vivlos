@@ -2,7 +2,7 @@
 
 ## 1. 文档目标
 
-本文定义 Vivlos Memory 的全新实现。新实现放在 `agent/memory-refactor/`，不在旧 `agent/memory/` 上继续叠加修改，也不复制旧模块的结构。
+本文定义 Vivlos 当前 Memory 实现。实现位于 `agent/memory/`；旧模块已删除，当前模块不沿用其结构。
 
 当前只实现 session 独立的 L1 Markdown Memory。设计重点是职责清楚、调用链可见，不提前实现 L2-L4 或通用 Memory Provider 框架。Consolidator 是 L1 的低频维护流程，不构成新的记忆层级。
 
@@ -656,7 +656,7 @@ agent/tools/advanced/memory/
 - 最小 L1 Prompt renderer。
 - session 级 Repository、History、Service、Runner 和 Trigger coordinator 装配。
 - 主 memory Tool、Event Logger、`memory:changed` 和主 Agent Loop 接线。
-- `memory-refactor/index.ts` 公共出口。
+- `memory/index.ts` 公共出口。
 - 组合根迁移，以及无引用旧 Memory 接线、重复类型和过时文案清理。
 - 最小离线集成测试与全仓回归。
 
@@ -675,7 +675,7 @@ TUI 接入在 Memory 核心闭环验证完成后单独从上到下设计，届�
 ## 4. 目录结构
 
 ```text
-vivlos/agent/memory-refactor/
+vivlos/agent/memory/
 ├── refactor.md
 ├── index.ts
 ├── types.ts
@@ -754,7 +754,7 @@ layers/l1.ts
 infra/storage/memory/repository.ts
 -> node:fs
 
-agent/memory-refactor/utils/event-logger.ts
+agent/memory/utils/event-logger.ts
 -> EventBus
 -> node:fs
 ```
@@ -867,7 +867,7 @@ Memory 改变通知：
 
 ### 7.3 Event Logger
 
-`agent/memory-refactor/utils/event-logger.ts` 负责一次性订阅 `memory:operation`：
+`agent/memory/utils/event-logger.ts` 负责一次性订阅 `memory:operation`：
 
 ```ts
 createMemoryEventLogger(eventBus, resolveSessionDir)

@@ -10,7 +10,7 @@ import type { Model, Api, Message } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
-import type { MemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
+import type { MemoryRuntime } from "@vivlos/agent/memory/index.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
 import {

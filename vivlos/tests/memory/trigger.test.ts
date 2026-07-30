@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
 	checkTrigger,
 	type TriggerInput,
-} from "@vivlos/agent/memory-refactor/consolidator/trigger.ts";
+} from "@vivlos/agent/memory/consolidator/trigger.ts";
 import type {
 	HistoryItem,
 	HistoryRead,

@@ -7,13 +7,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { ConsolidationMemoryCommand } from "@vivlos/agent/memory-refactor/consolidate.ts";
+import type { ConsolidationMemoryCommand } from "@vivlos/agent/memory/consolidate.ts";
 import type {
 	MemoryOperationContext,
 	MemoryService,
 	MemoryServiceResult,
 	MemoryServiceValue,
-} from "@vivlos/agent/memory-refactor/service.ts";
+} from "@vivlos/agent/memory/service.ts";
 import { createAdvancedTools } from "@vivlos/agent/tools/advanced/index.ts";
 import { createConsolidateTool } from "@vivlos/agent/tools/advanced/memory/consolidate.ts";
 import { createEventBus } from "@vivlos/infra/eventbus/index.ts";

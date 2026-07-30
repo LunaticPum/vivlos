@@ -25,9 +25,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
-import { createMemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
+import { createMemoryRuntime } from "@vivlos/agent/memory/index.ts";
 import { createMemoryTool } from "@vivlos/agent/tools/advanced/memory/memory.ts";
-import { createMemoryEventLogger } from "@vivlos/agent/memory-refactor/utils/event-logger.ts";
+import { createMemoryEventLogger } from "@vivlos/agent/memory/utils/event-logger.ts";
 import type { SessionManager } from "@vivlos/agent/session/index.ts";
 import { createEventBus, type MemoryOperationEvent } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/types.ts";
@@ -35,7 +35,7 @@ import {
 	createMemoryRepository,
 	type MemoryLimits,
 } from "@vivlos/infra/storage/memory/index.ts";
-import type { MemoryOperationContext } from "@vivlos/agent/memory-refactor/service.ts";
+import type { MemoryOperationContext } from "@vivlos/agent/memory/service.ts";
 
 const LIMITS = { memory: 100, user: 100 } as const;
 const CONFIG = {

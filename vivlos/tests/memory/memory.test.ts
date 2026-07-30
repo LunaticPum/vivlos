@@ -11,7 +11,7 @@ import {
 	addEntry,
 	removeEntry,
 	replaceEntry,
-} from "@vivlos/agent/memory-refactor/memory.ts";
+} from "@vivlos/agent/memory/memory.ts";
 
 // #region Add
 

@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createMemoryEventLogger } from "@vivlos/agent/memory-refactor/utils/event-logger.ts";
+import { createMemoryEventLogger } from "@vivlos/agent/memory/utils/event-logger.ts";
 import {
 	createEventBus,
 	type MemoryOperationEvent,

@@ -31,8 +31,8 @@ import {
 } from "@vivlos/infra/paths.ts";
 import { ensureConfig, loadConfig } from "@vivlos/infra/config/index.ts";
 import { checkPiAiVersion } from "@vivlos/infra/version.ts";
-import { createMemoryEventLogger } from "@vivlos/agent/memory-refactor/utils/event-logger.ts";
-import { createMemoryRuntime } from "@vivlos/agent/memory-refactor/index.ts";
+import { createMemoryEventLogger } from "@vivlos/agent/memory/utils/event-logger.ts";
+import { createMemoryRuntime } from "@vivlos/agent/memory/index.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";

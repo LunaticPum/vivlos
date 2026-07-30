@@ -4,7 +4,7 @@ import type {
 	MemoryService,
 	MemoryServiceResult,
 	MainMemoryCommand,
-} from "@vivlos/agent/memory-refactor/index.ts";
+} from "@vivlos/agent/memory/index.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createTodoTool } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";

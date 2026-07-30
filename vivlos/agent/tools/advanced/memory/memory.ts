@@ -18,8 +18,8 @@ import type {
 	MemoryOperationContext,
 	MemoryService,
 	MemoryServiceResult,
-} from "@vivlos/agent/memory-refactor/index.ts";
-import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory-refactor/index.ts";
+} from "@vivlos/agent/memory/index.ts";
+import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory/index.ts";
 import { memoryDescription } from "./description.ts";
 
 // #region Tool 参数
