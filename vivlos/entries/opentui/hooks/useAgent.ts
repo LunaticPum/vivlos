@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
-import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
+import type { EventBus, TodoList } from "@vivlos/infra/eventbus/index.ts";
 import type { MemoryOverview } from "@vivlos/infra/storage/memory/index.ts";
 import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
@@ -63,6 +63,8 @@ export interface UseAgentResult {
 	currentSession: CurrentSessionState | null;
 	sessions: readonly SessionMeta[];
 	memoryOverview: MemoryOverview | null;
+	/** 当前 Session 的完整 Todo List。 */
+	todoList: TodoList | null;
 	submit: (text: string) => void;
 	abort: () => void;
 	clearConversation: () => void;
@@ -249,6 +251,7 @@ export function useAgent(
 	const [currentSession, setCurrentSession] = useState<CurrentSessionState | null>(null);
 	const [sessions, setSessions] = useState<readonly SessionMeta[]>([]);
 	const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
+	const [todoList, setTodoList] = useState<TodoList | null>(null);
 
 	// #region useAgent hook
 
@@ -280,9 +283,11 @@ export function useAgent(
 				setSessions(event.state.sessions);
 
 				if (sessionChanged) {
+					const nextTodoList = agent.getTodoList();
 					setTurns(messagesToTurns(event.state.current.messages));
 					setLoading(false);
 					setMemoryOverview(null);
+					setTodoList(nextTodoList);
 					currentIdxRef.current = -1;
 					latestUsageRef.current = undefined;
 				}
@@ -299,6 +304,13 @@ export function useAgent(
 			eventBus.on("memory:overview", (event) => {
 				if (!isCurrentSession(event.overview.sessionId)) return;
 				setMemoryOverview(event.overview);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("todo:updated", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
+				setTodoList(event.todoList);
 			}),
 		);
 
@@ -587,7 +599,7 @@ export function useAgent(
 	const submit = useCallback(
 		(text: string) => {
 			if (!text.trim()) return;
-			currentIdxRef.current = conversationTurns.length; // 注意 turns 数组不能被清空，ChatArea 组件会渲染所有的 turns，从而确保终端的历史条目信息都可见
+			currentIdxRef.current = conversationTurns.length; // 注意 turns 数组不能被清空，ConversationView 会渲染所有 turns，从而保留终端历史。
 
 			setTurns((prev) => [
 				...prev,
@@ -685,6 +697,7 @@ export function useAgent(
 		currentSession,
 		sessions,
 		memoryOverview,
+		todoList,
 		submit,
 		abort,
 		clearConversation,

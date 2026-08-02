@@ -4,7 +4,11 @@ import { log } from "@vivlos/infra/logger/index.ts";
 
 export type {
 	VivlosEvent,
+	TodoPriority,
+	TodoItemStatus,
+	TodoListStatus,
 	TodoItem,
+	TodoList,
 	TaskItem,
 	MemoryOperationEvent,
 	MemoryChangedEvent,

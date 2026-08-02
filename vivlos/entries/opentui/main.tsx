@@ -41,6 +41,7 @@ import {
 	createBuiltinTools,
 	createAdvancedTools,
 } from "@vivlos/agent/tools/index.ts";
+import { readTodoList } from "@vivlos/agent/tools/advanced/todo/storage.ts";
 import {
 	scanSkillsDir,
 	formatSkillsForPrompt,
@@ -162,6 +163,7 @@ async function main(): Promise<void> {
 		maxTurns: 10,
 		tools,
 		toolsReset,
+		readTodoList: () => readTodoList(sessionManager.dirPath),
 		memoryRuntime,
 		sessionManager,
 		promptBuilder,

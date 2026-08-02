@@ -8,6 +8,8 @@ export interface LoopConfig {
 	readonly model: Model<Api>;
 	readonly maxTurns: number;
 	readonly signal?: AbortSignal;
+	/** 仅供本次用户请求使用且不会写入 Session History 的消息。 */
+	readonly transientMessages?: readonly AgentMessage[];
 	/** 推理等级（reasoning），传给 pi agentLoop → LLM reasoning 参数 */
 	readonly reasoning?: ThinkingLevel;
 }

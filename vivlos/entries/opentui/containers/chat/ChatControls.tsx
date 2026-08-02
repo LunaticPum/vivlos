@@ -4,9 +4,18 @@
  * 仅负责组合 StatusBar、InputBar 和 InfoBar；状态与行为由 Workspace 注入。
  */
 
-import { StatusBar, type StatusBarProps } from "./StatusBar";
-import { InputBar, type InputBarProps } from "./InputBar";
-import { InfoBar, type InfoBarProps } from "./InfoBar";
+import {
+	StatusBar,
+	type StatusBarProps,
+} from "../../components/chat/chat_control/StatusBar";
+import {
+	InputBar,
+	type InputBarProps,
+} from "../../components/chat/chat_control/InputBar";
+import {
+	InfoBar,
+	type InfoBarProps,
+} from "../../components/chat/chat_control/InfoBar";
 
 // #region Props
 

@@ -1,36 +1,9 @@
-export const description = `创建和维护当前会话的 todo 列表，跟踪进度，组织多步骤工作。
-
-## 何时使用
-- 任务需要 3+ 个不同步骤
-- 非简单工作，受益于规划
-- 用户给出多个任务（编号或逗号分隔）
-- 已使用 todo 的多步骤工作收到新指令时，更新对应 todo
-- 开始一个任务 -> 标记 in_progress（同时只有一个）
-- 完成一个任务 -> 标记 completed，发现的后续工作加为新 todo
-
-## 何时不用
-- 单一简单任务（<3 步）
-- 纯信息查询
-- 稳定事实、环境或用户偏好（用 memory 代替）
-- 跟踪无组织价值
-
-## 状态
-- pending - 未开始
-- in_progress - 正在做（同时只有一个）
-- completed - 已完成（含验证）
-- cancelled - 不再需要
-
-## 规则
-- 实时更新，不要批量标记完成
-- completed 只在实际完成（含验证）后标记，不基于意图
-- 同时只保留一个 in_progress
-- 阻塞时保持 in_progress + 加 follow-up todo 描述阻塞原因
-- 每次调用传入完整列表（全量替换）
-- 保留用户原始命令（flags、args、顺序）
-
-## 示例
-用： "加暗色模式并跑测试" -> 多步骤 + 验证
-用： "重构 getCwd -> getCurrentWorkingDirectory" -> grep 发现 15 处
-不用："怎么在 Python 打印 Hello World" -> 信息查询
-不用："给 calculateTotal 加注释" -> 单一编辑
-犹豫时，用它。`;
+/** Todo Tool 的模型使用规则。 */
+export const description = `维护当前 Session 的 Todo List。
+- read 读取完整 List。
+- write 创建新 List，replace 完整替换已有 List，delete 删除整个 List；新 List 的所有 Item 初始为 pending。
+- modify edit/move/insert/delete 处理 Item 内容、位置、增加和删除。
+- update 将 Item 推进为 in_progress 或 completed。
+- orderNum 以最新 Todo Hint 或 Tool Result 为准；move 和 insert 后其他 Item 自动顺移。
+- 只有第一条 pending 可以进入 in_progress，同时最多一个 in_progress。
+- completed 不可 edit 或 update，但可以 move 或 delete。`;

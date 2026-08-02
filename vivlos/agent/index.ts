@@ -2,9 +2,10 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model, Api, ThinkingLevel } from "@earendil-works/pi-ai";
 
-import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
+import type { EventBus, TodoList } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { MemoryRuntime } from "@vivlos/agent/memory/index.ts";
+import type { Result } from "@vivlos/shared";
 
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
 import {
@@ -16,6 +17,7 @@ import {
 import { createMaxTurnsHook, type LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
+import { buildTodoHint } from "./tools/advanced/todo/hint.ts";
 
 import type { VivlosAgent } from "./types.ts";
 
@@ -44,6 +46,8 @@ export interface CreateAgentParams {
 	readonly tools?: AgentTool<any, any>[];
 	/** 工具状态重置函数（/clear 时调用，清理 skill loadedSkills 等） */
 	readonly toolsReset?: () => void;
+	/** 读取当前 Session Todo；实际目录由组合根在每次调用时解析。 */
+	readonly readTodoList?: () => Result<TodoList | null, Error>;
 
 	/** agent loop 最大轮次（默认 10） */
 	readonly maxTurns?: number;
@@ -73,6 +77,19 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	};
 	const tools = params.tools;
 	const titleTasks = new Set<string>();
+	/** 安全读取当前 Session Todo；undefined 表示未配置或读取失败。 */
+	const readCurrentTodoList = (): TodoList | null | undefined => {
+		if (!params.readTodoList) return undefined;
+		try {
+			const result = params.readTodoList();
+			if (result.ok) return result.value;
+			log("warn", result.error.message, result.error);
+		} catch (error) {
+			const cause = error instanceof Error ? error : new Error(String(error));
+			log("warn", `读取 Todo List 失败: ${cause.message}`, cause);
+		}
+		return undefined;
+	};
 
 	const loop = createAgentLoop({
 		deps: { llm: params.llm, eventBus: params.eventBus },
@@ -148,11 +165,20 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 				});
 				publishSessionState();
 			}
+			const todoList = readCurrentTodoList();
+			const transientMessages: AgentMessage[] = todoList === undefined
+				? []
+				: [{
+						role: "user",
+						content: [{ type: "text", text: buildTodoHint(todoList) }],
+						timestamp: Date.now(),
+					}];
 			const result = await loop.run(input, {
 				model: currentModel,
 				maxTurns,
 				reasoning: params.thinkingLevel,
 				signal,
+				transientMessages,
 			});
 
 			if (!result.error && shouldTitle) {
@@ -171,6 +197,9 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		},
 		getMessages() {
 			return sessionManager.getMessages();
+		},
+		getTodoList() {
+			return readCurrentTodoList() ?? null;
 		},
 		getSessionId() {
 			return sessionManager.id;

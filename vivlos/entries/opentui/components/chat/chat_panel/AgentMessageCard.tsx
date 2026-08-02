@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import spinners from "cli-spinners";
 import { SyntaxStyle, type BorderCharacters } from "@opentui/core";
-import type { ConversationTurn, LogEntry } from "../hooks/useAgent";
+import type { ConversationTurn, LogEntry } from "../../../hooks/useAgent";
 
 // #region 常量
 

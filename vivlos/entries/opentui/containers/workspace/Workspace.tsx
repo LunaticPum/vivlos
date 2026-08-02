@@ -8,7 +8,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { ChatPanel } from "../chat/ChatPanel";
 import { ChatControls } from "../chat/ChatControls";
-import { WelcomeScreen } from "../welcome/WelcomeScreen";
+import { WelcomeScreen } from "../../components/welcome/WelcomeScreen";
 import { Sidebar } from "../sidebar/Sidebar";
 import { formatTokens } from "@vivlos/shared/utils/index.ts";
 import { useNotification } from "../../hooks/useNotification";
@@ -63,6 +63,8 @@ type PopupState =
 	| "custom"
 	| "sessions";
 
+type SidebarSection = "none" | "memory" | "todo";
+
 // #endregion
 
 // #region Workspace
@@ -92,12 +94,14 @@ export function Workspace({
 		currentSession,
 		sessions,
 		memoryOverview,
+		todoList,
 	} = useAgent(agent, eventBus);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
 	const [showHelp, setShowHelp] = useState(false);
-	const [memoryActive, setMemoryActive] = useState(false);
+	const [sidebarSection, setSidebarSection] = useState<SidebarSection>("none");
+	const memoryActive = sidebarSection === "memory";
 	const [compressing, setCompressing] = useState(false);
 	const { notification } = useNotification(eventBus);
 	const { exitPending, handleCtrlC } = useExitHandler(onExit, loading, abort);
@@ -132,7 +136,7 @@ export function Workspace({
 		handleCustomProviderSubmit,
 		setPendingProvider,
 	} = useProviderManager(llm, llmConfigRepo, modelLabel, (state) => {
-		setMemoryActive(false);
+		setSidebarSection("none");
 		setPopupState(state as PopupState);
 	});
 
@@ -160,13 +164,13 @@ export function Workspace({
 			return;
 		}
 		useNewSession();
-		setMemoryActive(false);
+		setSidebarSection("none");
 	}, [sessions.length, useNewSession]);
 
 	const handleSession = useCallback(
 		(id: string) => {
 			switchSession(id);
-			setMemoryActive(false);
+			setSidebarSection("none");
 		},
 		[switchSession],
 	);
@@ -174,20 +178,20 @@ export function Workspace({
 	const cmdCtx = useMemo<CommandContext>(
 		() => ({
 			openModels: () => {
-				setMemoryActive(false);
+				setSidebarSection("none");
 				setPopupState("models");
 			},
 			openProviders: () => {
-				setMemoryActive(false);
+				setSidebarSection("none");
 				setPopupState("providers");
 			},
 			openSessions: () => {
-				setMemoryActive(false);
+				setSidebarSection("none");
 				setPopupState("sessions");
 			},
 			toggleDetail: () => setDetailExpanded((v) => !v),
 			showHelp: () => {
-				setMemoryActive(false);
+				setSidebarSection("none");
 				setShowHelp(true);
 			},
 			clearConversation: handleClear,
@@ -303,7 +307,7 @@ export function Workspace({
 				overflow="hidden"
 				paddingY={1}
 				gap={1}
-				onMouseDown={() => setMemoryActive(false)}
+				onMouseDown={() => setSidebarSection("none")}
 			>
 				{welcomeVisible ? (
 					<WelcomeScreen
@@ -341,19 +345,19 @@ export function Workspace({
 						onCtrlC: handleCtrlC,
 						popupActive: popupState !== "none" || showHelp || memoryActive,
 						onOpenModels: () => {
-							setMemoryActive(false);
+							setSidebarSection("none");
 							setShowHelp(false);
 							setPopupState((prev) => (prev === "models" ? "none" : "models"));
 						},
 						onOpenProviders: () => {
-							setMemoryActive(false);
+							setSidebarSection("none");
 							setShowHelp(false);
 							setPopupState((prev) =>
 								prev === "providers" ? "none" : "providers",
 							);
 						},
 						onShowHelp: () => {
-							setMemoryActive(false);
+							setSidebarSection("none");
 							setPopupState("none");
 							setShowHelp((prev) => !prev);
 						},
@@ -370,11 +374,19 @@ export function Workspace({
 			</box>
 			{!welcomeVisible && (
 				<Sidebar
-					active={memoryActive}
-					onActiveChange={setMemoryActive}
+					todoList={todoList}
+					memoryActive={memoryActive}
+					todoActive={sidebarSection === "todo"}
+					onMemoryActiveChange={(active) =>
+						setSidebarSection(active ? "memory" : "none")
+					}
+					onTodoActiveChange={(active) =>
+						setSidebarSection(active ? "todo" : "none")
+					}
 					preview={{
 						sessionName,
 						sessionId: currentSessionId,
+						titleGenerating: false,
 						path: currentMemoryOverview?.directory ?? null,
 						cwd: process.cwd(),
 						memory: currentMemoryOverview?.memory ?? null,

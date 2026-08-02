@@ -36,6 +36,10 @@ export type {
 export type { AppEvent } from "./events/app-event.ts";
 export type {
 	WorkspaceEvent,
+	TodoPriority,
+	TodoItemStatus,
+	TodoListStatus,
 	TodoItem,
+	TodoList,
 	TaskItem,
 } from "./events/workspace-event.ts";

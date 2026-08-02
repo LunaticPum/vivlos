@@ -10,8 +10,8 @@ import { useState, useEffect } from "react";
 import spinners from "cli-spinners";
 import { t, fg, type TextChunk } from "@opentui/core";
 import type { Usage } from "@earendil-works/pi-ai";
-import type { ConversationTurn } from "../../hooks/useAgent";
-import type { ConnectionStatus } from "../../hooks/useProviderManager.js";
+import type { ConversationTurn } from "../../../hooks/useAgent";
+import type { ConnectionStatus } from "../../../hooks/useProviderManager.js";
 import { getContextTokens, formatTokens } from "@vivlos/shared/utils/index.ts";
 
 const SPINNER = spinners.line;

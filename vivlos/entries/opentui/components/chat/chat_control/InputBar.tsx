@@ -21,8 +21,8 @@ import type {
 	ScrollBoxRenderable,
 } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/react";
-import type { TUICommandRegistry } from "../../commands/registry";
-import { KEYBINDS, matchesKeybind } from "../../keybinds";
+import type { TUICommandRegistry } from "../../../commands/registry";
+import { KEYBINDS, matchesKeybind } from "../../../keybinds";
 
 const C = {
 	border: "#cba6f7",

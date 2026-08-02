@@ -1,14 +1,14 @@
 /**
- * ChatArea - 对话区分区
+ * ConversationView - 会话内容滚动视图
  *
  * 遍历 conversationTurns，渲染 UserMessageCard + AgentMessageCard。
  * WelcomeScreen 由 Workspace 单独管理，本组件只负责会话内容。
  */
 
-import { getColors } from "../../designs/colors";
-import { UserMessageCard } from "../../components/UserMessageCard";
-import { AgentMessageCard } from "../../components/AgentMessageCard";
-import type { ConversationTurn } from "../../hooks/useAgent";
+import { getColors } from "../../../designs/colors";
+import { UserMessageCard } from "./UserMessageCard";
+import { AgentMessageCard } from "./AgentMessageCard";
+import type { ConversationTurn } from "../../../hooks/useAgent";
 import type { ScrollAcceleration } from "@opentui/core";
 
 const colors = getColors();
@@ -18,12 +18,15 @@ const FAST_SCROLL: ScrollAcceleration = {
 	reset: () => {},
 };
 
-export interface ChatAreaProps {
+export interface ConversationViewProps {
 	conversationTurns: ConversationTurn[];
 	detailExpanded: boolean;
 }
 
-export function ChatArea({ conversationTurns, detailExpanded }: ChatAreaProps) {
+export function ConversationView({
+	conversationTurns,
+	detailExpanded,
+}: ConversationViewProps) {
 	return (
 		<box flexGrow={1} overflow="hidden">
 			<box flexGrow={1} overflow="hidden" width="100%">

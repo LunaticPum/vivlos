@@ -90,6 +90,9 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 						]
 					: userInput;
 			const prompts = rawPrompts.map(ensureMessageId);
+			const transientPrompts = (config.transientMessages ?? []).map(ensureMessageId);
+			const transientIds = new Set(transientPrompts.map((message) => message.id));
+			const requestPrompts = [...transientPrompts, ...prompts];
 
 			// --- 1.5 压缩检查（在构建 context 前检查是否需要压缩） ---
 			if (config.model.contextWindow > 0) {
@@ -183,7 +186,7 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			try {
 				// --- 6. 启动 agentLoop ---
 				const stream = agentLoop(
-					prompts,
+					requestPrompts,
 					context,
 					loopConfig,
 					config.signal,
@@ -200,7 +203,10 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 				}
 
 				// --- 8. 拿最终消息列表 ---
-				const newMessages = await stream.result();
+				const resultMessages = await stream.result();
+				const newMessages = resultMessages.filter(
+					(message) => !isTransientMessage(message, transientIds),
+				);
 
 				// --- 9. 追加新消息到 session ---
 				for (const m of newMessages) {
@@ -292,6 +298,15 @@ function ensureMessageId(message: AgentMessage): IdentifiedAgentMessage {
 		return message as IdentifiedAgentMessage;
 	}
 	return { ...message, id: randomUUID() } as IdentifiedAgentMessage;
+}
+
+/** 判断结果消息是否为本次请求临时插入、禁止落盘的消息。 */
+function isTransientMessage(
+	message: AgentMessage,
+	transientIds: ReadonlySet<string>,
+): boolean {
+	const id = (message as AgentMessage & { readonly id?: unknown }).id;
+	return typeof id === "string" && transientIds.has(id);
 }
 
 // #endregion
