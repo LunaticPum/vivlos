@@ -20,6 +20,9 @@ packages/
 .idea/
 .VSCodeCounter/
 
+# Local agent planning
+opencode/
+
 # OS
 .DS_Store
 Thumbs.db
