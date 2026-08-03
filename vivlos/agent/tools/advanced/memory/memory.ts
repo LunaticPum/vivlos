@@ -20,6 +20,7 @@ import type {
 	MemoryServiceResult,
 } from "@vivlos/agent/memory/index.ts";
 import { MAIN_MEMORY_REASON_CODES } from "@vivlos/agent/memory/index.ts";
+import { ToolError } from "@vivlos/shared/errors.ts";
 import { memoryDescription } from "./description.ts";
 
 // #region Tool 参数
@@ -98,7 +99,7 @@ export function createMemoryTool(
 			params: Params,
 		): Promise<AgentToolResult<MemoryToolDetails>> {
 			const command = toCommand(params);
-			if (typeof command === "string") return err(command);
+			if (typeof command === "string") throw new ToolError(command, "memory");
 
 			const result = deps.getMemoryService().executeMain(
 				command,

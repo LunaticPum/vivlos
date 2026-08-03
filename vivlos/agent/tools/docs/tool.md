@@ -428,12 +428,11 @@ executionMode: "sequential";
 -> 再处理下一个 Tool
 ```
 
-当前优先处理：
+当前批次：
 
 ```text
-Memory
-Consolidate
-Skill
+read / write / bash / ls / grep / find
+Memory / Consolidate 的参数适配错误语义
 ```
 
-Todo 当前作为结构化数组、`prepareArguments` 和简短 description 的参考实现；Task 与 Offer Choice 暂不进入本批次。
+拆分后的 Todo、Offer Choice 和 Skill 当前作为符合规范的参考实现；Task 等待后续正式重写。

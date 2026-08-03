@@ -42,4 +42,7 @@ export type {
 	TodoItem,
 	TodoList,
 	TaskItem,
+	OfferChoiceOption,
+	OfferChoiceQuestion,
+	OfferChoiceAnswer,
 } from "./events/workspace-event.ts";

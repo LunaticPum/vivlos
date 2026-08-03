@@ -1,32 +1,40 @@
 import { Type, type Static } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { readdirSync } from "node:fs";
-import { resolve, isAbsolute, basename } from "node:path";
+import { resolve, isAbsolute, basename, relative } from "node:path";
 import { ToolError } from "@vivlos/shared/errors.ts";
 
 // ── Schema ──（参照 pi coding-agent findSchema）
 const Params = Type.Object({
-	pattern: Type.String({ description: "文件名 glob 模式（如 *.ts、test*）" }),
+	pattern: Type.String({
+		description: "文件名通配模式（如 *.ts、test?），支持 * 和 ?",
+		minLength: 1,
+	}),
 	path: Type.Optional(
 		Type.String({ description: "搜索起始路径，默认当前工作目录" }),
+	),
+	limit: Type.Optional(
+		Type.Integer({
+			description: "最大返回文件数，默认 100",
+			minimum: 1,
+			maximum: 1000,
+		}),
 	),
 });
 
 type Params = Static<typeof Params>;
 
-const MAX_CHARS = 256 * 1024;
-const MAX_FILES = 100; // 限制搜索文件数
-
 interface FindDetails {
 	message: string;
 	count: number;
+	resultLimitReached: boolean;
 }
 
 // ── 工厂 ──
 export function createFindTool(cwd: string): AgentTool<typeof Params, FindDetails> {
 	return {
 		name: "find",
-		description: "按文件名模式搜索文件（支持 * 和 ? 通配符）。",
+		description: "递归搜索文件名，支持 * 和 ? 通配符，返回相对搜索目录的路径。",
 		label: "查找文件",
 		parameters: Params,
 		async execute(
@@ -47,30 +55,32 @@ export function createFindTool(cwd: string): AgentTool<typeof Params, FindDetail
 				const regex = new RegExp(`^${regexStr}$`, "i");
 
 				const matches: string[] = [];
-				let count = 0;
 				const entries = readdirSync(absolutePath, {
 					recursive: true,
 					withFileTypes: true,
 				});
 				for (const entry of entries) {
-					if (count >= MAX_FILES) break;
 					if (entry.isFile() && regex.test(basename(entry.name))) {
-						matches.push(resolve(entry.parentPath ?? absolutePath, entry.name));
-						count++;
+						const absoluteMatch = resolve(entry.parentPath ?? absolutePath, entry.name);
+						matches.push(relative(absolutePath, absoluteMatch).replace(/\\/g, "/"));
 					}
 				}
+				matches.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+				const limit = params.limit ?? 100;
+				const visibleMatches = matches.slice(0, limit);
+				const resultLimitReached = matches.length > visibleMatches.length;
 
-				let text = matches.join("\n") || "(no matches)";
-				if (text.length > MAX_CHARS) {
-					text = text.slice(0, MAX_CHARS) +
-						`\n...[truncated ${text.length - MAX_CHARS} chars]`;
-				}
+				const notice = resultLimitReached
+					? `\n\n[找到超过 ${limit} 个文件，仅显示前 ${limit} 个。]`
+					: "";
+				const text = (visibleMatches.join("\n") || "(no matches)") + notice;
 
 				return {
 					content: [{ type: "text", text }],
 					details: {
-						message: `found ${matches.length} files`,
-						count: matches.length,
+						message: `found ${visibleMatches.length}${resultLimitReached ? "+" : ""} files`,
+						count: visibleMatches.length,
+						resultLimitReached,
 					},
 				};
 			} catch (err) {

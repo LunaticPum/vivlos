@@ -230,20 +230,25 @@ describe("Consolidate Tool command mapping", () => {
 			},
 		});
 
-		const result = await tool.execute("call-invalid", {
-			action: "refine",
-			file: "memory",
-			old_entry: unsafeSource,
-			old_entries: [unsafeSource, "Other source."],
-			new_entry: "Result.",
-		});
+		let error: unknown;
+		try {
+			await tool.execute("call-invalid", {
+				action: "refine",
+				file: "memory",
+				old_entry: unsafeSource,
+				old_entries: [unsafeSource, "Other source."],
+				new_entry: "Result.",
+			});
+		} catch (caught) {
+			error = caught;
+		}
 
-		expect(parseToolText(result)).toEqual({
-			status: "rejected",
-			code: "invalid_tool_params",
+		expect(error).toMatchObject({
+			name: "ToolError",
+			toolName: "consolidate",
 			message: "refine 操作只接受 old_entry 参数",
 		});
-		expect(JSON.stringify(result)).not.toContain(unsafeSource);
+		expect(JSON.stringify(error)).not.toContain(unsafeSource);
 		expect(contextReads).toBe(0);
 		expect(fake.calls).toEqual([]);
 	});

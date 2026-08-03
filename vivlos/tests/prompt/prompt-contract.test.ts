@@ -11,7 +11,7 @@ import { createPromptBuilder } from "@vivlos/agent/prompt/index.ts";
 import { summarize } from "@vivlos/agent/compression/summarizer.ts";
 import { memoryDescription } from "@vivlos/agent/tools/advanced/memory/description.ts";
 import { description as taskDescription } from "@vivlos/agent/tools/advanced/task/description.ts";
-import { description as todoDescription } from "@vivlos/agent/tools/advanced/todo/description.ts";
+import { descriptions as todoDescriptions } from "@vivlos/agent/tools/advanced/todo/description.ts";
 import {
 	createBashTool,
 	createReadTool,
@@ -35,10 +35,11 @@ describe("Main agent prompt contract", () => {
 	});
 
 	it("PRM-002 Memory Description 只承诺当前 Session 的稳定信息", () => {
-		expect(memoryDescription).toContain("当前 Session 的 L1 Memory");
-		expect(memoryDescription).toContain("稳定的项目环境、事实、决策、约定、用户偏好");
-		expect(memoryDescription).toContain("committed");
-		expect(memoryDescription).toContain("不会被其他或未来 Session 自动继承");
+		expect(memoryDescription).toContain("当前 Session");
+		expect(memoryDescription).toContain("稳定项目事实和用户偏好");
+		expect(memoryDescription).toContain("add");
+		expect(memoryDescription).toContain("replace");
+		expect(memoryDescription).toContain("remove");
 		expect(memoryDescription).not.toContain("每个未来 session");
 		expect(memoryDescription).not.toContain("已完成工作");
 	});
@@ -52,12 +53,16 @@ describe("Main agent prompt contract", () => {
 		];
 
 		for (const description of descriptions) {
-			expect(description).toContain("不得用于");
-			expect(description).toContain("Vivlos Memory");
+			expect(description).not.toContain("Vivlos Memory");
 		}
+		const prompt = createPromptBuilder().build();
+		expect(prompt).toContain("不得使用 read、write 或 bash 访问或创建 Vivlos Memory");
 		expect(taskDescription).toContain("稳定事实、环境或用户偏好（用 memory 代替）");
 		expect(taskDescription).not.toContain("记住这个目标");
-		expect(todoDescription).toContain("稳定事实、环境或用户偏好（用 memory 代替）");
+		expect(todoDescriptions.write).toContain("当前 Session");
+		expect(todoDescriptions.write).toContain("创建");
+		expect(todoDescriptions.modify).toContain("Item");
+		expect(prompt).toContain("Todo 只跟踪当前 Session 的执行进度，不写入 memory");
 	});
 });
 

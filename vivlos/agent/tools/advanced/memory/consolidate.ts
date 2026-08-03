@@ -15,6 +15,7 @@ import type {
 	MemoryServiceValue,
 } from "@vivlos/agent/memory/service.ts";
 import { err, ok, type Result } from "@vivlos/shared";
+import { ToolError } from "@vivlos/shared/errors.ts";
 import { consolidateDescription } from "./description.ts";
 
 // #region Tool 参数
@@ -156,7 +157,7 @@ export function createConsolidateTool(
 		): Promise<AgentToolResult<ConsolidateToolDetails>> {
 			const commandResult = toConsolidationCommand(params);
 			if (!commandResult.ok) {
-				return parameterError(commandResult.error);
+				throw new ToolError(commandResult.error.message, "consolidate");
 			}
 
 			const result = deps.memoryService.executeConsolidation(
@@ -171,25 +172,6 @@ export function createConsolidateTool(
 // #endregion
 
 // #region Tool 返回结果
-
-/** 参数错误不回显原始参数，避免未经 Service 扫描的候选进入 Tool 留痕。 */
-function parameterError(
-	error: ConsolidateToolParameterError,
-): AgentToolResult<ConsolidateToolDetails> {
-	return {
-		content: [
-			{
-				type: "text",
-				text: JSON.stringify(
-					{ status: "rejected", code: error.code, message: error.message },
-					null,
-					2,
-				),
-			},
-		],
-		details: { message: error.message },
-	};
-}
 
 /**
  * 将 Service 终态转换为模型可读 JSON。

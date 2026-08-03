@@ -9,7 +9,7 @@ import type {
 } from "@vivlos/infra/eventbus/index.ts";
 import { ToolError } from "@vivlos/shared";
 import type { AdvancedToolDeps } from "../index.ts";
-import { description } from "./description.ts";
+import { descriptions } from "./description.ts";
 import {
 	deleteTodoList,
 	MAX_TODO_ITEMS,
@@ -28,9 +28,8 @@ const Priority = Type.Union([
 	Type.Literal("low"),
 ]);
 
-/** read operation 参数。 */
+/** todo_read 参数。 */
 const Read = Type.Object({
-	operation: Type.Literal("read"),
 }, { additionalProperties: false });
 
 /** write 中不带顺序号和状态的初始 Item 参数。 */
@@ -44,7 +43,7 @@ const WriteItem = Type.Object(
 
 /** 完整 List 的有序初始 Item。 */
 const CompleteItems = Type.Array(WriteItem, {
-	description: "按执行顺序排列的完整 Item List",
+	description: "按执行顺序排列的完整 Item 数组；必须传真实数组，不要传 JSON 字符串",
 	minItems: 1,
 	maxItems: MAX_TODO_ITEMS,
 });
@@ -52,7 +51,6 @@ const CompleteItems = Type.Array(WriteItem, {
 /** 创建新 Todo List。 */
 const Write = Type.Object(
 	{
-		operation: Type.Literal("write"),
 		description: Type.String({ description: "List 描述" }),
 		items: CompleteItems,
 	},
@@ -62,7 +60,6 @@ const Write = Type.Object(
 /** 完整替换已有 Todo List。 */
 const Replace = Type.Object(
 	{
-		operation: Type.Literal("replace"),
 		description: Type.String({ description: "新的 List 描述" }),
 		items: CompleteItems,
 	},
@@ -71,67 +68,37 @@ const Replace = Type.Object(
 
 /** 删除当前 Todo List。 */
 const Delete = Type.Object(
-	{ operation: Type.Literal("delete") },
+	{},
 	{ additionalProperties: false },
 );
 
-/** 修改 Item 内容和 priority。 */
-const ModifyEdit = Type.Object(
+/** todo_modify 的平面参数；action 相关约束由 Command adapter 校验。 */
+const Modify = Type.Object(
 	{
-		operation: Type.Literal("modify"),
-		action: Type.Literal("edit"),
-		orderNum: Type.Integer({ description: "Item 当前顺序号", minimum: 1 }),
-		content: Type.Optional(Type.String({ description: "新的任务内容" })),
-		priority: Type.Optional(Type.Union([Priority, Type.Null()])),
+		action: Type.Union(
+			[
+				Type.Literal("edit"),
+				Type.Literal("move"),
+				Type.Literal("insert"),
+				Type.Literal("delete"),
+			],
+			{ description: "Item 修改动作；各动作的必填字段见 Tool description" },
+		),
+		orderNum: Type.Optional(Type.Integer({ description: "edit、move 或 delete 的 Item 当前顺序号", minimum: 1 })),
+		toOrderNum: Type.Optional(Type.Integer({ description: "移动后的最终顺序号", minimum: 1 })),
+		atOrderNum: Type.Optional(Type.Integer({ description: "插入后的最终顺序号", minimum: 1 })),
+		content: Type.Optional(Type.String({ description: "edit 的新内容或 insert 的 Item 内容" })),
+		priority: Type.Optional(Type.Union(
+			[Priority, Type.Null()],
+			{ description: "edit/insert 的 priority；edit 传 null 表示移除 priority" },
+		)),
 	},
 	{ additionalProperties: false },
 );
 
-/** 在完整 List 中移动一个 Item。 */
-const ModifyMove = Type.Object(
-	{
-		operation: Type.Literal("modify"),
-		action: Type.Literal("move"),
-		orderNum: Type.Integer({ description: "Item 当前顺序号", minimum: 1 }),
-		toOrderNum: Type.Integer({ description: "移动后的最终顺序号", minimum: 1 }),
-	},
-	{ additionalProperties: false },
-);
-
-/** 在完整 List 中插入一个 pending Item。 */
-const ModifyInsert = Type.Object(
-	{
-		operation: Type.Literal("modify"),
-		action: Type.Literal("insert"),
-		atOrderNum: Type.Integer({ description: "插入后的最终顺序号", minimum: 1 }),
-		content: Type.String({ description: "新任务内容" }),
-		priority: Type.Optional(Priority),
-	},
-	{ additionalProperties: false },
-);
-
-/** 从完整 List 中删除一个 Item。 */
-const ModifyDelete = Type.Object(
-	{
-		operation: Type.Literal("modify"),
-		action: Type.Literal("delete"),
-		orderNum: Type.Integer({ description: "Item 当前顺序号", minimum: 1 }),
-	},
-	{ additionalProperties: false },
-);
-
-/** modify operation 的四种 Item 级动作。 */
-const Modify = Type.Union([
-	ModifyEdit,
-	ModifyMove,
-	ModifyInsert,
-	ModifyDelete,
-]);
-
-/** update operation 参数；只允许声明单向状态变化。 */
+/** todo_update 参数；只允许声明单向状态变化。 */
 const Update = Type.Object(
 	{
-		operation: Type.Literal("update"),
 		orderNum: Type.Integer({ description: "Item 当前顺序号", minimum: 1 }),
 		status: Type.Union([
 			Type.Literal("in_progress"),
@@ -141,10 +108,32 @@ const Update = Type.Object(
 	{ additionalProperties: false },
 );
 
-/** Todo Tool 的 operation 参数联合。 */
-const Params = Type.Union([Read, Write, Replace, Delete, Modify, Update]);
-type Params = Static<typeof Params>;
-type Operation = Params["operation"];
+/** Todo Result 中保持稳定的领域操作名。 */
+type Operation = "read" | "write" | "replace" | "delete" | "modify" | "update";
+
+/** todo_modify adapter 输出的严格 Item Command。 */
+type ModifyCommand =
+	| {
+			readonly action: "edit";
+			readonly orderNum: number;
+			readonly content?: string;
+			readonly priority?: TodoPriority | null;
+	  }
+	| {
+			readonly action: "move";
+			readonly orderNum: number;
+			readonly toOrderNum: number;
+	  }
+	| {
+			readonly action: "insert";
+			readonly atOrderNum: number;
+			readonly content: string;
+			readonly priority?: TodoPriority;
+	  }
+	| {
+			readonly action: "delete";
+			readonly orderNum: number;
+	  };
 
 /** Todo Tool 提供给 Tool Log 的结构化详情。 */
 export interface TodoToolDetails {
@@ -157,38 +146,114 @@ export interface TodoToolDetails {
 
 // #region Tool 主入口
 
-/** 创建绑定当前 Session 和 EventBus 的 Todo Tool。 */
-export function createTodoTool(
+/** 创建共享当前 Session Todo 状态的六个独立 Tool。 */
+export function createTodoTools(
 	deps: AdvancedToolDeps,
-): AgentTool<typeof Params, TodoToolDetails> {
-	return {
-		name: "todo",
-		description,
-		label: "Todo 列表",
-		parameters: Params,
-		prepareArguments: prepareTodoArguments,
-		executionMode: "sequential",
-		async execute(
-			_toolCallId: string,
-			params: Params,
-		): Promise<AgentToolResult<TodoToolDetails>> {
-			const sessionId = deps.getSessionId();
-			const sessionDir = deps.getSessionDir();
+): AgentTool<any, TodoToolDetails>[] {
+	return [
+		createTodoReadTool(deps),
+		createTodoWriteTool(deps),
+		createTodoReplaceTool(deps),
+		createTodoDeleteTool(deps),
+		createTodoModifyTool(deps),
+		createTodoUpdateTool(deps),
+	];
+}
 
-			switch (params.operation) {
-				case "read":
-					return executeRead(sessionDir);
-				case "write":
-					return executeWrite(deps, sessionId, sessionDir, params);
-				case "replace":
-					return executeReplace(deps, sessionId, sessionDir, params);
-				case "delete":
-					return executeDelete(deps, sessionId, sessionDir);
-				case "modify":
-					return executeModify(deps, sessionId, sessionDir, params);
-				case "update":
-					return executeUpdate(deps, sessionId, sessionDir, params);
-			}
+function createTodoReadTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Read, TodoToolDetails> {
+	return {
+		name: "todo_read",
+		description: descriptions.read,
+		label: "读取 Todo",
+		parameters: Read,
+		executionMode: "sequential",
+		async execute(): Promise<AgentToolResult<TodoToolDetails>> {
+			return executeRead(deps.getSessionDir());
+		},
+	};
+}
+
+function createTodoWriteTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Write, TodoToolDetails> {
+	return {
+		name: "todo_write",
+		description: descriptions.write,
+		label: "创建 Todo",
+		parameters: Write,
+		prepareArguments: (args) => prepareTodoItems(args) as Static<typeof Write>,
+		executionMode: "sequential",
+		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
+			return executeWrite(deps, deps.getSessionId(), deps.getSessionDir(), params);
+		},
+	};
+}
+
+function createTodoReplaceTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Replace, TodoToolDetails> {
+	return {
+		name: "todo_replace",
+		description: descriptions.replace,
+		label: "替换 Todo",
+		parameters: Replace,
+		prepareArguments: (args) => prepareTodoItems(args) as Static<typeof Replace>,
+		executionMode: "sequential",
+		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
+			return executeReplace(deps, deps.getSessionId(), deps.getSessionDir(), params);
+		},
+	};
+}
+
+function createTodoDeleteTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Delete, TodoToolDetails> {
+	return {
+		name: "todo_delete",
+		description: descriptions.delete,
+		label: "删除 Todo",
+		parameters: Delete,
+		executionMode: "sequential",
+		async execute(): Promise<AgentToolResult<TodoToolDetails>> {
+			return executeDelete(deps, deps.getSessionId(), deps.getSessionDir());
+		},
+	};
+}
+
+function createTodoModifyTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Modify, TodoToolDetails> {
+	return {
+		name: "todo_modify",
+		description: descriptions.modify,
+		label: "修改 Todo Item",
+		parameters: Modify,
+		executionMode: "sequential",
+		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
+			const command = toModifyCommand(params);
+			return executeModify(
+				deps,
+				deps.getSessionId(),
+				deps.getSessionDir(),
+				command,
+			);
+		},
+	};
+}
+
+function createTodoUpdateTool(
+	deps: AdvancedToolDeps,
+): AgentTool<typeof Update, TodoToolDetails> {
+	return {
+		name: "todo_update",
+		description: descriptions.update,
+		label: "更新 Todo 状态",
+		parameters: Update,
+		executionMode: "sequential",
+		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
+			return executeUpdate(deps, deps.getSessionId(), deps.getSessionDir(), params);
 		},
 	};
 }
@@ -215,7 +280,7 @@ function executeWrite(
 	params: Static<typeof Write>,
 ): AgentToolResult<TodoToolDetails> {
 	if (unwrap(readTodoList(sessionDir))) {
-		throw toolError("当前 Session 已有 Todo List，请使用 replace");
+		throw toolError("当前 Session 已有 Todo List，请使用 todo_replace");
 	}
 	return persistNewList(deps, sessionId, sessionDir, "write", params);
 }
@@ -268,21 +333,15 @@ function executeDelete(
 		: "当前 Session 没有 Todo List");
 }
 
-/** 兼容少数模型把 write/replace items 数组序列化为 JSON 字符串的情况。 */
-function prepareTodoArguments(args: unknown): Params {
-	if (
-		!isObject(args) ||
-		(args.operation !== "write" && args.operation !== "replace") ||
-		typeof args.items !== "string"
-	) {
-		return args as Params;
-	}
+/** 兼容少数模型把 todo_write/todo_replace items 序列化为 JSON 字符串的情况。 */
+function prepareTodoItems(args: unknown): unknown {
+	if (!isObject(args) || typeof args.items !== "string") return args;
 
 	try {
 		const items = JSON.parse(args.items);
-		return Array.isArray(items) ? { ...args, items } as Params : args as Params;
+		return Array.isArray(items) ? { ...args, items } : args;
 	} catch {
-		return args as Params;
+		return args;
 	}
 }
 
@@ -291,12 +350,84 @@ function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** 将 todo_modify 平面参数收窄为严格的 Item Command。 */
+function toModifyCommand(params: Static<typeof Modify>): ModifyCommand {
+	switch (params.action) {
+		case "edit": {
+			assertOnlyModifyFields(params, ["action", "orderNum", "content", "priority"]);
+			const orderNum = requireModifyField(params.orderNum, "orderNum", "edit");
+			if (params.content === undefined && params.priority === undefined) {
+				throw toolError("todo_modify edit 至少需要 content 或 priority 中的一项");
+			}
+			return {
+				action: "edit",
+				orderNum,
+				...(params.content === undefined ? {} : { content: params.content }),
+				...(params.priority === undefined ? {} : { priority: params.priority }),
+			};
+		}
+		case "move": {
+			assertOnlyModifyFields(params, ["action", "orderNum", "toOrderNum"]);
+			return {
+				action: "move",
+				orderNum: requireModifyField(params.orderNum, "orderNum", "move"),
+				toOrderNum: requireModifyField(params.toOrderNum, "toOrderNum", "move"),
+			};
+		}
+		case "insert": {
+			assertOnlyModifyFields(params, ["action", "atOrderNum", "content", "priority"]);
+			if (params.priority === null) {
+				throw toolError("todo_modify insert 的 priority 不能为 null");
+			}
+			return {
+				action: "insert",
+				atOrderNum: requireModifyField(params.atOrderNum, "atOrderNum", "insert"),
+				content: requireModifyField(params.content, "content", "insert"),
+				...(params.priority === undefined ? {} : { priority: params.priority }),
+			};
+		}
+		case "delete": {
+			assertOnlyModifyFields(params, ["action", "orderNum"]);
+			return {
+				action: "delete",
+				orderNum: requireModifyField(params.orderNum, "orderNum", "delete"),
+			};
+		}
+	}
+}
+
+/** 拒绝当前 modify action 不使用的字段。 */
+function assertOnlyModifyFields(
+	params: Static<typeof Modify>,
+	allowed: readonly (keyof Static<typeof Modify>)[],
+): void {
+	const allowedFields = new Set<string>(allowed);
+	const unexpected = Object.entries(params)
+		.filter(([field, value]) => value !== undefined && !allowedFields.has(field))
+		.map(([field]) => field);
+	if (unexpected.length > 0) {
+		throw toolError(`todo_modify ${params.action} 不接受字段: ${unexpected.join(", ")}`);
+	}
+}
+
+/** 返回 modify action 的动态必填字段。 */
+function requireModifyField<TValue>(
+	value: TValue | undefined,
+	field: string,
+	action: Static<typeof Modify>["action"],
+): TValue {
+	if (value === undefined) {
+		throw toolError(`todo_modify ${action} 缺少 ${field}`);
+	}
+	return value;
+}
+
 /** 对当前完整 List 执行一个 Item 级修改。 */
 function executeModify(
 	deps: AdvancedToolDeps,
 	sessionId: string,
 	sessionDir: string,
-	params: Static<typeof Modify>,
+	params: ModifyCommand,
 ): AgentToolResult<TodoToolDetails> {
 	const current = requiredList(sessionDir);
 	let items: TodoItem[];
@@ -416,7 +547,7 @@ function executeUpdate(
 /** 返回必须存在的 Todo List，并把读取失败转换为 ToolError。 */
 function requiredList(sessionDir: string): TodoList {
 	const todoList = unwrap(readTodoList(sessionDir));
-	if (!todoList) throw toolError("当前 Session 没有 Todo List，请先调用 write");
+	if (!todoList) throw toolError("当前 Session 没有 Todo List，请先调用 todo_write");
 	return todoList;
 }
 

@@ -47,6 +47,26 @@ export interface TaskItem {
 	readonly completedAt?: number;
 }
 
+/** Offer Choice 中由 Agent 提供的一个单选项。 */
+export interface OfferChoiceOption {
+	readonly label: string;
+	readonly description: string;
+}
+
+/** Offer Choice 的一个分页问题。 */
+export interface OfferChoiceQuestion {
+	readonly title: string;
+	readonly question: string;
+	readonly choices: readonly OfferChoiceOption[];
+}
+
+/** 用户对一个 Offer Choice 问题的唯一回答。 */
+export interface OfferChoiceAnswer {
+	readonly question: string;
+	readonly answer: string;
+	readonly source: "choice" | "custom";
+}
+
 // #endregion
 
 export type WorkspaceEvent =
@@ -72,13 +92,13 @@ export type WorkspaceEvent =
 	  }
 	| {
 			readonly type: "offer_choice:pending";
-			readonly resolveId: string;
-			readonly prompt: string;
-			readonly choices: readonly string[];
-			readonly multiple: boolean;
+			readonly sessionId: string;
+			readonly toolCallId: string;
+			readonly questions: readonly OfferChoiceQuestion[];
 	  }
 	| {
 			readonly type: "offer_choice:resolved";
-			readonly resolveId: string;
-			readonly selection: string | readonly string[];
+			readonly sessionId: string;
+			readonly toolCallId: string;
+			readonly answers: readonly OfferChoiceAnswer[];
 	  };

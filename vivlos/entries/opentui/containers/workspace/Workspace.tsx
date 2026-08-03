@@ -24,6 +24,7 @@ import { ApiKeyPopup } from "../../components/popups/ApiKeyPopup";
 import { HelpPopup } from "../../components/popups/HelpPopup";
 import { CustomProviderPopup } from "../../components/popups/CustomProviderPopup";
 import { useAgent } from "../../hooks/useAgent";
+import { useOfferChoice } from "../../hooks/useOfferChoice";
 import {
 	createTUICommandRegistry,
 	type TUICommandRegistry,
@@ -96,6 +97,8 @@ export function Workspace({
 		memoryOverview,
 		todoList,
 	} = useAgent(agent, eventBus);
+	const currentSessionId = currentSession?.id ?? "";
+	const offerChoice = useOfferChoice(eventBus, currentSessionId);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
@@ -120,6 +123,13 @@ export function Workspace({
 			offEnd();
 		};
 	}, [eventBus]);
+
+	useEffect(() => {
+		if (!offerChoice.pending) return;
+		setPopupState("none");
+		setShowHelp(false);
+		setSidebarSection("none");
+	}, [offerChoice.pending?.toolCallId]);
 
 	// #endregion
 
@@ -280,7 +290,6 @@ export function Workspace({
 			? conversationTurns[conversationTurns.length - 1]
 			: undefined;
 	const lastStatus = lastTurn?.status;
-	const currentSessionId = currentSession?.id ?? "";
 	const durationResetKey = currentSession
 		? `${currentSession.id}:${currentSession.pending ? "pending" : "active"}`
 		: "none";
@@ -324,6 +333,12 @@ export function Workspace({
 					/>
 				)}
 				<ChatControls
+					offerChoice={offerChoice.pending ? {
+						toolCallId: offerChoice.pending.toolCallId,
+						questions: offerChoice.pending.questions,
+						onResolve: offerChoice.resolve,
+						onAbort: abort,
+					} : undefined}
 					status={{
 						modelLabel: currentLabel,
 						loading,

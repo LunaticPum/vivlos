@@ -8,29 +8,42 @@ import { ToolError } from "@vivlos/shared/errors.ts";
 const Params = Type.Object({
 	path: Type.String({ description: "要读取的文件路径（相对或绝对）" }),
 	offset: Type.Optional(
-		Type.Number({ description: "起始行号（1 起始），默认从第 1 行开始" }),
+		Type.Integer({
+			description: "起始行号（1 起始），默认从第 1 行开始",
+			minimum: 1,
+		}),
 	),
 	limit: Type.Optional(
-		Type.Number({ description: "最大读取行数，默认全部" }),
+		Type.Integer({ description: "最大读取行数，默认全部", minimum: 1 }),
 	),
 });
 
 type Params = Static<typeof Params>;
 
-const MAX_CHARS = 256 * 1024; // 256K 字符截断（非精确字节）
+const MAX_BYTES = 256 * 1024;
+
+interface ReadDetails {
+	message: string;
+	path: string;
+	startLine: number;
+	endLine: number;
+	totalLines: number;
+	truncated: boolean;
+	nextOffset?: number;
+	oversizedLine?: number;
+}
 
 // ── 工厂 ──
-export function createReadTool(cwd: string): AgentTool<typeof Params, { message: string }> {
+export function createReadTool(cwd: string): AgentTool<typeof Params, ReadDetails> {
 	return {
 		name: "read",
-		description:
-			"读取普通工作区文件内容。支持 offset（起始行）和 limit（最大行数），大文件自动截断。不得用于访问 Vivlos Memory；记忆内容已由 system prompt 提供。",
+		description: "读取文本文件。支持按行读取，输出超过 256KB 时提供后续 offset。",
 		label: "读取文件",
 		parameters: Params,
 		async execute(
 			_toolCallId: string,
 			params: Params,
-		): Promise<AgentToolResult<{ message: string }>> {
+		): Promise<AgentToolResult<ReadDetails>> {
 			try {
 				// 1. 解析为绝对路径
 				const absolutePath = isAbsolute(params.path)
@@ -46,23 +59,42 @@ export function createReadTool(cwd: string): AgentTool<typeof Params, { message:
 
 				// 4. offset / limit 截取
 				const start = (params.offset ?? 1) - 1;
-				const end = params.limit != null ? start + params.limit : lines.length;
-				const sliced = lines.slice(start, end).join("\n");
-
-				// 5. 大文件截断（按 UTF-8 字节安全截断，避免切到多字节字符中间）
-				let truncated = sliced;
-				const byteLen = Buffer.byteLength(sliced, "utf-8");
-				if (byteLen > MAX_CHARS) {
-					truncated = Buffer.from(sliced, "utf-8")
-						.slice(0, MAX_CHARS)
-						.toString("utf-8");
-					truncated += `\n...[truncated ${byteLen - MAX_CHARS} bytes]`;
+				if (start >= lines.length) {
+					throw new Error(`起始行 ${start + 1} 超出文件范围（共 ${lines.length} 行）`);
 				}
+				const requestedEnd = params.limit != null
+					? Math.min(start + params.limit, lines.length)
+					: lines.length;
+				const selectedLines = lines.slice(start, requestedEnd);
+				const { output, outputLines, outputTruncated, oversizedLine } = truncateCompleteLines(
+					selectedLines,
+					start + 1,
+				);
+				const endLine = start + outputLines;
+				const hasMore = oversizedLine
+					? endLine < lines.length
+					: outputTruncated || requestedEnd < lines.length;
+				const nextOffset = hasMore ? endLine + 1 : undefined;
+				const notice = nextOffset
+					? oversizedLine
+						? `\n\n[第 ${start + 1} 行因超过 256KB 未显示。使用 offset=${nextOffset} 继续读取后续行。]`
+						: `\n\n[显示第 ${start + 1}-${endLine} 行，共 ${lines.length} 行。使用 offset=${nextOffset} 继续。]`
+					: "";
+				const text = output || "(empty)";
 
 				return {
-					content: [{ type: "text", text: truncated || "(empty)" }],
+					content: [{ type: "text", text: text + notice }],
 					details: {
-						message: `read ${absolutePath} (${sliced.length} chars)`,
+						message: oversizedLine
+							? `line ${start + 1} exceeds read limit in ${absolutePath}`
+							: `read ${absolutePath} lines ${start + 1}-${endLine}`,
+						path: absolutePath,
+						startLine: start + 1,
+						endLine,
+						totalLines: lines.length,
+						truncated: outputTruncated,
+						...(nextOffset ? { nextOffset } : {}),
+						...(oversizedLine ? { oversizedLine: start + 1 } : {}),
 					},
 				};
 			} catch (err) {
@@ -70,5 +102,39 @@ export function createReadTool(cwd: string): AgentTool<typeof Params, { message:
 				throw new ToolError(cause.message, "read", cause);
 			}
 		},
+	};
+}
+
+function truncateCompleteLines(
+	lines: readonly string[],
+	startLine: number,
+): {
+	output: string;
+	outputLines: number;
+	outputTruncated: boolean;
+	oversizedLine: boolean;
+} {
+	if (Buffer.byteLength(lines[0] ?? "", "utf-8") > MAX_BYTES) {
+		return {
+			output: `[第 ${startLine} 行超过 256KB，无法由 read Tool 完整返回。请使用 bash 分段读取该行。]`,
+			outputLines: 1,
+			outputTruncated: true,
+			oversizedLine: true,
+		};
+	}
+
+	const output: string[] = [];
+	let bytes = 0;
+	for (const line of lines) {
+		const addedBytes = Buffer.byteLength(line, "utf-8") + (output.length > 0 ? 1 : 0);
+		if (bytes + addedBytes > MAX_BYTES) break;
+		output.push(line);
+		bytes += addedBytes;
+	}
+	return {
+		output: output.join("\n"),
+		outputLines: output.length,
+		outputTruncated: output.length < lines.length,
+		oversizedLine: false,
 	};
 }

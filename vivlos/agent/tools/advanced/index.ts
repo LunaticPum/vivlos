@@ -6,7 +6,7 @@ import type {
 	MainMemoryCommand,
 } from "@vivlos/agent/memory/index.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
-import { createTodoTool } from "./todo/todo.ts";
+import { createTodoTools } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";
 import { createOfferChoiceTool } from "./offer-choice/offer-choice.ts";
 import { createMemoryTool } from "./memory/memory.ts";
@@ -49,7 +49,7 @@ export interface AdvancedToolDeps {
  */
 export function createAdvancedTools(deps: AdvancedToolDeps): AgentTool<any, any>[] {
 	return [
-		createTodoTool(deps),
+		...createTodoTools(deps),
 		createTaskTool(deps),
 		createOfferChoiceTool(deps),
 		createMemoryTool({

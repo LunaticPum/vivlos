@@ -9,13 +9,32 @@ import { loadBashPermissions, checkBashPermission } from "../permit/index.ts";
 const Params = Type.Object({
 	command: Type.String({ description: "要执行的 shell 命令" }),
 	timeout: Type.Optional(
-		Type.Number({ description: "超时时间（秒），默认 30 秒" }),
+		Type.Number({
+			description: "超时时间（秒），默认 30 秒",
+			exclusiveMinimum: 0,
+		}),
 	),
 });
 
 type Params = Static<typeof Params>;
 
 const MAX_CHARS = 256 * 1024;
+const MAX_STREAM_CHARS = MAX_CHARS / 2;
+const KILL_GRACE_MS = 2_000;
+
+interface BashOutput {
+	stdout: string;
+	stderr: string;
+	code: number | null;
+	truncated: boolean;
+}
+
+interface BashDetails {
+	message: string;
+	exitCode: number;
+	outputChars: number;
+	truncated: boolean;
+}
 
 /**
  * 查找可用的 bash 路径。
@@ -64,13 +83,33 @@ function killProcessTree(pid: number): void {
 	}
 }
 
+function forceKillProcessTree(pid: number): void {
+	if (process.platform === "win32") {
+		killProcessTree(pid);
+		return;
+	}
+	try {
+		process.kill(-pid, "SIGKILL");
+	} catch {
+		try {
+			process.kill(pid, "SIGKILL");
+		} catch {
+			/* already dead */
+		}
+	}
+}
+
 function spawnAsync(
 	command: string,
 	cwd: string,
 	timeoutMs: number,
 	signal?: AbortSignal,
-): Promise<{ stdout: string; stderr: string; code: number | null }> {
+): Promise<BashOutput> {
 	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error("aborted"));
+			return;
+		}
 		const shell = findBash();
 
 		const env = {
@@ -82,6 +121,7 @@ function spawnAsync(
 
 		const child = spawn(shell, ["-c", command], {
 			cwd,
+			detached: process.platform !== "win32",
 			stdio: ["pipe", "pipe", "pipe"],
 			env,
 			windowsHide: true,
@@ -92,66 +132,88 @@ function spawnAsync(
 
 		let stdout = "";
 		let stderr = "";
+		let truncated = false;
+		let terminalError: Error | undefined;
+		let killFallback: ReturnType<typeof setTimeout> | undefined;
+		let settled = false;
 
 		child.stdout.on("data", (chunk: string) => {
-			stdout += chunk;
+			const next = appendBoundedTail(stdout, chunk);
+			stdout = next.text;
+			truncated ||= next.truncated;
 		});
 
 		child.stderr.on("data", (chunk: string) => {
-			stderr += chunk;
+			const next = appendBoundedTail(stderr, chunk);
+			stderr = next.text;
+			truncated ||= next.truncated;
 		});
 
-		const timer = setTimeout(() => {
+		const cleanup = () => {
+			clearTimeout(timer);
+			if (killFallback) clearTimeout(killFallback);
+			signal?.removeEventListener("abort", onAbort);
+		};
+		const settle = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			fn();
+		};
+		const terminate = (error: Error) => {
+			if (terminalError) return;
+			terminalError = error;
 			if (child.pid) killProcessTree(child.pid);
-			reject(new Error(`command timed out after ${timeoutMs}ms`));
-		}, timeoutMs);
+			killFallback = setTimeout(
+				() => {
+					if (child.pid) forceKillProcessTree(child.pid);
+					settle(() => reject(withCommandOutput(error, stdout, stderr, truncated)));
+				},
+				KILL_GRACE_MS,
+			);
+		};
+		const onAbort = () => terminate(new Error("aborted"));
+		const timer = setTimeout(
+			() => terminate(new Error(`command timed out after ${timeoutMs}ms`)),
+			timeoutMs,
+		);
 
-		if (signal) {
-			const onAbort = () => {
-				if (child.pid) killProcessTree(child.pid);
-				clearTimeout(timer);
-				reject(new Error("aborted"));
-			};
-			signal.addEventListener("abort", onAbort, { once: true });
-		}
+		signal?.addEventListener("abort", onAbort, { once: true });
 
 		child.on("close", (code) => {
-			clearTimeout(timer);
-			resolve({ stdout, stderr, code });
+			settle(() => terminalError
+				? reject(withCommandOutput(terminalError, stdout, stderr, truncated))
+				: resolve({ stdout, stderr, code, truncated }));
 		});
 
 		child.on("error", (err) => {
-			clearTimeout(timer);
-			reject(err);
+			settle(() => reject(err));
 		});
 	});
 }
 
-export function createBashTool(cwd: string): AgentTool<typeof Params, { message: string }> {
+export function createBashTool(cwd: string): AgentTool<typeof Params, BashDetails> {
 	const bashRules = loadBashPermissions();
 
 	return {
 		name: "bash",
-		description: "执行项目开发所需的 shell 命令并返回 stdout。不得用于访问或修改 Vivlos Memory；记忆操作使用 memory Tool。timeout 超时后终止命令，输出超过 256K 字符自动截断。临时文件请保存到 $TMPDIR 目录（.vivlos/temp/）。",
+		description: "在当前工作目录执行 shell 命令并返回 stdout 和 stderr。默认 30 秒超时，两个输出流各保留末尾 128K 字符。",
 		label: "运行命令",
 		parameters: Params,
 		async execute(
 			_toolCallId: string,
 			params: Params,
 			signal?: AbortSignal,
-		): Promise<AgentToolResult<{ message: string }>> {
+		): Promise<AgentToolResult<BashDetails>> {
 			try {
 				const perm = checkBashPermission(params.command, bashRules);
 				if (!perm.allowed) {
-					return {
-						content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
-						details: { message: `denied: ${params.command.slice(0, 80)}` },
-					};
+					throw new ToolError(`Permission denied: ${perm.reason}`, "bash");
 				}
 
 				const timeoutMs = (params.timeout ?? 30) * 1000;
 
-				const { stdout, stderr, code } = await spawnAsync(
+				const { stdout, stderr, code, truncated } = await spawnAsync(
 					params.command,
 					cwd,
 					timeoutMs,
@@ -159,25 +221,57 @@ export function createBashTool(cwd: string): AgentTool<typeof Params, { message:
 				);
 
 				if (code === null) {
-					throw new Error("command killed (exit code: null)");
+					throw withCommandOutput(
+						new Error("command killed (exit code: null)"),
+						stdout,
+						stderr,
+						truncated,
+					);
 				}
 
-				const combined = stderr ? `${stdout}\n[stderr]\n${stderr}` : stdout;
-
-				const text =
-					combined.length > MAX_CHARS
-						? combined.slice(0, MAX_CHARS) +
-							`\n...[truncated ${combined.length - MAX_CHARS} chars]`
-						: combined || "(no output)";
+				const combined = formatOutput(stdout, stderr, truncated);
+				if (code !== 0) {
+					throw new Error(`${combined}\n\nCommand exited with code ${code}`);
+				}
 
 				return {
-					content: [{ type: "text", text }],
-					details: { message: `exit ${code} (${combined.length} chars)` },
+					content: [{ type: "text", text: combined }],
+					details: {
+						message: `exit ${code} (${stdout.length + stderr.length} chars)`,
+						exitCode: code,
+						outputChars: stdout.length + stderr.length,
+						truncated,
+					},
 				};
 			} catch (err) {
+				if (err instanceof ToolError) throw err;
 				const cause = err instanceof Error ? err : new Error(String(err));
 				throw new ToolError(cause.message, "bash", cause);
 			}
 		},
 	};
+}
+
+function appendBoundedTail(current: string, chunk: string): { text: string; truncated: boolean } {
+	const combined = current + chunk;
+	return combined.length > MAX_STREAM_CHARS
+		? { text: combined.slice(-MAX_STREAM_CHARS), truncated: true }
+		: { text: combined, truncated: false };
+}
+
+function formatOutput(stdout: string, stderr: string, truncated: boolean): string {
+	const combined = stderr ? `${stdout}\n[stderr]\n${stderr}` : stdout;
+	const notice = truncated ? "\n...[earlier output truncated]" : "";
+	return (combined || "(no output)") + notice;
+}
+
+function withCommandOutput(
+	error: Error,
+	stdout: string,
+	stderr: string,
+	truncated: boolean,
+): Error {
+	return new Error(`${formatOutput(stdout, stderr, truncated)}\n\n${error.message}`, {
+		cause: error,
+	});
 }
