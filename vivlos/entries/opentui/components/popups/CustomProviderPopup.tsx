@@ -124,9 +124,8 @@ export function CustomProviderPopup({
 			alignItems="center"
 			paddingTop={1}
 			paddingBottom={0}
-			gap={1}
 		>
-			<box flexDirection="column" flexGrow={1} width="90%">
+			<box flexDirection="column" height="90%" width="90%">
 				{/* API 标准 */}
 				<box flexDirection="row">
 					<text fg={C.label} width={7}>
