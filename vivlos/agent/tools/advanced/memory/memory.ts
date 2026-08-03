@@ -27,22 +27,19 @@ import { memoryDescription } from "./description.ts";
 const Params = Type.Object({
 	action: Type.Union(
 		[Type.Literal("add"), Type.Literal("replace"), Type.Literal("remove")],
-		{ description: "操作类型" },
+		{ description: "Memory mutation" },
 	),
 	file: Type.Union([Type.Literal("memory"), Type.Literal("user")], {
-		description: "目标文件：memory = 项目/环境笔记，user = 用户画像",
+		description: "Target Memory file",
 	}),
 	content: Type.Optional(
-		Type.String({ description: "要追加的内容（add 时必填）" }),
+		Type.String({ description: "Entry for add" }),
 	),
 	old_text: Type.Optional(
-		Type.String({
-			description:
-				"replace/remove 时必填：当前 Memory 中足够唯一的原文子串",
-		}),
+		Type.String({ description: "Current text for replace or remove" }),
 	),
 	new_text: Type.Optional(
-		Type.String({ description: "替换后的文本（replace 时必填）" }),
+		Type.String({ description: "Replacement text" }),
 	),
 	reasonCode: Type.Union(
 		[
@@ -52,13 +49,10 @@ const Params = Type.Object({
 			Type.Literal(MAIN_MEMORY_REASON_CODES[3]),
 			Type.Literal(MAIN_MEMORY_REASON_CODES[4]),
 		],
-		{ description: "本次记忆操作的稳定原因分类（必填）" },
+		{ description: "Audit reason category" },
 	),
 	reason: Type.Optional(
-		Type.String({
-			description: "简短、可审计的原因说明；不要包含完整推理",
-			maxLength: 200,
-		}),
+		Type.String({ description: "Short audit note", maxLength: 200 }),
 	),
 });
 
@@ -151,6 +145,9 @@ function toCommand(params: Params): MainMemoryCommand | string {
 	switch (params.action) {
 		case "add":
 			if (!params.content) return "add 操作需要 content 参数";
+			if (params.old_text !== undefined || params.new_text !== undefined) {
+				return "add 操作只接受 content 参数";
+			}
 			return {
 				action: "add",
 				file: params.file,
@@ -159,6 +156,9 @@ function toCommand(params: Params): MainMemoryCommand | string {
 		case "replace":
 			if (!params.old_text || params.new_text === undefined) {
 				return "replace 操作必须同时提供 old_text 和 new_text，请按当前 Memory 原文补全后重试";
+			}
+			if (params.content !== undefined) {
+				return "replace 操作只接受 old_text 和 new_text 参数";
 			}
 			return {
 				action: "replace",
@@ -169,6 +169,12 @@ function toCommand(params: Params): MainMemoryCommand | string {
 		case "remove":
 			if (!params.old_text) {
 				return "remove 操作必须提供 old_text，请从当前 Memory 复制足够唯一的原文片段后重试";
+			}
+			if (params.content !== undefined || params.new_text !== undefined) {
+				return "remove 操作只接受 old_text 参数";
+			}
+			if (params.reasonCode !== "explicit_user_forget") {
+				return "remove 只用于用户明确要求遗忘，reasonCode 必须为 explicit_user_forget";
 			}
 			return {
 				action: "remove",

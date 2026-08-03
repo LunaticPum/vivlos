@@ -22,7 +22,23 @@ export type MainAgentEvent =
 	| {
 			readonly type: "agent:error";
 			readonly sessionId: string;
+			readonly kind: "error" | "aborted";
 			readonly error: Error;
+	  }
+	| {
+			readonly type: "agent:retry_start";
+			readonly sessionId: string;
+			readonly attempt: number;
+			readonly maxAttempts: number;
+			readonly delayMs: number;
+			readonly error: Error;
+	  }
+	| {
+			readonly type: "agent:retry_end";
+			readonly sessionId: string;
+			readonly success: boolean;
+			readonly attempt: number;
+			readonly finalError?: Error;
 	  }
 	| {
 			readonly type: "agent:message_start";
@@ -52,6 +68,8 @@ export type MainAgentEvent =
 			readonly sessionId: string;
 			readonly content: string;
 			readonly thinkingContent: string;
+			readonly outcome: "complete" | "error" | "aborted";
+			readonly errorMessage?: string;
 			readonly usage?: Usage;
 	  }
 	| {

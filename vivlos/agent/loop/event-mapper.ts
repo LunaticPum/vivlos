@@ -45,30 +45,28 @@ export function mapAgentEvent(
 		case "turn_start":
 			return [{ type: "agent:turn_start", sessionId, turn }];
 		case "turn_end": {
+			const msg = event.message;
+			const outcome = msg.role === "assistant" &&
+				(msg.stopReason === "error" || msg.stopReason === "aborted")
+				? msg.stopReason
+				: "complete";
 			const events: VivlosEvent[] = [
 				{ type: "agent:turn_complete", sessionId, turn },
 			];
-			const msg = event.message;
-			if (
-				msg.role === "assistant" &&
-				(msg.stopReason === "error" || msg.stopReason === "aborted")
-			) {
-				events.push({
-					type: "agent:error",
-					sessionId,
-					error: new Error(msg.errorMessage ?? `LLM ${msg.stopReason}`),
-				});
-			}
-		const text = extractText(msg);
-		const thinking = extractThinking(msg);
-		const usage = msg.role === "assistant" ? msg.usage : undefined;
-		events.push({
-			type: "agent:message_complete",
-			sessionId,
-			content: text,
-			thinkingContent: thinking,
-			usage,
-		});
+			const text = extractText(msg);
+			const thinking = extractThinking(msg);
+			const usage = msg.role === "assistant" ? msg.usage : undefined;
+			events.push({
+				type: "agent:message_complete",
+				sessionId,
+				content: text,
+				thinkingContent: thinking,
+				outcome,
+				...(msg.role === "assistant" && msg.errorMessage
+					? { errorMessage: msg.errorMessage }
+					: {}),
+				usage,
+			});
 			return events;
 		}
 		case "message_start":

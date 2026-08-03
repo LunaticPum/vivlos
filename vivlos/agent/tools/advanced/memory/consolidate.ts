@@ -23,7 +23,7 @@ import { consolidateDescription } from "./description.ts";
 const MemoryFileSchema = Type.Union(
 	[Type.Literal("memory"), Type.Literal("user")],
 	{
-		description: "目标文件：memory = 项目、环境和决策；user = 用户偏好和画像",
+		description: "Target Memory file",
 	},
 );
 
@@ -33,31 +33,30 @@ const MemoryFileSchema = Type.Union(
  */
 const Params = Type.Object({
 	action: Type.Union([Type.Literal("refine"), Type.Literal("merge")], {
-		description:
-			"巩固操作：refine 精炼一条完整 entry；merge 合并多条完整 entries",
+		description: "Consolidation operation",
 	}),
 	file: MemoryFileSchema,
 	old_entry: Type.Optional(
 		Type.String({
-			description: "refine 的完整 source entry，必须与当前文件精确匹配",
+			description: "Source entry for refine",
 			minLength: 1,
 		}),
 	),
 	old_entries: Type.Optional(
 		Type.Array(
 			Type.String({
-				description: "merge 的一条完整 source entry",
+				description: "Source entry for merge",
 				minLength: 1,
 			}),
 			{
-				description: "merge 的完整 source entries，至少两条且不能重复",
+				description: "Source entries for merge",
 				minItems: 2,
 				uniqueItems: true,
 			},
 		),
 	),
 	new_entry: Type.String({
-		description: "整理后的完整最终 entry，只能保留并压缩 source 中已有的事实",
+		description: "Consolidated entry",
 		minLength: 1,
 	}),
 });

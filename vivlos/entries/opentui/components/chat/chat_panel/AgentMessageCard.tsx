@@ -117,8 +117,15 @@ export function AgentMessageCard({
 				</box>
 			)}
 
-			{conversationTurn.status === "aborted" && (
-				<text fg={C.abort}>该次对话被打断</text>
+			{conversationTurn.termination && (
+				<text fg={C.abort}>
+					{`对话终止：${conversationTurn.termination.message}`}
+				</text>
+			)}
+			{conversationTurn.retry && (
+				<text fg={C.toolName}>
+					{`正在重试 ${conversationTurn.retry.attempt}/${conversationTurn.retry.maxAttempts}，${Math.ceil(conversationTurn.retry.delayMs / 1000)} 秒后继续`}
+				</text>
 			)}
 			{conversationTurn.finalText ? (
 				<markdown
@@ -156,6 +163,8 @@ type RenderItem =
 
 /** Thinking 和 ToolGroup 都转换为 [主行, ...子文本行]。 */
 function thinkingToLines(entry: ThinkingEntry, spin: string): LogLines {
+	const failed = entry.done &&
+		(entry.outcome === "error" || entry.outcome === "aborted");
 	const durMs = entry.done
 		? (entry.durationMs ?? 0)
 		: Date.now() - entry.createdAt;
@@ -163,8 +172,12 @@ function thinkingToLines(entry: ThinkingEntry, spin: string): LogLines {
 	const main: RenderLine = {
 		segments: [
 			{
-				text: `${entry.done ? "✓ Thought" : spin + " Thinking..."}`,
-				color: entry.done ? C.done : C.thinking,
+				text: failed
+					? "✗ Thought"
+					: entry.done
+						? "✓ Thought"
+						: `${spin} Thinking...`,
+				color: failed ? C.abort : entry.done ? C.done : C.thinking,
 			},
 			...(durStr ? [{ text: durStr, color: C.toolName }] : []),
 		],

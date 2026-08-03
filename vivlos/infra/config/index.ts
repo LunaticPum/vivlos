@@ -14,6 +14,19 @@ export interface ToolConfig {
 
 // #endregion
 
+// #region RetryConfig
+
+export interface RetryConfig {
+	/** 是否自动重试瞬时 Provider/网络错误 */
+	enabled: boolean;
+	/** Agent Session 级最大重试次数，0 表示不重试 */
+	maxRetries: number;
+	/** 指数退避基础时间，实际为 baseDelayMs * 2^(attempt - 1) */
+	baseDelayMs: number;
+}
+
+// #endregion
+
 // #region CompressionConfig
 
 export interface CompressionConfig {
@@ -62,6 +75,7 @@ export interface MemoryConfig {
 
 export interface VivlosConfig {
 	tool: ToolConfig;
+	retry: RetryConfig;
 	compression: CompressionConfig;
 	memory: MemoryConfig;
 }
@@ -72,6 +86,11 @@ const DEFAULT_CONFIG: VivlosConfig = {
 			"rm -rf /*": "deny",
 			"*": "allow",
 		},
+	},
+	retry: {
+		enabled: true,
+		maxRetries: 3,
+		baseDelayMs: 2000,
 	},
 	compression: {
 		threshold: 0.5,
@@ -124,6 +143,19 @@ export function loadConfig(): VivlosConfig {
 			tool: {
 				bash: { ...DEFAULT_CONFIG.tool.bash, ...userConfig.tool?.bash },
 			},
+			retry: {
+				enabled: typeof userConfig.retry?.enabled === "boolean"
+					? userConfig.retry.enabled
+					: DEFAULT_CONFIG.retry.enabled,
+				maxRetries: nonNegativeInteger(
+					userConfig.retry?.maxRetries,
+					DEFAULT_CONFIG.retry.maxRetries,
+				),
+				baseDelayMs: positiveInteger(
+					userConfig.retry?.baseDelayMs,
+					DEFAULT_CONFIG.retry.baseDelayMs,
+				),
+			},
 			compression: { ...DEFAULT_CONFIG.compression, ...userConfig.compression },
 			memory: {
 				characterLimit: {
@@ -171,6 +203,13 @@ export function loadConfig(): VivlosConfig {
 /** 配置值必须是正整数，否则回退默认值 */
 function positiveInteger(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isInteger(value) && value > 0
+		? value
+		: fallback;
+}
+
+/** 配置值必须是非负整数，否则回退默认值 */
+function nonNegativeInteger(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0
 		? value
 		: fallback;
 }

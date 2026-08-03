@@ -22,7 +22,7 @@
 
 ## Skill 使用规则
 - 以下 skill 提供特定任务的专用指引，当任务匹配描述时用 skill 工具加载完整内容
-- 第一步 skill({ name }) 加载 SKILL.md 正文 + references 列表
-- 第二步 skill({ name, reference }) 加载指定 reference 文件
+- skill Tool 只用于加载指引：首次调用只传 name，加载正文后读取 reference 时只传 name + reference
+- 不向 skill Tool 传递 prompt、query、task 或其他任务参数；加载后按照正文指引使用对应工具完成用户任务
 - 必须先加载正文才能加载 reference
 - skill 中引用的相对路径，基于 SKILL.md 所在目录解析

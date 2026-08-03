@@ -18,7 +18,15 @@ import { log } from "@vivlos/infra/logger/logger.ts";
  * 推理过程日志条目（thinking / tool），按事件顺序追加
  */
 export type LogEntry =
-	| { kind: "thinking"; text: string; done: boolean; turnIndex: number; createdAt: number; durationMs?: number }
+	| {
+			kind: "thinking";
+			text: string;
+			done: boolean;
+			outcome?: "complete" | "error" | "aborted";
+			turnIndex: number;
+			createdAt: number;
+			durationMs?: number;
+	  }
 	| {
 			kind: "tool";
 			callId: string;
@@ -43,6 +51,16 @@ export interface ConversationTurn {
 	status: "running" | "complete" | "error" | "aborted";
 	turnCount: number;
 	toolCount: number;
+	termination?: {
+		kind: "error" | "aborted";
+		message: string;
+	};
+	retry?: {
+		attempt: number;
+		maxAttempts: number;
+		delayMs: number;
+		errorMessage: string;
+	};
 	/** 最近一次 assistant 消息的 token 用量 */
 	usage?: Usage;
 }
@@ -154,6 +172,29 @@ function updateLastThinking(
 	return log;
 }
 
+/** 冻结所有未完成日志，避免终止后的计时和 spinner 继续运行。 */
+function finishPendingLog(
+	log: LogEntry[],
+	outcome: "complete" | "error" | "aborted",
+	reason = "",
+	endedAt = Date.now(),
+): LogEntry[] {
+	return log.map((entry) => {
+		if (entry.kind === "thinking" && !entry.done) {
+			return {
+				...entry,
+				done: true,
+				outcome,
+				durationMs: Math.max(0, endedAt - entry.createdAt),
+			};
+		}
+		if (outcome !== "complete" && entry.kind === "tool" && !entry.done) {
+			return { ...entry, done: true, success: false, result: reason };
+		}
+		return entry;
+	});
+}
+
 function completeTool(
 	log: LogEntry[],
 	callId: string,
@@ -210,7 +251,14 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 			for (const c of msg.content) {
 				if (c.type === "thinking") {
 					const t = (c as unknown as Record<string, string>).thinking ?? "";
-					cur.log.push({ kind: "thinking", text: t, done: true, turnIndex, createdAt: msg.timestamp });
+					cur.log.push({
+						kind: "thinking",
+						text: t,
+						done: true,
+						outcome: "complete",
+						turnIndex,
+						createdAt: msg.timestamp,
+					});
 				}
 				if (c.type === "toolCall") {
 					cur.toolCount++;
@@ -226,6 +274,12 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 						createdAt: msg.timestamp,
 					});
 				}
+			}
+			if (msg.stopReason === "error" || msg.stopReason === "aborted") {
+				const message = msg.errorMessage ?? `LLM ${msg.stopReason}`;
+				cur.status = msg.stopReason;
+				cur.termination = { kind: msg.stopReason, message };
+				cur.log = finishPendingLog(cur.log, msg.stopReason, message, msg.timestamp);
 			}
 		} else if (msg.role === "toolResult" && cur) {
 			cur.log = completeTool(
@@ -259,6 +313,7 @@ export function useAgent(
 	const currentIdxRef = useRef(-1);
 	const currentSessionRef = useRef<CurrentSessionState | null>(null);
 	const consolidateRunRef = useRef(0);
+	const abortRef = useRef<AbortController | null>(null);
 	// 暂存 loop turn 的 usage，conversationTurn 结束时才提交
 	const latestUsageRef = useRef<Usage | undefined>(undefined);
 	useEffect(() => {
@@ -510,6 +565,7 @@ export function useAgent(
 						log: updateLastThinking(t.log, (entry) => ({
 							...entry,
 							done: true,
+							outcome: "complete",
 							durationMs: Date.now() - entry.createdAt,
 						})),
 					})),
@@ -528,6 +584,7 @@ export function useAgent(
 						log: updateLastThinking(t.log, (entry) => ({
 							...entry,
 							done: true,
+							outcome: "complete",
 							durationMs: Date.now() - entry.createdAt,
 						})),
 					})),
@@ -540,6 +597,50 @@ export function useAgent(
 		eventBus.on("agent:message_complete", (e) => {
 			if (!isCurrentSession(e.sessionId)) return;
 			if (e.usage) latestUsageRef.current = e.usage;
+			setTurns((prev) =>
+				updateCurrent(prev, currentIdxRef.current, (t) => t.status === "running"
+					? {
+						...t,
+						log: finishPendingLog(
+							t.log,
+							e.outcome,
+							e.errorMessage ?? "",
+						),
+					}
+					: t),
+			);
+		}),
+	);
+
+	unsubs.push(
+		eventBus.on("agent:retry_start", (e) => {
+			if (!isCurrentSession(e.sessionId)) return;
+			setTurns((prev) =>
+				updateCurrent(prev, currentIdxRef.current, (t) => t.status === "running"
+					? {
+						...t,
+						finalText: "",
+						retry: {
+							attempt: e.attempt,
+							maxAttempts: e.maxAttempts,
+							delayMs: e.delayMs,
+							errorMessage: e.error.message,
+						},
+					}
+					: t),
+			);
+		}),
+	);
+
+	unsubs.push(
+		eventBus.on("agent:retry_end", (e) => {
+			if (!isCurrentSession(e.sessionId)) return;
+			setTurns((prev) =>
+				updateCurrent(prev, currentIdxRef.current, (t) => ({
+					...t,
+					retry: undefined,
+				})),
+			);
 		}),
 	);
 
@@ -547,21 +648,22 @@ export function useAgent(
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
-				setLoading(false);
 
-				// setTurns 异步执行，先捕获 idx 和 usage 避免重置后找不到
+				// setTurns 异步执行，先捕获 idx 和 usage。
 				const idx = currentIdxRef.current;
 				const finalUsage = latestUsageRef.current;
 				setTurns((prev) =>
-					updateCurrent(prev, idx, (t) => ({
-						...t,
-						status: "complete" as const,
-						finalText: e.finalMessage || t.finalText,
-						usage: finalUsage,
-					})),
+					updateCurrent(prev, idx, (t) => t.status === "running"
+						? {
+							...t,
+							status: "complete" as const,
+							finalText: e.finalMessage || t.finalText,
+							usage: finalUsage,
+							log: finishPendingLog(t.log, "complete"),
+							retry: undefined,
+						}
+						: t),
 				);
-				// 重置
-				currentIdxRef.current = -1;
 				latestUsageRef.current = undefined;
 			}),
 		);
@@ -570,20 +672,21 @@ export function useAgent(
 		unsubs.push(
 			eventBus.on("agent:error", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
-				setLoading(false);
 
-				const isAborted = e.error.message.toLowerCase().includes("abort");
-				if (!isAborted) log("error", e.error.message, e.error, true);
+				if (e.kind === "error") log("error", e.error.message, e.error, true);
 
 				const idx = currentIdxRef.current;
 				setTurns((prev) =>
-					updateCurrent(prev, idx, (t) => ({
-						...t,
-						status: isAborted ? ("aborted" as const) : ("error" as const),
-					})),
+					updateCurrent(prev, idx, (t) => t.status === "running"
+						? {
+							...t,
+							status: e.kind,
+							termination: { kind: e.kind, message: e.error.message },
+							log: finishPendingLog(t.log, e.kind, e.error.message),
+							retry: undefined,
+						}
+						: t),
 				);
-				// 重置 turns 下标
-				currentIdxRef.current = -1;
 			}),
 		);
 
@@ -594,12 +697,12 @@ export function useAgent(
 	// #endregion
 
 	// #region Callbacks
-	const abortRef = useRef<AbortController | null>(null);
-
 	const submit = useCallback(
 		(text: string) => {
-			if (!text.trim()) return;
-			currentIdxRef.current = conversationTurns.length; // 注意 turns 数组不能被清空，ConversationView 会渲染所有 turns，从而保留终端历史。
+			if (!text.trim() || loading || abortRef.current) return;
+			const idx = conversationTurns.length;
+			currentIdxRef.current = idx; // 注意 turns 数组不能被清空，ConversationView 会渲染所有 turns，从而保留终端历史。
+			setLoading(true);
 
 			setTurns((prev) => [
 				...prev,
@@ -619,35 +722,46 @@ export function useAgent(
 
 			agent
 				.prompt(text, controller.signal)
-				.then((result) => {
-					// 如果 loop 返回了 error 但没走 catch（比如 turn_end 里的 error 事件）
-				if (result.error && !controller.signal.aborted) {
-					log("error", result.error.message, result.error, true);
-				}
-			})
-			.catch((err) => {
-				log("error", `fatal: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err : undefined, true);
+				.catch((err) => {
+					const error = err instanceof Error ? err : new Error(String(err));
+					const kind = controller.signal.aborted ? "aborted" : "error";
+					if (kind === "error") log("error", `fatal: ${error.message}`, error, true);
+					setTurns((prev) =>
+						updateCurrent(prev, idx, (t) => t.status === "running"
+							? {
+								...t,
+								status: kind,
+								termination: { kind, message: error.message },
+								log: finishPendingLog(t.log, kind, error.message),
+							}
+							: t),
+					);
+				})
+				.finally(() => {
+					if (abortRef.current === controller) abortRef.current = null;
+					if (currentIdxRef.current === idx) currentIdxRef.current = -1;
 					setLoading(false);
-					currentIdxRef.current = -1;
 				});
 		},
-		[agent, conversationTurns.length],
+		[agent, conversationTurns.length, loading],
 	);
 
 	/** 打断当前 LLM 调用 */
 	const abort = useCallback(() => {
-		if (abortRef.current) {
-			abortRef.current.abort();
-			abortRef.current = null;
-			setLoading(false);
+		const controller = abortRef.current;
+		if (controller && !controller.signal.aborted) {
+			controller.abort();
 			const idx = currentIdxRef.current;
 			setTurns((prev) =>
-				updateCurrent(prev, idx, (t) => ({
-					...t,
-					status: "aborted" as const,
-				})),
+				updateCurrent(prev, idx, (t) => t.status === "running"
+					? {
+						...t,
+						status: "aborted" as const,
+						termination: { kind: "aborted", message: "用户主动中断" },
+						log: finishPendingLog(t.log, "aborted", "用户主动中断"),
+					}
+					: t),
 			);
-			currentIdxRef.current = -1;
 		}
 	}, []);
 
