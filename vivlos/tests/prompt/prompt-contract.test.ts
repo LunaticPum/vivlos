@@ -24,6 +24,9 @@ describe("Main agent prompt contract", () => {
 		const prompt = createPromptBuilder().build();
 
 		for (const required of [
+			"同一轮发出全部 Tool Call",
+			"依赖前一个 Tool Result 时才分轮执行",
+			"重新核对本轮用户请求",
 			"必须使用 memory Tool",
 			"只有对应 Tool Result 确认成功",
 			"只在当前 Session 生效",
@@ -40,6 +43,9 @@ describe("Main agent prompt contract", () => {
 		expect(memoryDescription).toContain("add");
 		expect(memoryDescription).toContain("replace");
 		expect(memoryDescription).toContain("remove");
+		expect(memoryDescription).toContain("用户明确要求记住、纠正或遗忘时必须调用");
+		expect(memoryDescription).toContain("Thought 中计划写入不代表已完成");
+		expect(memoryDescription).toContain("只有成功的 Tool Result");
 		expect(memoryDescription).not.toContain("每个未来 session");
 		expect(memoryDescription).not.toContain("已完成工作");
 	});
@@ -61,6 +67,8 @@ describe("Main agent prompt contract", () => {
 		expect(taskDescription).not.toContain("记住这个目标");
 		expect(todoDescriptions.write).toContain("当前 Session");
 		expect(todoDescriptions.write).toContain("创建");
+		expect(todoDescriptions.write).toContain("不要传字符串");
+		expect(todoDescriptions.replace).toContain("不要传字符串");
 		expect(todoDescriptions.modify).toContain("Item");
 		expect(prompt).toContain("Todo 只跟踪当前 Session 的执行进度，不写入 memory");
 	});

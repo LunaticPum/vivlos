@@ -14,7 +14,7 @@ import {
 	readTitleInput,
 	type SessionManager,
 } from "./session/index.ts";
-import { createMaxTurnsHook, type LoopHooks } from "./loop/hooks/index.ts";
+import type { LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
 import { buildTodoHint } from "./tools/advanced/todo/hint.ts";
@@ -60,7 +60,7 @@ export interface CreateAgentParams {
  *
  * 职责：
  * - 装配 session / prompt / tools / memory 各组件
- * - 合并内置 hook（maxTurns）+ 外部 hook
+ * - 注入外部 loop hook；maxTurns 由主循环按请求处理
  * - 创建 agentLoop 并包装为 VivlosAgent 公共接口
  */
 export function createAgent(params: CreateAgentParams): VivlosAgent {
@@ -69,12 +69,6 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 
 	const sessionManager = params.sessionManager ?? createSessionManager();
 	const promptBuilder = params.promptBuilder ?? createPromptBuilder();
-	const hooks: LoopHooks = {
-		// 内置 hook
-		...createMaxTurnsHook(maxTurns),
-		// 外部 hook（steering / follow-up 等）
-		...params.hooks,
-	};
 	const tools = params.tools;
 	const titleTasks = new Set<string>();
 	/** 安全读取当前 Session Todo；undefined 表示未配置或读取失败。 */
@@ -96,7 +90,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		memoryRuntime: params.memoryRuntime,
 		sessionManager,
 		promptBuilder,
-		hooks,
+		hooks: params.hooks,
 		tools,
 	});
 	const publishSessionState = () => {

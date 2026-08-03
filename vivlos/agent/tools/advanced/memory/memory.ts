@@ -107,7 +107,7 @@ export function createMemoryTool(
 			);
 			deps.onCapacityExceeded?.(command, result);
 			if (!result.ok) {
-				return err(result.error.message, result);
+				throw new ToolError(`[${result.error.code}] ${result.error.message}`, "memory");
 			}
 			return ok(formatSuccess(command, result), result);
 		},
@@ -125,18 +125,6 @@ function ok(
 ): AgentToolResult<MemoryToolDetails> {
 	return {
 		content: [{ type: "text", text: message }],
-		details: { message, result },
-	};
-}
-
-/** 构造错误结果 */
-function err(
-	message: string,
-	result?: MemoryServiceResult,
-): AgentToolResult<MemoryToolDetails> {
-	const code = result && !result.ok ? `[${result.error.code}] ` : "";
-	return {
-		content: [{ type: "text", text: `错误：${code}${message}` }],
 		details: { message, result },
 	};
 }

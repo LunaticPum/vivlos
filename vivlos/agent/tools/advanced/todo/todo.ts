@@ -183,7 +183,7 @@ function createTodoWriteTool(
 		description: descriptions.write,
 		label: "创建 Todo",
 		parameters: Write,
-		prepareArguments: (args) => prepareTodoItems(args) as Static<typeof Write>,
+		prepareArguments: (args) => prepareTodoItems(args, "todo_write") as Static<typeof Write>,
 		executionMode: "sequential",
 		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
 			return executeWrite(deps, deps.getSessionId(), deps.getSessionDir(), params);
@@ -199,7 +199,7 @@ function createTodoReplaceTool(
 		description: descriptions.replace,
 		label: "替换 Todo",
 		parameters: Replace,
-		prepareArguments: (args) => prepareTodoItems(args) as Static<typeof Replace>,
+		prepareArguments: (args) => prepareTodoItems(args, "todo_replace") as Static<typeof Replace>,
 		executionMode: "sequential",
 		async execute(_toolCallId, params): Promise<AgentToolResult<TodoToolDetails>> {
 			return executeReplace(deps, deps.getSessionId(), deps.getSessionDir(), params);
@@ -334,14 +334,22 @@ function executeDelete(
 }
 
 /** 兼容少数模型把 todo_write/todo_replace items 序列化为 JSON 字符串的情况。 */
-function prepareTodoItems(args: unknown): unknown {
+function prepareTodoItems(args: unknown, toolName: "todo_write" | "todo_replace"): unknown {
 	if (!isObject(args) || typeof args.items !== "string") return args;
 
 	try {
 		const items = JSON.parse(args.items);
-		return Array.isArray(items) ? { ...args, items } : args;
-	} catch {
-		return args;
+		if (!Array.isArray(items)) {
+			throw new ToolError("items 解析后必须是 JSON 数组", toolName);
+		}
+		return { ...args, items };
+	} catch (error) {
+		if (error instanceof ToolError) throw error;
+		throw new ToolError(
+			'items 必须直接传 JSON 数组，不要传字符串；priority 必须是 "high"、"medium" 或 "low"',
+			toolName,
+			error instanceof Error ? error : undefined,
+		);
 	}
 }
 

@@ -14,6 +14,7 @@ import type { SessionManager } from "@vivlos/agent/session/index.ts";
 import type { MemoryRuntime } from "@vivlos/agent/memory/index.ts";
 import type { PromptBuilder } from "@vivlos/agent/prompt/types.ts";
 import type { LoopHooks } from "@vivlos/agent/loop/hooks/index.ts";
+import { createMaxTurnsHook } from "@vivlos/agent/loop/hooks/max-turns.ts";
 import {
 	compact,
 	type CompactorDeps,
@@ -86,6 +87,11 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			config: LoopConfig,
 		): Promise<LoopResult> {
 			// #region 请求准备
+			let unconsumedToolResultAtLimit = false;
+			const maxTurnsHook = createMaxTurnsHook(
+				config.maxTurns,
+				() => { unconsumedToolResultAtLimit = true; },
+			);
 
 			// --- 1. 构造 user message(s) ---
 			const rawPrompts: AgentMessage[] =
@@ -166,6 +172,8 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 			let preparedContext: AgentContext | undefined;
 			let preparedLoopConfig: AgentLoopConfig | undefined;
 			let activeLoopConfig: AgentLoopConfig;
+			let finalizedToolsThisTurn = 0;
+			let allFinalizedToolsTerminate = true;
 			const loopConfig: AgentLoopConfig = {
 				model: config.model,
 				reasoning: config.reasoning,
@@ -179,6 +187,29 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 					);
 				},
 				...params.hooks,
+				afterToolCall: async (toolContext, signal) => {
+					const external = await params.hooks?.afterToolCall?.(toolContext, signal);
+					finalizedToolsThisTurn++;
+					allFinalizedToolsTerminate &&=
+						(external?.terminate ?? toolContext.result.terminate) === true;
+					return external;
+				},
+				shouldStopAfterTurn: async (turnContext) => {
+					const allToolResultsTerminate = turnContext.toolResults.length > 0 &&
+						finalizedToolsThisTurn === turnContext.toolResults.length &&
+						allFinalizedToolsTerminate;
+					try {
+						const externalStop = await params.hooks?.shouldStopAfterTurn?.(turnContext);
+						if (externalStop) return true;
+						return maxTurnsHook.shouldStopAfterTurn(
+							turnContext,
+							turnContext.toolResults.length > 0 && !allToolResultsTerminate,
+						);
+					} finally {
+						finalizedToolsThisTurn = 0;
+						allFinalizedToolsTerminate = true;
+					}
+				},
 				prepareNextTurn: async (turnContext) => {
 					const external = await params.hooks?.prepareNextTurn?.(turnContext);
 					const currentLoopConfig = preparedLoopConfig ?? activeLoopConfig;
@@ -301,6 +332,34 @@ export function createAgentLoop(params: CreateAgentLoopParams) {
 							(message) => !isTransientMessage(message, transientIds),
 						),
 					);
+
+					if (!failure && config.signal?.aborted) {
+						const error = new Error("Agent 操作已中止");
+						persistenceAttempted = true;
+						persistCanonicalMessages(sessionManager, canonicalMessages);
+						deps.eventBus.emit({
+							type: "agent:error",
+							sessionId: sessionManager.id,
+							kind: "aborted",
+							error,
+						});
+						return { messages: canonicalMessages, turns: turn, error };
+					}
+
+					if (!failure && unconsumedToolResultAtLimit) {
+						const error = new Error(
+							`Agent 达到最大轮次 ${config.maxTurns}，最后一个 Tool Result 尚未交给模型处理`,
+						);
+						persistenceAttempted = true;
+						persistCanonicalMessages(sessionManager, canonicalMessages);
+						deps.eventBus.emit({
+							type: "agent:error",
+							sessionId: sessionManager.id,
+							kind: "error",
+							error,
+						});
+						return { messages: canonicalMessages, turns: turn, error };
+					}
 
 					if (!failure) {
 						// 最终成功：一次性提交所有有效消息，再结束顶层 Conversation。
