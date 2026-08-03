@@ -1,5 +1,8 @@
 ﻿# Vivlos Agent 架构
 
+> [!CAUTION]
+> 本文档为历史设计记录，已经过时，不代表当前 Vivlos 实现。
+
 > 基于 `01-arch.md`（Hermes 架构详解）和 `02-memory.md`（Hermes Memory 四层体系）的深度研读。
 >
 > **更新历史**：初版对比分析 -> P0-A/P0-B 完成 -> Compression UX 完成 -> 长期目标规划

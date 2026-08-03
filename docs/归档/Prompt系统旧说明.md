@@ -1,5 +1,8 @@
 # Prompt 系统
 
+> [!CAUTION]
+> 本文档为旧版实现说明，已经归档。当前机制请阅读 [智能体运行机制](../智能体运行机制.md)。
+
 ## 概述
 
 vivlos 的 system prompt 采用全 XML 格式，每个段落用 XML 标签包裹，内容 tab 缩进。

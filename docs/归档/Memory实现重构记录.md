@@ -1,5 +1,8 @@
 # Memory Refactor
 
+> [!CAUTION]
+> 本文档为阶段性实现记录，后续代码和设计已有调整，不作为当前行为说明。
+
 ## 1. 文档目标
 
 本文定义 Vivlos 当前 Memory 实现。实现位于 `agent/memory/`；旧模块已删除，当前模块不沿用其结构。

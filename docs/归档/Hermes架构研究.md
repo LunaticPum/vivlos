@@ -1,5 +1,8 @@
 # Hermes Agent 架构详解
 
+> [!CAUTION]
+> 本文档为外部项目研究记录，仅用于设计参考，不代表当前 Vivlos 实现。
+
 https://www.youtube.com/watch?v=n32qq7Kwzh0&t=488s
 
 本文从鸟瞰全貌出发，依次讲清：Agent Loop、Context（Session 冻结 vs Turn 组装）、Compression、Gateway、Memory、Cron。目标是既理解如何使用 Hermes，也能照着思路自己搭一套类似系统。贯穿主线：**Session 管稳定前缀与历史容器，Turn 管每一轮 Build Context / 压缩检查 / 写盘。**

@@ -40,7 +40,7 @@ Vivlos 面向希望在终端中使用大模型完成信息检索、文件处理�
 4. **Skill 扩展**：按需加载 Skill 指引；内置 Tavily CLI 扩展可用于搜索、网页提取、站点映射、抓取和深度研究。
 5. **会话管理**：支持新建、切换、删除、重命名和自动标题，并通过 JSONL 恢复历史消息。
 6. **上下文压缩**：支持自动压缩和手动 `/compact`，在长对话中保留关键事实、进度与后续步骤。
-7. **Session Memory**：使用 `memory.md` 和 `user.md` 保存当前 Session 的稳定项目事实与用户偏好，包含容量限制、安全扫描和操作记录。
+7. **分层 Memory**：当前使用 `memory.md` 和 `user.md` 实现 Session-local L1，并为历史检索、外部 Provider 和文件知识库保留 L2-L4 设计。
 8. **任务规划**：提供结构化 Todo List、状态推进和侧栏查看，并支持交互式选项确认。
 9. **本地持久化**：Provider、Model、凭证和自定义服务配置保存在本地 SQLite；Session、Memory 与 Todo 保存在当前工作目录。
 10. **运行时控制**：提供重试、最大轮次、Bash 权限和压缩策略等配置边界。
@@ -151,13 +151,14 @@ Vivlos 的运行数据默认位于当前 Workspace 的 `.vivlos/`：
 .vivlos/
 ├── config.json            # Workspace 运行配置
 ├── vivlos.db              # Provider、Model 与凭证数据
-├── logs/                  # 运行日志
-└── sessions/
-    └── <session-id>/
-        ├── history.jsonl  # 对话与 Tool Result
-        ├── memory.md      # 项目和环境记忆
-        ├── user.md        # 用户偏好
-        └── todos.json     # 当前 Todo List
+├── sessions/
+│   └── <session-id>/
+│       ├── history.jsonl  # 对话与 Tool Result
+│       ├── memory.md      # 项目和环境记忆
+│       ├── user.md        # 用户偏好
+│       └── todos.json     # 当前 Todo List
+├── tasks/                 # 跨 Session Task
+└── temp/                  # 临时文件
 ```
 
 Memory 和 Todo 当前均以 Session 为边界，不承诺跨 Session 自动继承。
@@ -177,22 +178,19 @@ bun test
 
 ## 项目文档
 
-模块文档将统一整理到根目录 `docs/`，正文与文件名均使用中文。现有散落文档会作为实现参考，过时内容集中归档并明确标注，不直接作为当前行为说明。
+完整目录见 [Vivlos 文档](./docs/README.md)。
 
-计划整理的主题包括：
+| 文档 | 内容 |
+| --- | --- |
+| [使用指南](./docs/使用指南.md) | 源码启动、模型配置、终端操作和本地数据 |
+| [整体架构](./docs/整体架构.md) | 分层结构、核心模块和请求链路 |
+| [智能体运行机制](./docs/智能体运行机制.md) | Prompt、Agent Turn、Tool Call、重试与终止语义 |
+| [上下文与会话](./docs/上下文与会话.md) | Session、History、上下文组装和压缩机制 |
+| [记忆机制](./docs/记忆机制.md) | L1-L4 四层 Memory 目标设计与当前实现 |
+| [任务规划](./docs/任务规划.md) | Todo、Task 和 Offer Choice |
+| [工具与技能](./docs/工具与技能.md) | Tool 协议、权限、Builtin/Advanced Tools 和 Skill |
 
-- Agent 整体架构与请求生命周期
-- 上下文压缩机制
-- Session Memory 机制
-- Todo 与任务规划机制
-- Tool 执行与错误协议
-- Prompt 构建系统
-- Session 管理与本地存储
-- Provider 与 Model 管理
-- Skill 扩展机制
-- OpenTUI 界面与交互
-
-对应文档完成后，本节将提供可直接跳转的目录链接。
+早期研究与旧版方案已集中到 [历史归档](./docs/归档/)，不代表当前行为。
 
 ## 开发状态
 
@@ -205,6 +203,7 @@ bun test
 - Delegation 与多 Agent 协作
 - Scheduler 与后台任务
 - Task 的完整侧栏工作流
+- L2-L4 Memory 的检索、Provider 与知识库实现
 - 跨平台安装包与容器部署
 
 ## 参与开发

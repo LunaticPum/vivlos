@@ -1,5 +1,8 @@
 # Vivlos Tool 定义规范
 
+> [!CAUTION]
+> 本文档为阶段性 Tool 规范，已经归档。当前说明请阅读 [工具与技能](../工具与技能.md)。
+
 本文规定 Vivlos Agent Tool 的 schema、description、参数兼容、执行边界、错误语义和验证方式。后续新增或重构 Tool 时应先按本文设计，再进入实现。
 
 规范以 pi 的生产 Tool 实现为主要参考：

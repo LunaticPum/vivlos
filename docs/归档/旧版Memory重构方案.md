@@ -1,5 +1,8 @@
 # Vivlos Memory 重构设计
 
+> [!CAUTION]
+> 本文档为旧版重构方案，已经过时，不代表当前 Vivlos 实现。
+
 ## 1. 文档目标
 
 本文定义 Vivlos L1 Memory 的下一版实现，作为后续代码重构和任务拆分的依据。
