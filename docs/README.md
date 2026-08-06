@@ -26,6 +26,7 @@
 | [智能体运行机制](./智能体运行机制.md) | Prompt、Agent Turn、Tool Call、重试与终止语义 |
 | [上下文与会话](./上下文与会话.md) | Session、History、上下文组装和压缩机制 |
 | [记忆机制](./记忆机制.md) | L1-L4 四层 Memory 目标设计与当前实现状态 |
+| [Memory 模块文档](./memory/README.md) | Memory 开发规范集：架构管线与 S0-S4 Spec |
 | [任务规划](./任务规划.md) | Todo、Task 和 Offer Choice 的职责与状态模型 |
 | [工具与技能](./工具与技能.md) | Tool 协议、Builtin/Advanced Tools、权限和 Skill |
 

@@ -13,7 +13,7 @@
 
 </div>
 
-Vivlos 面向希望在终端中使用大模型完成信息检索、文件处理、任务规划和多步骤操作的用户。它将模型调用、工具执行、会话管理、上下文压缩与可控记忆整合在同一个终端界面中，并通过清晰的运行时边界保留本地状态。
+Vivlos 面向希望在终端中使用大模型（LLM）完成信息检索、文件处理、任务规划和多步骤操作的用户。它将模型调用、工具执行、会话管理、上下文压缩与可控记忆整合在同一个终端界面中，并通过清晰的运行时边界保留本地状态。
 
 > [!IMPORTANT]
 > Vivlos 当前处于早期开发阶段，暂未发布稳定安装包。本仓库现阶段仅提供源码运行方式，接口、配置和交互仍可能调整。
@@ -34,15 +34,15 @@ Vivlos 面向希望在终端中使用大模型完成信息检索、文件处理�
 
 ## 主要能力
 
-1. **终端交互界面**：基于 OpenTUI 和 React 构建，支持流式回复、Thinking 展示、Tool Call 状态和请求中止。
-2. **多模型接入**：通过 pi-ai 管理模型与凭证，支持切换 Provider 和 Model，并可添加 OpenAI Compatible 或 Anthropic Compatible 服务。
-3. **Agent 工具系统**：内置文件读取与写入、Shell、目录浏览、文本搜索和文件查找等基础工具。
-4. **Skill 扩展**：按需加载 Skill 指引；内置 Tavily CLI 扩展可用于搜索、网页提取、站点映射、抓取和深度研究。
-5. **会话管理**：支持新建、切换、删除、重命名和自动标题，并通过 JSONL 恢复历史消息。
+1. **终端交互界面**：基于 OpenTUI（终端 UI 框架）和 React 构建，支持流式回复、Thinking（思考过程）展示、Tool Call（工具调用）状态和请求中止。
+2. **多模型接入**：通过 pi-ai（模型接入库）管理模型与凭证，支持切换 Provider（模型服务商）和 Model（模型），并可添加 OpenAI Compatible 或 Anthropic Compatible（兼容接口）服务。
+3. **Agent 工具系统**：内置文件读取与写入、Shell（命令行）、目录浏览、文本搜索和文件查找等基础工具。
+4. **Skill（技能）扩展**：按需加载 Skill 指引；内置 Tavily CLI 扩展可用于搜索、网页提取、站点映射、抓取和深度研究。
+5. **会话管理**：支持新建、切换、删除、重命名和自动标题，并通过 JSONL（逐行 JSON 文件）恢复历史消息。
 6. **上下文压缩**：支持自动压缩和手动 `/compact`，在长对话中保留关键事实、进度与后续步骤。
-7. **分层 Memory**：当前使用 `memory.md` 和 `user.md` 实现 Session-local L1，并为历史检索、外部 Provider 和文件知识库保留 L2-L4 设计。
-8. **任务规划**：提供结构化 Todo List、状态推进和侧栏查看，并支持交互式选项确认。
-9. **本地持久化**：Provider、Model、凭证和自定义服务配置保存在本地 SQLite；Session、Memory 与 Todo 保存在当前工作目录。
+7. **分层 Memory（记忆）**：L1 使用 `memory.md` 和 `user.md` 保存当前会话的稳定事实；L2 通过 `session_search` 跨会话检索历史对话；L3 外部记忆服务与 L4 文件知识库已有设计、尚未实现。
+8. **任务规划**：提供结构化 Todo List（待办清单）、状态推进和侧栏查看，并支持交互式选项确认。
+9. **本地持久化**：Provider、Model、凭证和自定义服务配置保存在本地 SQLite（嵌入式数据库）；Session（会话）、Memory 与 Todo 保存在当前工作目录。
 10. **运行时控制**：提供重试、最大轮次、Bash 权限和压缩策略等配置边界。
 
 ## 快速开始
@@ -51,7 +51,7 @@ Vivlos 面向希望在终端中使用大模型完成信息检索、文件处理�
 
 - [Bun](https://bun.sh/) 1.3 或更高版本
 - 支持现代终端控制能力的终端程序
-- 至少一个可用的 LLM Provider API Key
+- 至少一个可用的 LLM Provider API Key（模型服务商的接口凭证）
 
 ### 获取源码
 
@@ -111,10 +111,10 @@ API Key 和本地运行数据不应提交到版本控制。仓库已默认忽略
 
 | 模块 | 技术 |
 | --- | --- |
-| Runtime | Bun |
+| Runtime（运行时） | Bun |
 | 语言 | TypeScript |
 | 终端界面 | OpenTUI、React |
-| Agent Loop | pi-agent-core |
+| Agent Loop（智能体主循环） | pi-agent-core |
 | 模型接入 | pi-ai |
 | 本地数据库 | `bun:sqlite` |
 | 结构化配置 | JSON、YAML、dotenv |
@@ -145,12 +145,13 @@ vivlos/
 
 ## 本地数据
 
-Vivlos 的运行数据默认位于当前 Workspace 的 `.vivlos/`：
+Vivlos 的运行数据默认位于当前 Workspace（工作目录）的 `.vivlos/`：
 
 ```text
 .vivlos/
 ├── config.json            # Workspace 运行配置
 ├── vivlos.db              # Provider、Model 与凭证数据
+├── memory.db              # L2 历史会话索引（可删除重建）
 ├── sessions/
 │   └── <session-id>/
 │       ├── history.jsonl  # 对话与 Tool Result
@@ -161,7 +162,7 @@ Vivlos 的运行数据默认位于当前 Workspace 的 `.vivlos/`：
 └── temp/                  # 临时文件
 ```
 
-Memory 和 Todo 当前均以 Session 为边界，不承诺跨 Session 自动继承。
+L1 Memory 和 Todo 当前均以 Session 为边界，不承诺跨 Session 自动继承；跨 Session 的历史细节可通过 `session_search`（L2）按需检索。
 
 ## 常用命令
 
@@ -173,7 +174,7 @@ bun run dev
 bun run typecheck
 
 # 运行当前逻辑测试
-bun test
+bun run test
 ```
 
 ## 项目文档
@@ -203,7 +204,7 @@ bun test
 - Delegation 与多 Agent 协作
 - Scheduler 与后台任务
 - Task 的完整侧栏工作流
-- L2-L4 Memory 的检索、Provider 与知识库实现
+- L3/L4 Memory 的 Provider 与知识库实现
 - 跨平台安装包与容器部署
 
 ## 参与开发
