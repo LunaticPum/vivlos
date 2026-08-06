@@ -1,8 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 
-const piAiSrc = resolve(__dirname, "packages/ai/src");
-
 export default defineConfig({
 	test: {
 		include: ["vivlos/tests/**/*.test.ts"],
@@ -12,16 +10,12 @@ export default defineConfig({
 			// ── vivlos 内部 alias（对应 tsconfig.json paths）──
 			// 精确匹配子路径要在通配之前
 			{
-				find: "@vivlos/shared/utils/id.ts",
-				replacement: resolve(__dirname, "vivlos/shared/utils/id.ts"),
-			},
-			{
-				find: "@vivlos/shared/utils/time.ts",
-				replacement: resolve(__dirname, "vivlos/shared/utils/time.ts"),
-			},
-			{
-				find: "@vivlos/shared/utils",
+				find: /^@vivlos\/shared\/utils$/,
 				replacement: resolve(__dirname, "vivlos/shared/utils/index.ts"),
+			},
+			{
+				find: /^@vivlos\/shared\/utils\/(.+)$/,
+				replacement: resolve(__dirname, "vivlos/shared/utils/$1"),
 			},
 			{
 				find: /^@vivlos\/shared$/,
@@ -55,27 +49,7 @@ export default defineConfig({
 				find: /^@vivlos\/entries\/(.+)$/,
 				replacement: resolve(__dirname, "vivlos/entries/$1"),
 			},
-			// ── pi SDK alias ──
-			{
-				find: "@earendil-works/pi-ai/providers/all",
-				replacement: resolve(piAiSrc, "providers/all.ts"),
-			},
-			{
-				find: "@earendil-works/pi-ai/compat",
-				replacement: resolve(piAiSrc, "compat.ts"),
-			},
-			{
-				find: /^@earendil-works\/pi-ai$/,
-				replacement: resolve(piAiSrc, "index.ts"),
-			},
-			{
-				find: /^@earendil-works\/pi-agent-core$/,
-				replacement: resolve(__dirname, "packages/agent/src/index.ts"),
-			},
-			{
-				find: /^@earendil-works\/pi-tui$/,
-				replacement: resolve(__dirname, "packages/tui/src/index.ts"),
-			},
+			// pi SDK 从 node_modules 正常解析，无需 alias
 		],
 	},
 });

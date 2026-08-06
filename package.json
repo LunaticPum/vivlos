@@ -7,7 +7,7 @@
 	},
 	"scripts": {
 		"dev": "bun --watch run vivlos/entries/opentui/main.tsx",
-		"test": "vitest --run",
+		"test": "bun --bun vitest --run",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
