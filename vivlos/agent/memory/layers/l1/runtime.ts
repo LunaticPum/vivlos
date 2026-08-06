@@ -21,7 +21,7 @@ import { resolveModel } from "@vivlos/infra/llm/provider.ts";
 import { createMemoryService, type MemoryService, type MemoryServiceResult } from "./service.ts";
 import { createRunner, type Runner } from "./consolidator/runner.ts";
 import { checkTrigger } from "./consolidator/trigger.ts";
-import { createL1 } from "./layers/l1.ts";
+import { createL1 } from "./prompt.ts";
 import type { MainMemoryCommand } from "./memory.ts";
 
 export interface MemoryRuntimeDeps {

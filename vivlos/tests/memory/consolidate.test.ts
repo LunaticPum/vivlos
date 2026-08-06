@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
 	applyConsolidationCommand,
 	type ConsolidationLogicResult,
-} from "@vivlos/agent/memory/consolidate.ts";
+} from "@vivlos/agent/memory/layers/l1/consolidate.ts";
 
 function expectErrorCode(
 	result: ConsolidationLogicResult,

@@ -20,8 +20,8 @@ import {
 	scanContent,
 	type SecurityViolation,
 	type SecurityViolationCode,
-} from "./security.ts";
-import type { MemoryAction, MemoryActor } from "./types.ts";
+} from "../../security.ts";
+import type { MemoryAction, MemoryActor } from "../../types.ts";
 
 import type {
 	EventBus,

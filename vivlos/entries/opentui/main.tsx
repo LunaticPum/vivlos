@@ -32,7 +32,13 @@ import {
 import { ensureConfig, loadConfig } from "@vivlos/infra/config/index.ts";
 import { checkPiAiVersion } from "@vivlos/infra/version.ts";
 import { createMemoryEventLogger } from "@vivlos/agent/memory/utils/event-logger.ts";
-import { createMemoryRuntime } from "@vivlos/agent/memory/index.ts";
+import {
+	createMemoryRuntime,
+	createMemoryCoordinator,
+} from "@vivlos/agent/memory/index.ts";
+import { createL2Indexer } from "@vivlos/agent/memory/layers/l2/indexer.ts";
+import { createL2SearchService } from "@vivlos/agent/memory/layers/l2/search.ts";
+import { getL2Db, readL2Overview } from "@vivlos/infra/storage/memory/index.ts";
 
 // -- 上游业务 --
 import { createAgent, createPromptBuilder } from "@vivlos/agent/index.ts";
@@ -128,6 +134,32 @@ async function main(): Promise<void> {
 		limits: config.memory.characterLimit,
 		config: config.memory.consolidator,
 	});
+	const memoryCoordinator = createMemoryCoordinator();
+
+	// ── L2 会话检索（索引 + session_search）──
+	const l2Enabled = config.memory.l2.enabled;
+	const l2Indexer = l2Enabled ? createL2Indexer() : null;
+	const l2SearchService = l2Enabled ? createL2SearchService() : null;
+	const publishL2Overview = () => {
+		if (!l2Enabled) return;
+		eventBus.emit({
+			type: "memory:l2_overview",
+			overview: readL2Overview(getL2Db()),
+		});
+	};
+	if (l2Indexer) {
+		memoryCoordinator.onAfterTurn((context) => {
+			l2Indexer.upsertSession(context.sessionId);
+			publishL2Overview();
+		});
+		memoryCoordinator.onSessionDelete((sessionId) => {
+			l2Indexer.removeSession(sessionId);
+			publishL2Overview();
+		});
+		eventBus.on("memory:overview_requested", () => publishL2Overview());
+		l2Indexer.backfill(config.memory.l2.backfillSessionLimit);
+		publishL2Overview();
+	}
 	const disposeMemoryLogger = createMemoryEventLogger(
 		eventBus,
 		(sessionId) => sessionManager.resolveDir(sessionId) ?? sessionManager.dirPath,
@@ -148,6 +180,7 @@ async function main(): Promise<void> {
 			memoryRuntime.getOperationContext(command, reasonCode, reason),
 		onMemoryResult: (command, result) =>
 			memoryRuntime.recordMainResult(command, result),
+		getL2SearchService: l2SearchService ? () => l2SearchService : undefined,
 	});
 	const tools = [...builtinTools, ...advancedTools];
 
@@ -165,6 +198,7 @@ async function main(): Promise<void> {
 		toolsReset,
 		readTodoList: () => readTodoList(sessionManager.dirPath),
 		memoryRuntime,
+		memoryCoordinator,
 		sessionManager,
 		promptBuilder,
 		thinkingLevel: "medium",

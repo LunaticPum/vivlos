@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EventBus, TodoList } from "@vivlos/infra/eventbus/index.ts";
 import type { MemoryOverview } from "@vivlos/infra/storage/memory/index.ts";
+import type { L2Overview } from "@vivlos/infra/storage/memory/index.ts";
 import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import { log } from "@vivlos/infra/logger/logger.ts";
@@ -81,6 +82,8 @@ export interface UseAgentResult {
 	currentSession: CurrentSessionState | null;
 	sessions: readonly SessionMeta[];
 	memoryOverview: MemoryOverview | null;
+	/** L2 索引概览（Workspace 级，不随 Session 切换重置）。 */
+	l2Overview: L2Overview | null;
 	/** 当前 Session 的完整 Todo List。 */
 	todoList: TodoList | null;
 	submit: (text: string) => void;
@@ -305,6 +308,7 @@ export function useAgent(
 	const [currentSession, setCurrentSession] = useState<CurrentSessionState | null>(null);
 	const [sessions, setSessions] = useState<readonly SessionMeta[]>([]);
 	const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
+	const [l2Overview, setL2Overview] = useState<L2Overview | null>(null);
 	const [todoList, setTodoList] = useState<TodoList | null>(null);
 
 	// #region useAgent hook
@@ -359,6 +363,12 @@ export function useAgent(
 			eventBus.on("memory:overview", (event) => {
 				if (!isCurrentSession(event.overview.sessionId)) return;
 				setMemoryOverview(event.overview);
+			}),
+		);
+
+		unsubs.push(
+			eventBus.on("memory:l2_overview", (event) => {
+				setL2Overview(event.overview);
 			}),
 		);
 
@@ -811,6 +821,7 @@ export function useAgent(
 		currentSession,
 		sessions,
 		memoryOverview,
+		l2Overview,
 		todoList,
 		submit,
 		abort,

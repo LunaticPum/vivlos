@@ -6,6 +6,7 @@
 
 import stringWidth from "string-width";
 import type { TodoList } from "@vivlos/infra/eventbus/index.ts";
+import type { L2Overview } from "@vivlos/infra/storage/memory/index.ts";
 import {
 	SidebarMemory,
 	type FilePreview,
@@ -32,6 +33,7 @@ export interface SidebarPreview {
 	readonly cwd: string;
 	readonly memory: FilePreview | null;
 	readonly user: FilePreview | null;
+	readonly l2: L2Overview | null;
 }
 
 export interface SidebarProps {
@@ -99,6 +101,7 @@ export function Sidebar({
 						path: preview.path,
 						memory: preview.memory,
 						user: preview.user,
+						l2: preview.l2,
 					}}
 				/>
 			</box>

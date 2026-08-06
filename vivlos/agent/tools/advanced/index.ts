@@ -5,11 +5,13 @@ import type {
 	MemoryServiceResult,
 	MainMemoryCommand,
 } from "@vivlos/agent/memory/index.ts";
+import type { L2SearchService } from "@vivlos/agent/memory/layers/l2/search.ts";
 import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import { createTodoTools } from "./todo/todo.ts";
 import { createTaskTool } from "./task/task.ts";
 import { createOfferChoiceTool } from "./offer-choice/offer-choice.ts";
 import { createMemoryTool } from "./memory/memory.ts";
+import { createSessionSearchTool } from "./session-search/session-search.ts";
 
 /**
  * Advanced tools 的运行时依赖。
@@ -39,6 +41,10 @@ export interface AdvancedToolDeps {
 		command: MainMemoryCommand,
 		result: MemoryServiceResult,
 	) => void;
+	/** L2 会话检索服务；提供时注册 session_search Tool */
+	readonly getL2SearchService?: () => L2SearchService;
+	/** L2 默认返回条数 */
+	readonly l2MaxResults?: number;
 }
 
 /**
@@ -48,7 +54,7 @@ export interface AdvancedToolDeps {
  * 各 tool 的具体实现在各自子目录（todo/ task/ offer-choice/ memory/）。
  */
 export function createAdvancedTools(deps: AdvancedToolDeps): AgentTool<any, any>[] {
-	return [
+	const tools: AgentTool<any, any>[] = [
 		...createTodoTools(deps),
 		createTaskTool(deps),
 		createOfferChoiceTool(deps),
@@ -66,5 +72,11 @@ export function createAdvancedTools(deps: AdvancedToolDeps): AgentTool<any, any>
 				},
 			onCapacityExceeded: deps.onMemoryResult,
 		}),
-	].filter(Boolean);
+	];
+	if (deps.getL2SearchService) {
+		tools.push(
+			createSessionSearchTool({ getSearchService: deps.getL2SearchService }),
+		);
+	}
+	return tools;
 }

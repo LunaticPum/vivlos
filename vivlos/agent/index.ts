@@ -4,7 +4,10 @@ import type { Model, Api, ThinkingLevel } from "@earendil-works/pi-ai";
 
 import type { EventBus, TodoList } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
-import type { MemoryRuntime } from "@vivlos/agent/memory/index.ts";
+import type {
+	MemoryRuntime,
+	MemoryCoordinator,
+} from "@vivlos/agent/memory/index.ts";
 import type { Result } from "@vivlos/shared";
 
 import { createPromptBuilder, type PromptBuilder } from "./prompt/index.ts";
@@ -36,6 +39,8 @@ export interface CreateAgentParams {
 
 	/** 当前 session 的 Memory 运行时 */
 	readonly memoryRuntime: MemoryRuntime;
+	/** Memory 生命周期协调器（可选）；分发 beforeTurn/afterTurn/sessionDelete 钩子 */
+	readonly memoryCoordinator?: MemoryCoordinator;
 	/** PromptBuilder——组装 system prompt（可选，默认用内置模板） */
 	readonly promptBuilder?: PromptBuilder;
 	/** SessionManager——消息存储管理器（可选，默认内存实现） */
@@ -167,6 +172,12 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 						content: [{ type: "text", text: buildTodoHint(todoList) }],
 						timestamp: Date.now(),
 					}];
+			if (params.memoryCoordinator) {
+				await params.memoryCoordinator.beforeTurn({
+					sessionId,
+					userText: readTitleInput(input),
+				});
+			}
 			const result = await loop.run(input, {
 				model: currentModel,
 				maxTurns,
@@ -174,6 +185,10 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 				signal,
 				transientMessages,
 			});
+
+			if (params.memoryCoordinator) {
+				await params.memoryCoordinator.afterTurn({ sessionId });
+			}
 
 			if (!result.error && shouldTitle) {
 				requestTitle(sessionId, titleInput, currentModel);
@@ -233,6 +248,9 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 				params.memoryRuntime.reset();
 				loop.resetCompaction();
 				params.toolsReset?.();
+			}
+			if (params.memoryCoordinator) {
+				void params.memoryCoordinator.sessionDelete(sessionId);
 			}
 			params.eventBus.emit({
 				type: "session:deleted",

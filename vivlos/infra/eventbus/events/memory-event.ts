@@ -1,6 +1,9 @@
 /** Session L1 Memory 的操作终态与内容变化事件。 */
 
-import type { MemoryOverview } from "@vivlos/infra/storage/memory/index.ts";
+import type {
+	L2Overview,
+	MemoryOverview,
+} from "@vivlos/infra/storage/memory/index.ts";
 
 export interface MemoryOperationEvent {
 	readonly type: "memory:operation";
@@ -44,8 +47,15 @@ export interface MemoryOverviewEvent {
 	readonly overview: MemoryOverview;
 }
 
+/** L2 索引概览（Workspace 级，不绑定 Session）。 */
+export interface MemoryL2OverviewEvent {
+	readonly type: "memory:l2_overview";
+	readonly overview: L2Overview;
+}
+
 export type MemoryEvent =
 	| MemoryOperationEvent
 	| MemoryChangedEvent
 	| MemoryOverviewRequestedEvent
-	| MemoryOverviewEvent;
+	| MemoryOverviewEvent
+	| MemoryL2OverviewEvent;

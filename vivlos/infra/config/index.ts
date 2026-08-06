@@ -60,13 +60,26 @@ export interface ConsolidatorConfig {
 	timeoutMs: number;
 }
 
+export interface L2Config {
+	/** 是否启用 L2 会话检索（索引 + session_search） */
+	enabled: boolean;
+	/** session_search 单次默认返回条数 */
+	maxResults: number;
+	/** 单条片段最大字符数 */
+	snippetChars: number;
+	/** 启动回填的单批 Session 上限 */
+	backfillSessionLimit: number;
+}
+
 export interface MemoryConfig {
-	/** Markdown 记忆文件的字符上限 */
-	characterLimit: {
-		memory: number;
-		user: number;
-	};
-	consolidator: ConsolidatorConfig;
+  /** Markdown 记忆文件的字符上限 */
+  characterLimit: {
+    memory: number;
+    user: number;
+  };
+  consolidator: ConsolidatorConfig;
+  /** L2 会话检索配置 */
+  l2: L2Config;
 }
 
 // #endregion
@@ -113,6 +126,12 @@ const DEFAULT_CONFIG: VivlosConfig = {
 			maxTurns: 6,
 			maxTools: 8,
 			timeoutMs: 60_000,
+		},
+		l2: {
+			enabled: true,
+			maxResults: 8,
+			snippetChars: 400,
+			backfillSessionLimit: 50,
 		},
 	},
 };
@@ -191,6 +210,23 @@ export function loadConfig(): VivlosConfig {
 					timeoutMs: positiveInteger(
 						userConsolidator?.timeoutMs,
 						defaults.timeoutMs,
+					),
+				},
+				l2: {
+					enabled: typeof userConfig.memory?.l2?.enabled === "boolean"
+						? userConfig.memory.l2.enabled
+						: DEFAULT_CONFIG.memory.l2.enabled,
+					maxResults: positiveInteger(
+						userConfig.memory?.l2?.maxResults,
+						DEFAULT_CONFIG.memory.l2.maxResults,
+					),
+					snippetChars: positiveInteger(
+						userConfig.memory?.l2?.snippetChars,
+						DEFAULT_CONFIG.memory.l2.snippetChars,
+					),
+					backfillSessionLimit: positiveInteger(
+						userConfig.memory?.l2?.backfillSessionLimit,
+						DEFAULT_CONFIG.memory.l2.backfillSessionLimit,
 					),
 				},
 			},

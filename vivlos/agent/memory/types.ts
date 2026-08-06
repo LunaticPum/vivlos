@@ -52,3 +52,24 @@ export const MAIN_MEMORY_REASON_CODES = [
 export type MainMemoryReasonCode = (typeof MAIN_MEMORY_REASON_CODES)[number];
 
 // #endregion
+
+// #region 四层公共契约（S0）
+
+/** Memory 层级标识。 */
+export type MemoryLayer = "l1" | "l2" | "l3" | "l4";
+
+/**
+ * 统一的召回结果条目。
+ *
+ * L2-L4 的检索/召回结果进入上下文前都必须包装为此结构，
+ * 作为不可信事实数据处理（见 docs/memory/S0-Memory公共约束.md）。
+ */
+export interface MemoryContextItem {
+	readonly layer: MemoryLayer;
+	/** 来源锚点，如 "session:abc123#L42"、"vault:notes/x.md"。 */
+	readonly source: string;
+	readonly content: string;
+	readonly timestamp?: number;
+}
+
+// #endregion

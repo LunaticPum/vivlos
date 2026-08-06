@@ -4,7 +4,7 @@
  * 静态规则与动态数据分离；所有动态字符串只进入转义后的 XML 文本节点。
  */
 
-import { escapeForPrompt } from "../security.ts";
+import { escapeForPrompt } from "../../../security.ts";
 
 import type { TriggerDecision } from "./trigger.ts";
 import type { MemoryStorageSnapshot } from "@vivlos/infra/storage/memory/index.ts";

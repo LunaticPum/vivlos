@@ -40,7 +40,7 @@ import {
 	createMemoryRepository,
 	type MemoryLimits,
 } from "@vivlos/infra/storage/memory/index.ts";
-import type { MemoryOperationContext } from "@vivlos/agent/memory/service.ts";
+import type { MemoryOperationContext } from "@vivlos/agent/memory/layers/l1/service.ts";
 
 const LIMITS = { memory: 100, user: 100 } as const;
 const CONFIG = {

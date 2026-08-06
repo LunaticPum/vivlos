@@ -95,6 +95,7 @@ export function Workspace({
 		currentSession,
 		sessions,
 		memoryOverview,
+		l2Overview,
 		todoList,
 	} = useAgent(agent, eventBus);
 	const currentSessionId = currentSession?.id ?? "";
@@ -398,7 +399,7 @@ export function Workspace({
 					onTodoActiveChange={(active) =>
 						setSidebarSection(active ? "todo" : "none")
 					}
-					preview={{
+				preview={{
 						sessionName,
 						sessionId: currentSessionId,
 						titleGenerating: false,
@@ -406,6 +407,7 @@ export function Workspace({
 						cwd: process.cwd(),
 						memory: currentMemoryOverview?.memory ?? null,
 						user: currentMemoryOverview?.user ?? null,
+						l2: l2Overview,
 					}}
 				/>
 			)}

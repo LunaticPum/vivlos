@@ -70,6 +70,12 @@ describe("Memory Consolidator config", () => {
 				maxTools: 8,
 				timeoutMs: 60_000,
 			},
+			l2: {
+				enabled: true,
+				maxResults: 8,
+				snippetChars: 400,
+				backfillSessionLimit: 50,
+			},
 		});
 	});
 

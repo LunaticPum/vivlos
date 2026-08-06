@@ -11,7 +11,7 @@ import {
 	addEntry,
 	removeEntry,
 	replaceEntry,
-} from "@vivlos/agent/memory/memory.ts";
+} from "@vivlos/agent/memory/layers/l1/memory.ts";
 
 // #region Add
 

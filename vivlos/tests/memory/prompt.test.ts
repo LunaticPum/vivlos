@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
 import {
 	buildPrompt,
 	SYSTEM_PROMPT,
-} from "@vivlos/agent/memory/consolidator/prompt.ts";
-import type { TriggerDecision } from "@vivlos/agent/memory/consolidator/trigger.ts";
+} from "@vivlos/agent/memory/layers/l1/consolidator/prompt.ts";
+import type { TriggerDecision } from "@vivlos/agent/memory/layers/l1/consolidator/trigger.ts";
 import type { MemoryStorageSnapshot } from "@vivlos/infra/storage/memory/index.ts";
 
 function snapshot(

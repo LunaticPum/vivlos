@@ -4,7 +4,7 @@
  * 只读取传入 snapshot，不缓存、不写盘；PromptBuilder 的缓存由 Agent 层管理。
  */
 
-import { escapeForPrompt } from "../security.ts";
+import { escapeForPrompt } from "../../security.ts";
 import type { MemoryStorageSnapshot } from "@vivlos/infra/storage/memory/index.ts";
 
 export interface L1SnapshotSource {

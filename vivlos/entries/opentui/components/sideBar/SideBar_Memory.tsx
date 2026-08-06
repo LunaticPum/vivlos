@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { MouseButton, type MouseEvent } from "@opentui/core";
+import type { L2Overview } from "@vivlos/infra/storage/memory/index.ts";
 
 const C = {
 	text: "#cad3f5", // Macchiato/Text
@@ -41,6 +42,8 @@ export interface SidebarMemoryPreview {
 	readonly path: string | null;
 	readonly memory: FilePreview | null;
 	readonly user: FilePreview | null;
+	/** L2 索引概览；null 表示 L2 未启用。 */
+	readonly l2: L2Overview | null;
 }
 
 export interface SidebarMemoryProps {
@@ -50,7 +53,6 @@ export interface SidebarMemoryProps {
 }
 
 type Layer = (typeof layers)[number];
-const activeLayers: readonly Layer[] = [1];
 
 // #endregion
 
@@ -86,6 +88,7 @@ export function SidebarMemory({
 }: SidebarMemoryProps) {
 	const [layer, setLayer] = useState<Layer>(1);
 	const [expanded, setExpanded] = useState(true);
+	const activeLayers: readonly Layer[] = preview.l2 ? [1, 2] : [1];
 
 	useEffect(() => {
 		setLayer(1);
@@ -222,6 +225,57 @@ function MemoryCard({
 					<FileRow name="user.md" file={preview.user} />
 				</>
 			)}
+			{layer === 2 && (
+				<>
+					<box width="100%" flexDirection="row">
+						<text fg={C.muted}>Storage</text>
+						<box flexGrow={1} />
+						<text fg={C.secondary}>SQLite FTS5</text>
+					</box>
+					<box width="100%" flexDirection="row">
+						<text fg={C.muted}>Location</text>
+						<box flexGrow={1} />
+						<text fg={C.secondary}>.vivlos/memory.db</text>
+					</box>
+					<box height={1} />
+					{preview.l2 ? (
+						<>
+							<StatRow
+								name="Sessions"
+								value={formatChars(preview.l2.sessionCount)}
+							/>
+							<StatRow
+								name="Messages"
+								value={formatChars(preview.l2.messageCount)}
+							/>
+							<StatRow
+								name="Indexed"
+								value={formatAge(preview.l2.lastIndexedAt)}
+							/>
+						</>
+					) : (
+						<box width="100%" flexDirection="row">
+							<text fg={C.muted}>Status</text>
+							<box flexGrow={1} />
+							<text fg={C.muted}>disabled</text>
+						</box>
+					)}
+				</>
+			)}
+		</box>
+	);
+}
+
+// #endregion
+
+// #region Stat Row
+
+function StatRow({ name, value }: { name: string; value: string }) {
+	return (
+		<box width="100%" flexDirection="row">
+			<text fg={C.text}>{name}</text>
+			<box flexGrow={1} />
+			<text fg={C.secondary}>{value}</text>
 		</box>
 	);
 }

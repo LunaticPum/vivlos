@@ -40,7 +40,18 @@ export function ensureVivlosDir(): string {
 
 /** 获取 SQLite 数据库路径 */
 export function getDbPath(): string {
-	return resolve(getVivlosDir(), "vivlos.db");
+  return resolve(getVivlosDir(), "vivlos.db");
+}
+
+/**
+ * 获取 Memory L2 索引数据库路径。
+ *
+ * 与主 vivlos.db 分离：L2 索引是可重建数据，删除此文件不影响配置与凭证。
+ * env 覆盖：VIVLOS_MEMORY_DB_PATH。
+ */
+export function getMemoryDbPath(): string {
+  return process.env.VIVLOS_MEMORY_DB_PATH ??
+    resolve(getVivlosDir(), "memory.db");
 }
 
 /** 获取日志目录路径 */

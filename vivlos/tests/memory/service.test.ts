@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	createMemoryService,
 	type MemoryOperationContext,
-} from "@vivlos/agent/memory/service.ts";
+} from "@vivlos/agent/memory/layers/l1/service.ts";
 import {
 	createEventBus,
 	type EventBus,
