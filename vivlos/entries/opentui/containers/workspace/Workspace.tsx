@@ -37,6 +37,7 @@ import type { EventBus } from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
 import type { PiAiVersionInfo } from "@vivlos/infra/version.ts";
+import type { ImageAttachment } from "@vivlos/shared/utils/image.ts";
 
 /** 截断字符串，超长用 ... 替代（仅用于显示，不影响存储） */
 function truncate(s: string, max: number): string {
@@ -97,7 +98,7 @@ export function Workspace({
 		memoryOverview,
 		l2Overview,
 		todoList,
-	} = useAgent(agent, eventBus);
+	} = useAgent(agent, eventBus, { llm, llmConfigRepo });
 	const currentSessionId = currentSession?.id ?? "";
 	const offerChoice = useOfferChoice(eventBus, currentSessionId);
 
@@ -141,8 +142,10 @@ export function Workspace({
 		connected,
 		connectionStatus,
 		pendingProvider,
+		visionModelEntry,
 		handleProviderSelect,
 		handleModelSelect,
+		handleSetVision,
 		handleApiKeySubmit,
 		handleCustomProviderSubmit,
 		setPendingProvider,
@@ -264,16 +267,19 @@ export function Workspace({
 	);
 
 	const handleSubmit = useCallback(
-		(text: string) => {
-			const result = checkCommand(text, registry, cmdCtx);
-			if (!result.handled) {
-				submit(text);
-				return;
+		(text: string, attachments?: readonly ImageAttachment[]) => {
+			// 带附件时不走 slash 命令，直接提交
+			if ((attachments?.length ?? 0) === 0) {
+				const result = checkCommand(text, registry, cmdCtx);
+				if (result.handled) {
+					// 弹窗类命令不改变 welcome/session 主视图。
+					if (result.error) {
+						log("error", result.error, undefined, true);
+					}
+					return;
+				}
 			}
-			// 弹窗类命令不改变 welcome/session 主视图。
-			if (result.error) {
-				log("error", result.error, undefined, true);
-			}
+			submit(text, attachments);
 		},
 		[registry, cmdCtx, submit],
 	);
@@ -425,28 +431,51 @@ export function Workspace({
 					zIndex={100}
 				>
 					<SelectionPopup
-						title="Models"
+						title={`Models · ${llm.getDefaultProvider()}`}
+						filterable={true}
+						allItemsHeader="All Models"
 						recentItems={llmConfigRepo
 							.loadRecentModels()
 							.map<SelectionItem>((entry) => {
 								const [p, m] = entry.split("/");
+								const model = llm.getModel(p, m);
+								const vision = model?.input.includes("image") ?? false;
 								return {
 									id: entry,
 									label: `[${truncate(p, 10)}] ${m}`,
+									tag: vision ? "[文本,视觉]" : "[文本]",
+									tagVision: vision,
 									suffix:
-										formatTokens(llm.getModel(p, m)?.contextWindow ?? 0) ||
+										formatTokens(model?.contextWindow ?? 0) ||
 										undefined,
 								};
 							})}
 						allItems={llm
 							.listModels(llm.getDefaultProvider())
-							.map<SelectionItem>((m) => ({
-								id: `${llm.getDefaultProvider()}/${m.id}`,
-								label: m.id,
-								suffix: formatTokens(m.contextWindow),
-							}))}
+							.map<SelectionItem>((m) => {
+								const vision = m.input.includes("image");
+								return {
+									id: `${llm.getDefaultProvider()}/${m.id}`,
+									label: m.id,
+									tag: vision ? "[文本,视觉]" : "[文本]",
+									tagVision: vision,
+									suffix: formatTokens(m.contextWindow),
+								};
+							})}
 						currentItemId={`${llm.getDefaultProvider()}/${llm.getDefaultModelId()}`}
+						visionItemIds={[
+							...llmConfigRepo.loadRecentModels().filter((entry) => {
+								const [p, m] = entry.split("/");
+								return llm.getModel(p, m)?.input.includes("image") ?? false;
+							}),
+							...llm
+								.listModels(llm.getDefaultProvider())
+								.filter((m) => m.input.includes("image"))
+								.map((m) => `${llm.getDefaultProvider()}/${m.id}`),
+						]}
+						visionItemId={visionModelEntry ?? undefined}
 						onSelect={handleModelSelect}
+						onSetVision={handleSetVision}
 						onClose={() => setPopupState("none")}
 						onSwitchToProviders={() => setPopupState("providers")}
 					/>

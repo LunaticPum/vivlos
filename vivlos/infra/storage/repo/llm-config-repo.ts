@@ -33,6 +33,12 @@ export interface LLMConfigRepository {
   loadCustomProvider(id: string): CustomProviderConfig | undefined;
   listCustomProviders(): string[];
   removeCustomProvider(id: string): void;
+
+  // ── 视觉模型（图片解析专用） ──
+  /** 读取已指定的视觉模型（格式：provider/modelId），未指定返回 undefined */
+  loadVisionModel(): string | undefined;
+  /** 保存视觉模型；传 null 清除指定 */
+  saveVisionModel(entry: string | null): void;
 }
 
 /** 创建基于 ConfigRepository 的 LLM 配置仓储 */
@@ -94,6 +100,19 @@ export function createLLMConfigRepository(
 
     removeCustomProvider(id) {
       configRepo.remove(`custom:${id}`);
+    },
+
+    // ── 视觉模型 ──
+    loadVisionModel() {
+      return configRepo.get<string>("llm:vision-model");
+    },
+
+    saveVisionModel(entry) {
+      if (entry === null) {
+        configRepo.remove("llm:vision-model");
+        return;
+      }
+      configRepo.set("llm:vision-model", entry);
     },
   };
 }

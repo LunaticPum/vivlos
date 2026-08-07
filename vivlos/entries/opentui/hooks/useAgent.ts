@@ -5,11 +5,22 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Usage, Message, TextContent } from "@earendil-works/pi-ai";
+import type {
+	Usage,
+	Message,
+	TextContent,
+	Model,
+	Api,
+	UserMessage,
+} from "@earendil-works/pi-ai";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { EventBus, TodoList } from "@vivlos/infra/eventbus/index.ts";
 import type { MemoryOverview } from "@vivlos/infra/storage/memory/index.ts";
 import type { L2Overview } from "@vivlos/infra/storage/memory/index.ts";
 import type { SessionMeta } from "@vivlos/infra/storage/session/index.ts";
+import type { LLMClient } from "@vivlos/infra/llm/index.ts";
+import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
+import type { ImageAttachment } from "@vivlos/shared/utils/image.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
 import { log } from "@vivlos/infra/logger/logger.ts";
 
@@ -47,6 +58,8 @@ export type LogEntry =
  */
 export interface ConversationTurn {
 	userInput: string;
+	/** 本轮附带的图片文件名（用于渲染占位） */
+	attachedImages?: readonly string[];
 	log: LogEntry[];
 	finalText: string;
 	status: "running" | "complete" | "error" | "aborted";
@@ -86,7 +99,7 @@ export interface UseAgentResult {
 	l2Overview: L2Overview | null;
 	/** 当前 Session 的完整 Todo List。 */
 	todoList: TodoList | null;
-	submit: (text: string) => void;
+	submit: (text: string, attachments?: readonly ImageAttachment[]) => void;
 	abort: () => void;
 	clearConversation: () => void;
 	switchSession: (sessionId: string) => void;
@@ -299,9 +312,55 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 
 // #endregion
 
+// #region 视觉模型解析
+
+type VisionResolution =
+	| { ok: true; model: Model<Api> }
+	| { ok: false; message: string };
+
+/**
+ * 图片轮次的模型解析链：
+ * 已指定视觉模型且可解析 → 用它；否则主模型支持图片 → 用主模型；
+ * 都不满足 → 失败并给出通知文案。
+ */
+function resolveVisionModel(deps: UseAgentLlmDeps): VisionResolution {
+	const visionEntry = deps.llmConfigRepo.loadVisionModel();
+	if (visionEntry) {
+		const [provider, modelId] = visionEntry.split("/");
+		const model = provider && modelId
+			? deps.llm.getModel(provider, modelId)
+			: undefined;
+		if (model && model.input.includes("image")) {
+			return { ok: true, model };
+		}
+	}
+	const mainModel = deps.llm.getModel(
+		deps.llm.getDefaultProvider(),
+		deps.llm.getDefaultModelId(),
+	);
+	if (mainModel?.input.includes("image")) {
+		return { ok: true, model: mainModel };
+	}
+	return {
+		ok: false,
+		message:
+			"当前主模型不支持图片识别，请在模型选择弹窗（Ctrl+L）按 g 指定视觉模型",
+	};
+}
+
+// #endregion
+
+export interface UseAgentLlmDeps {
+	/** LLM 客户端（用于图片轮次解析视觉模型） */
+	readonly llm: LLMClient;
+	/** LLM 配置仓储（读取已指定的视觉模型） */
+	readonly llmConfigRepo: LLMConfigRepository;
+}
+
 export function useAgent(
 	agent: VivlosAgent,
 	eventBus: EventBus,
+	llmDeps?: UseAgentLlmDeps,
 ): UseAgentResult {
 	const [conversationTurns, setTurns] = useState<ConversationTurn[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -708,8 +767,35 @@ export function useAgent(
 
 	// #region Callbacks
 	const submit = useCallback(
-		(text: string) => {
-			if (!text.trim() || loading || abortRef.current) return;
+		(text: string, attachments?: readonly ImageAttachment[]) => {
+			const hasAttachments = (attachments?.length ?? 0) > 0;
+			if ((!text.trim() && !hasAttachments) || loading || abortRef.current) return;
+
+			// ── 图片轮次：解析视觉模型 ──
+			let input: string | AgentMessage[] = text;
+			let modelOverride: Model<Api> | undefined;
+			if (hasAttachments && llmDeps) {
+				const resolved = resolveVisionModel(llmDeps);
+				if (!resolved.ok) {
+					log("warn", resolved.message, undefined, true);
+					return;
+				}
+				modelOverride = resolved.model;
+				const content: UserMessage["content"] = [];
+				if (text.trim()) content.push({ type: "text", text: text.trim() });
+				for (const attachment of attachments!) {
+					content.push({
+						type: "image",
+						data: attachment.data,
+						mimeType: attachment.mimeType,
+					});
+				}
+				input = [{ role: "user", content, timestamp: Date.now() }];
+			} else if (hasAttachments) {
+				log("warn", "图片功能未就绪（LLM 依赖缺失）", undefined, true);
+				return;
+			}
+
 			const idx = conversationTurns.length;
 			currentIdxRef.current = idx; // 注意 turns 数组不能被清空，ConversationView 会渲染所有 turns，从而保留终端历史。
 			setLoading(true);
@@ -718,6 +804,9 @@ export function useAgent(
 				...prev,
 				{
 					userInput: text,
+					...(hasAttachments
+						? { attachedImages: attachments!.map((a) => a.name) }
+						: {}),
 					log: [],
 					finalText: "",
 					status: "running",
@@ -731,7 +820,7 @@ export function useAgent(
 			abortRef.current = controller;
 
 			agent
-				.prompt(text, controller.signal)
+				.prompt(input, controller.signal, modelOverride)
 				.catch((err) => {
 					const error = err instanceof Error ? err : new Error(String(err));
 					const kind = controller.signal.aborted ? "aborted" : "error";
@@ -753,7 +842,7 @@ export function useAgent(
 					setLoading(false);
 				});
 		},
-		[agent, conversationTurns.length, loading],
+		[agent, conversationTurns.length, loading, llmDeps],
 	);
 
 	/** 打断当前 LLM 调用 */

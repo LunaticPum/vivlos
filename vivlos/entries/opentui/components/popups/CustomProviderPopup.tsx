@@ -43,6 +43,7 @@ export interface CustomProviderPopupProps {
 		modelId: string;
 		apiKey: string;
 		contextWindow?: number;
+		vision?: boolean;
 	}) => void;
 	onClose: () => void;
 }
@@ -58,7 +59,8 @@ export function CustomProviderPopup({
 	const [modelId, setModelId] = useState("");
 	const [apiKey, setApiKey] = useState("");
 	const [ctxWindow, setCtxWindow] = useState("");
-	const [focusIdx, setFocusIdx] = useState(0); // 0=URL, 1=Model, 2=Key, 3=Ctx
+	const [vision, setVision] = useState(false);
+	const [focusIdx, setFocusIdx] = useState(0); // 0=URL, 1=Model, 2=Key, 3=Ctx, 4=Vision
 	const [showHint, setShowHint] = useState(false);
 
 	const inputRefs = useRef<(InputRenderable | null)[]>([
@@ -83,13 +85,18 @@ export function CustomProviderPopup({
 		if (key.name === "up") {
 			key.preventDefault();
 			resetViewport(focusIdx);
-			setFocusIdx((i) => (i + 3) % 4);
+			setFocusIdx((i) => (i + 4) % 5);
 			return;
 		}
 		if (key.name === "down") {
 			key.preventDefault();
 			resetViewport(focusIdx);
-			setFocusIdx((i) => (i + 1) % 4);
+			setFocusIdx((i) => (i + 1) % 5);
+			return;
+		}
+		if (key.name === "space" && focusIdx === 4) {
+			key.preventDefault();
+			setVision((v) => !v);
 			return;
 		}
 		if (key.name === "return") {
@@ -104,6 +111,7 @@ export function CustomProviderPopup({
 				modelId: modelId.trim(),
 				apiKey: apiKey.trim(),
 				contextWindow: parseContextWindow(ctxWindow),
+				...(vision ? { vision: true } : {}),
 			});
 			return;
 		}
@@ -234,6 +242,22 @@ export function CustomProviderPopup({
 						textColor={C.text}
 						onInput={setCtxWindow}
 					/>
+				</box>
+
+				{/* 视觉理解（可选） */}
+				<box flexDirection="row" marginTop={1} width="100%">
+					<text fg={C.label} width={7}>
+						{"视觉:  "}
+					</text>
+					<box
+						onMouseDown={() => setVision((v) => !v)}
+						backgroundColor={focusIdx === 4 ? C.selectedBg : C.normalBg}
+						paddingX={1}
+					>
+						<text fg={vision ? C.selected : C.text}>
+							{vision ? "支持图片输入 ✓" : "纯文本（空格切换）"}
+						</text>
+					</box>
 				</box>
 
 				{showHint && (

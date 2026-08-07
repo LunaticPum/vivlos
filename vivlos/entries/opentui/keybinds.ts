@@ -30,6 +30,8 @@ export const KEYBINDS = {
 	openProviders: { ctrl: true, name: "p", description: "供应商选择" } satisfies Keybind,
 	/** 指令帮助弹窗 */
 	openHelp: { ctrl: true, name: "o", description: "指令集" } satisfies Keybind,
+	/** 从剪贴板粘贴截图（Windows） */
+	grabImage: { ctrl: true, name: "g", description: "粘贴剪贴板截图" } satisfies Keybind,
 } as const;
 
 /** 检查 KeyEvent 是否匹配某个快捷键 */

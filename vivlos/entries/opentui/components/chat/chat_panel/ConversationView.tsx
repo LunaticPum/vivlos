@@ -5,11 +5,12 @@
  * WelcomeScreen 由 Workspace 单独管理，本组件只负责会话内容。
  */
 
+import { useEffect, useRef } from "react";
 import { getColors } from "../../../designs/colors";
 import { UserMessageCard } from "./UserMessageCard";
 import { AgentMessageCard } from "./AgentMessageCard";
 import type { ConversationTurn } from "../../../hooks/useAgent";
-import type { ScrollAcceleration } from "@opentui/core";
+import type { ScrollAcceleration, ScrollBoxRenderable } from "@opentui/core";
 
 const colors = getColors();
 
@@ -27,10 +28,20 @@ export function ConversationView({
 	conversationTurns,
 	detailExpanded,
 }: ConversationViewProps) {
+	const scrollboxRef = useRef<ScrollBoxRenderable>(null);
+
+	// scrollbox 默认可聚焦：鼠标点击聊天区会抢走焦点，
+	// 之后 ↑↓ 会触发其内置键盘滚动，与输入框历史导航冲突。
+	// 聊天区没有键盘滚动需求，禁用聚焦，焦点保持在输入框。
+	useEffect(() => {
+		if (scrollboxRef.current) scrollboxRef.current.focusable = false;
+	}, []);
+
 	return (
 		<box flexGrow={1} overflow="hidden">
 			<box flexGrow={1} overflow="hidden" width="100%">
 				<scrollbox
+					ref={scrollboxRef}
 					height="100%"
 					width="100%"
 					stickyScroll={true}
@@ -46,7 +57,10 @@ export function ConversationView({
 							paddingX={1}
 							gap={1}
 						>
-							<UserMessageCard text={convTurn.userInput} />
+							<UserMessageCard
+								text={convTurn.userInput}
+								attachedImages={convTurn.attachedImages}
+							/>
 							<AgentMessageCard
 								conversationTurn={convTurn}
 								detailExpanded={detailExpanded}

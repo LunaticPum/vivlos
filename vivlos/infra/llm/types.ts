@@ -73,12 +73,14 @@ export interface LLMClient {
 
 /** 自定义 provider 配置 */
 export interface CustomProviderConfig {
-	baseUrl: string;
-	apiStandard: "openai" | "anthropic";
-	modelId: string;
-	apiKey: string;
-	/** 上下文窗口大小（token 数）。不填则自动查找 pi-ai 内置定义，再不行默认 128k */
-	contextWindow?: number;
+  baseUrl: string;
+  apiStandard: "openai" | "anthropic";
+  modelId: string;
+  apiKey: string;
+  /** 上下文窗口大小（token 数）。不填则自动查找 pi-ai 内置定义，再不行默认 128k */
+  contextWindow?: number;
+  /** 模型是否支持图片输入（视觉理解）。不填默认纯文本 */
+  vision?: boolean;
 }
 
 /**

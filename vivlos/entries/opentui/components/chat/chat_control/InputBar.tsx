@@ -19,10 +19,19 @@ import type {
 	TextareaRenderable,
 	ContentChangeEvent,
 	ScrollBoxRenderable,
+	PasteEvent,
 } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import type { TUICommandRegistry } from "../../../commands/registry";
 import { KEYBINDS, matchesKeybind } from "../../../keybinds";
+import {
+	extractImagePaths,
+	loadImageAttachment,
+	type ImageAttachment,
+} from "@vivlos/shared/utils/image.ts";
+import { grabClipboardImage } from "@vivlos/infra/clipboard/image.ts";
+import { getTempDir } from "@vivlos/infra/paths.ts";
+import { log } from "@vivlos/infra/logger/index.ts";
 
 const C = {
 	border: "#cba6f7",
@@ -55,8 +64,8 @@ function visualLineCount(textarea: TextareaRenderable): number {
 }
 
 export interface InputBarProps {
-	/** 提交文本（非指令时触发） */
-	onSubmit: (text: string) => void;
+	/** 提交文本与图片附件（非指令时触发） */
+	onSubmit: (text: string, attachments: readonly ImageAttachment[]) => void;
 	/** Ctrl+C 打断 / 退出 */
 	onCtrlC?: () => void;
 	/** 弹窗是否激活（激活时 blur textarea + 跳过历史导航） */
@@ -84,6 +93,9 @@ export function InputBar({
 	const [contentLines, setContentLines] = useState(1);
 	const [inputText, setInputText] = useState("");
 	const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
+	const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+	// Ctrl+G 剪贴板读取进行中标记（防连按重复生成）
+	const grabbingRef = useRef(false);
 
 	// ── 历史消息状态 ──
 	// history[0] = 最新，history[5] = 最旧；historyIdx = -1 表示草稿
@@ -97,6 +109,8 @@ export function InputBar({
 	const suggestionScrollRef = useRef<ScrollBoxRenderable>(null);
 
 	// ── 失焦自动抢回：除弹窗激活外，始终聚焦 textarea ──
+	// 延迟一拍执行：点击其他区域时，点击目标的聚焦发生在 blur 事件之后，
+	// 立即抢回会被点击流程覆盖。
 	const popupActiveRef = useRef(popupActive);
 	popupActiveRef.current = popupActive;
 
@@ -104,7 +118,9 @@ export function InputBar({
 		const ta = textareaRef.current;
 		if (!ta) return;
 		const handler = () => {
-			if (!popupActiveRef.current) ta.focus();
+			setTimeout(() => {
+				if (!popupActiveRef.current) ta.focus();
+			}, 0);
 		};
 		ta.on("blurred", handler);
 		return () => {
@@ -217,6 +233,37 @@ export function InputBar({
 		// 弹窗激活时，跳过后续按键，让弹窗组件接管
 		if (popupActive) return;
 
+		// Ctrl+G：读取剪贴板位图（截图键截图）保存为临时 PNG 并挂为附件
+		if (matchesKeybind(key, KEYBINDS.grabImage)) {
+			key.preventDefault();
+			// 读取较慢（PowerShell 冷启动），进行中忽略重复按键
+			if (grabbingRef.current) return;
+			grabbingRef.current = true;
+			log("info", "正在读取剪贴板截图...", undefined, true);
+			void (async () => {
+				try {
+					const grabbed = await grabClipboardImage(getTempDir());
+					if (!grabbed.ok) {
+						log("warn", grabbed.error.message, undefined, true);
+						return;
+					}
+					const loaded = loadImageAttachment(grabbed.value);
+					if (!loaded.ok) {
+						log("warn", `截图附件失败: ${loaded.error.message}`, undefined, true);
+						return;
+					}
+					setAttachments((prev) =>
+						prev.some((a) => a.path === loaded.value.path)
+							? prev
+							: [...prev, loaded.value],
+					);
+				} finally {
+					grabbingRef.current = false;
+				}
+			})();
+			return;
+		}
+
 		// 补全提示可见时，拦截 Up/Down/Enter，preventDefault 防止 textarea 吞键
 		if (slashSuggestions.length > 0) {
 			if (key.name === "up") {
@@ -251,6 +298,13 @@ export function InputBar({
 			) {
 				switchHistory("down");
 			}
+		} else if (key.name === "backspace" && attachments.length > 0) {
+			// 输入为空时 Backspace 移除最后一个附件
+			const ta = textareaRef.current;
+			if (ta && ta.plainText === "") {
+				key.preventDefault();
+				setAttachments((prev) => prev.slice(0, -1));
+			}
 		} else if (key.ctrl && key.name === "c") {
 			if (renderer.hasSelection) {
 				const text = renderer.getSelection()?.getSelectedText();
@@ -273,13 +327,15 @@ export function InputBar({
 		const ta = textareaRef.current;
 		if (!ta) return;
 		const text = ta.plainText.trim();
-		if (!text) return;
+		if (!text && attachments.length === 0) return;
 
 		// 存入历史（新的在前，去重，限制 6 条）
-		const history = historyRef.current;
-		if (history[0] !== text) {
-			history.unshift(text);
-			if (history.length > MAX_HISTORY) history.pop();
+		if (text) {
+			const history = historyRef.current;
+			if (history[0] !== text) {
+				history.unshift(text);
+				if (history.length > MAX_HISTORY) history.pop();
+			}
 		}
 
 		// 重置状态
@@ -288,12 +344,35 @@ export function InputBar({
 		ta.clear();
 		setContentLines(1);
 		setInputText("");
+		const pending = attachments;
+		setAttachments([]);
 
-		onSubmit(text);
-	}, [onSubmit]);
+		onSubmit(text, pending);
+	}, [onSubmit, attachments]);
 
-	// ── 外层高度：内容行数 + 2 行边框，限制 3~6 ──
-	const boxHeight = Math.min(contentLines + 2, MAX_LINES + 2);
+	// ── 粘贴拦截：终端拖入文件 = 粘贴路径，识别图片路径转为附件 ──
+	const handlePaste = useCallback((event: PasteEvent) => {
+		const text = new TextDecoder().decode(event.bytes);
+		const paths = extractImagePaths(text);
+		if (paths.length === 0) return;
+
+		const loaded: ImageAttachment[] = [];
+		for (const path of paths) {
+			const result = loadImageAttachment(path);
+			if (result.ok) {
+				loaded.push(result.value);
+			} else {
+				log("warn", `图片附件失败: ${result.error.message}`, undefined, true);
+			}
+		}
+		if (loaded.length === 0) return;
+		event.preventDefault();
+		setAttachments((prev) => [...prev, ...loaded]);
+	}, []);
+
+	// ── 外层高度：内容行数 + 2 行边框 + 附件行，限制 3~7 ──
+	const attachmentRows = attachments.length > 0 ? 1 : 0;
+	const boxHeight = Math.min(contentLines + 2 + attachmentRows, MAX_LINES + 3);
 
 	return (
 		<box width="100%" height={boxHeight} position="relative">
@@ -342,30 +421,44 @@ export function InputBar({
 				border={["top", "bottom"]}
 				customBorderChars={inputBorder}
 				borderColor={C.border}
-				flexDirection="row"
+				flexDirection="column"
 				paddingRight={1}
 			>
-				<text width={1} height={1} fg={C.border}>❯</text>
-				<box width={1} />
-				<textarea
-					ref={textareaRef}
-					focused={!popupActive}
-					showCursor={!popupActive}
-					flexGrow={1}
-					placeholder="输入消息... (Ctrl+Enter 换行)"
-					placeholderColor={C.subtext}
-					textColor={C.text}
-					wrapMode="char"
-					keyBindings={[
-						{ name: "return", ctrl: true, action: "newline" },
-						{ name: "return", action: "submit" },
-						{ name: "kpenter", ctrl: true, action: "newline" },
-						{ name: "kpenter", action: "submit" },
-					]}
-					onContentChange={handleContentChange}
-					onSizeChange={syncContentLines}
-					onSubmit={handleSubmit}
-				/>
+				{attachments.length > 0 && (
+					<box width="100%" flexDirection="row" paddingLeft={2}>
+						<text fg={C.hint}>{"附件: "}</text>
+						{attachments.map((attachment, index) => (
+							<text key={`${attachment.path}-${index}`} fg={C.border}>
+								{`[${attachment.name}] `}
+							</text>
+						))}
+						<text fg={C.hint}>{"(空输入按 Backspace 移除)"}</text>
+					</box>
+				)}
+				<box width="100%" flexGrow={1} flexDirection="row">
+					<text width={1} height={1} fg={C.border}>❯</text>
+					<box width={1} />
+					<textarea
+						ref={textareaRef}
+						focused={!popupActive}
+						showCursor={!popupActive}
+						flexGrow={1}
+						placeholder="输入消息... (Ctrl+Enter 换行，拖入图片 / Ctrl+G 粘贴截图)"
+						placeholderColor={C.subtext}
+						textColor={C.text}
+						wrapMode="char"
+						keyBindings={[
+							{ name: "return", ctrl: true, action: "newline" },
+							{ name: "return", action: "submit" },
+							{ name: "kpenter", ctrl: true, action: "newline" },
+							{ name: "kpenter", action: "submit" },
+						]}
+						onContentChange={handleContentChange}
+						onSizeChange={syncContentLines}
+						onSubmit={handleSubmit}
+						onPaste={handlePaste}
+					/>
+				</box>
 			</box>
 		</box>
 	);

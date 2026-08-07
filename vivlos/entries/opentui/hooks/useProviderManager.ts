@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
+import { log } from "@vivlos/infra/logger/index.ts";
 
 export type ConnectionStatus =
 	| { state: "idle" }
@@ -17,8 +18,12 @@ export interface ProviderManagerResult {
 	connected: boolean;
 	connectionStatus: ConnectionStatus;
 	pendingProvider: string | null;
+	/** 已指定的视觉模型（provider/modelId），未指定为 null */
+	visionModelEntry: string | null;
 	handleProviderSelect: (providerId: string) => Promise<void>;
 	handleModelSelect: (entry: string) => void;
+	/** 双击 g 指定/取消视觉模型（toggle） */
+	handleSetVision: (entry: string) => void;
 	handleApiKeySubmit: (key: string) => Promise<void>;
 	handleCustomProviderSubmit: (config: {
 		baseUrl: string;
@@ -26,6 +31,7 @@ export interface ProviderManagerResult {
 		modelId: string;
 		apiKey: string;
 		contextWindow?: number;
+		vision?: boolean;
 	}) => Promise<void>;
 	setPopupState: (state: string) => void;
 	setPendingProvider: (provider: string | null) => void;
@@ -52,6 +58,9 @@ export function useProviderManager(
 		state: "idle",
 	});
 	const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+	const [visionModelEntry, setVisionModelEntry] = useState<string | null>(
+		() => llmConfigRepo.loadVisionModel() ?? null,
+	);
 
 	// 启动时检查默认 provider 是否已配置 API key
 	useEffect(() => {
@@ -178,6 +187,7 @@ export function useProviderManager(
 		modelId: string;
 		apiKey: string;
 		contextWindow?: number;
+		vision?: boolean;
 	}) => {
 		const providerId = llm.addCustomProvider(config);
 		llmConfigRepo.saveCustomProvider(`${providerId}/${config.modelId}`, config);
@@ -197,13 +207,27 @@ export function useProviderManager(
 		llmConfigRepo.addRecentModel(entry);
 	};
 
+	const handleSetVision = (entry: string) => {
+		if (visionModelEntry === entry) {
+			llmConfigRepo.saveVisionModel(null);
+			setVisionModelEntry(null);
+			log("info", "已取消视觉模型指定，图片解析将使用主模型", undefined, true);
+			return;
+		}
+		llmConfigRepo.saveVisionModel(entry);
+		setVisionModelEntry(entry);
+		log("info", `已指定视觉模型: ${entry}`, undefined, true);
+	};
+
 	return {
 		currentLabel,
 		connected,
 		connectionStatus,
 		pendingProvider,
+		visionModelEntry,
 		handleProviderSelect,
 		handleModelSelect,
+		handleSetVision,
 		handleApiKeySubmit,
 		handleCustomProviderSubmit,
 		setPopupState,

@@ -141,11 +141,15 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	};
 
 	return {
-		async prompt(input: string | AgentMessage[], signal?: AbortSignal): Promise<LoopResult> {
-			const currentModel = params.llm.getModel(
+		async prompt(
+			input: string | AgentMessage[],
+			signal?: AbortSignal,
+			modelOverride?: Model<Api>,
+		): Promise<LoopResult> {
+			const currentModel = modelOverride ?? (params.llm.getModel(
 				params.llm.getDefaultProvider(),
 				params.llm.getDefaultModelId(),
-			) ?? model;
+			) ?? model);
 			const sessionId = sessionManager.id;
 			const titleInput = readTitleInput(input);
 			const shouldTitle = titleInput.length > 0 &&
