@@ -20,8 +20,8 @@ packages/
 .idea/
 .VSCodeCounter/
 
-# Local agent planning
-opencode/
+# Local agent planning（仅根目录，避免误伤 docs/opencode/）
+/opencode/
 
 # OS
 .DS_Store
