@@ -27,6 +27,8 @@ export interface CommandContext {
 	switchToSession: (id: string) => void;
 	/** /compact -- 手动触发上下文压缩 */
 	compact: () => Promise<void>;
+	/** /delegate-demo -- 模拟委派全流程（样式原型） */
+	runDelegateDemo: () => void;
 }
 
 /** TUI Slash 命令 */

@@ -13,6 +13,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import spinners from "cli-spinners";
 import { SyntaxStyle, type BorderCharacters, type ScrollBoxRenderable } from "@opentui/core";
 import type { ConversationTurn, LogEntry } from "../../../hooks/useAgent";
+import type {
+	DelegationBatchState,
+	DelegationTaskState,
+} from "@vivlos/agent/delegation/types.ts";
 
 // #region 常量
 
@@ -62,6 +66,8 @@ const textBlock: BorderCharacters = {
 export interface AgentMessageCardProps {
 	conversationTurn: ConversationTurn;
 	detailExpanded: boolean;
+	/** 点击委派任务行时触发（钻取子会话）；taskId = 批次callId:任务序号。 */
+	onOpenTask?: (taskId: string) => void;
 }
 
 /** 推理框计时器 */
@@ -86,6 +92,7 @@ function useReasoningDuration(status: ConversationTurn["status"]): number {
 export function AgentMessageCard({
 	conversationTurn,
 	detailExpanded,
+	onOpenTask,
 }: AgentMessageCardProps) {
 	// 实时计时优先；恢复的历史轮次回退到 messagesToTurns 重算的 durationMs
 	const liveDuration = useReasoningDuration(conversationTurn.status);
@@ -126,16 +133,17 @@ export function AgentMessageCard({
 				return (
 					<box key={`part-${i}`} flexDirection="column">
 						{dividerTurn !== null && <TurnDivider turn={dividerTurn} />}
-						{renderItem({
-							item,
-							spin: isRunning ? spin : "✓",
-							active: isRunning,
-							expanded: detailExpanded,
-							expandedThinkings,
-							expandedTools,
-							onToggleThinking: toggleThinking,
-							onToggleTool: toggleTool,
-						})}
+					{renderItem({
+						item,
+						spin: isRunning ? spin : "✓",
+						active: isRunning,
+						expanded: detailExpanded,
+						expandedThinkings,
+						expandedTools,
+						onToggleThinking: toggleThinking,
+						onToggleTool: toggleTool,
+						onOpenTask,
+					})}
 					</box>
 				);
 			})}
@@ -243,6 +251,7 @@ interface RenderCtx {
 	expandedTools: Set<string>;
 	onToggleThinking: (index: number) => void;
 	onToggleTool: (callId: string) => void;
+	onOpenTask?: (taskId: string) => void;
 }
 
 function renderItem({
@@ -254,6 +263,7 @@ function renderItem({
 	expandedTools,
 	onToggleThinking,
 	onToggleTool,
+	onOpenTask,
 }: RenderCtx & { item: RenderItem }) {
 	if (item.kind === "text") {
 		return (
@@ -297,6 +307,17 @@ function renderItem({
 	// tool
 	const entries = item.entries;
 	const callId = entries[0]!.callId;
+	// delegate 工具走专属委派卡片
+	if (entries[0]!.name === "delegate") {
+		return (
+			<DelegationCard
+				entry={entries[0]!}
+				expanded={expandedTools.has(callId)}
+				onToggle={() => onToggleTool(callId)}
+				onOpenTask={onOpenTask}
+			/>
+		);
+	}
 	const main = toolMainLine(entries, spin);
 	const detail = toolDetailLines(entries);
 	// /detail 只展开 thinking；tool 仅响应单独点击展开
@@ -381,6 +402,134 @@ function ToolDetail({ detail }: { detail: RenderLine[] }) {
 					{line.segments.map((seg) => seg.text).join("")}
 				</text>
 			))}
+		</box>
+	);
+}
+
+// #endregion
+
+// #region 委派卡片
+
+/** 委派卡片：delegate 工具专属渲染，四阶段（规划/已委派/运行中/完成）。 */
+function DelegationCard({
+	entry,
+	expanded,
+	onToggle,
+	onOpenTask,
+}: {
+	entry: ToolEntry;
+	expanded: boolean;
+	onToggle: () => void;
+	onOpenTask?: (taskId: string) => void;
+}) {
+	const batch = entry.details as DelegationBatchState | undefined;
+	const running = !entry.done || batch?.phase !== "done";
+	const spin = useSpinnerFrame(running);
+
+	// 阶段一：参数流式中，尚无批次状态
+	if (!batch) {
+		return (
+			<box flexDirection="row">
+				<text fg={C.bright}>{`${spin} 任务委派`}</text>
+				<text fg={C.subtext}>{" · 正在规划任务..."}</text>
+			</box>
+		);
+	}
+
+	const done = batch.phase === "done";
+	const completedCount = batch.tasks.filter((t) => t.state === "completed").length;
+	return (
+		<box flexDirection="column">
+			<box flexDirection="row" onMouseDown={onToggle}>
+				<text fg={done ? C.done : C.bright}>
+					{done ? "✓" : spin}
+				</text>
+				<text fg={C.bright}>{" 任务委派"}</text>
+				<text fg={C.subtext}>
+					{done
+						? ` · ${completedCount}/${batch.tasks.length} 完成`
+						: ` · 已委派 ${batch.tasks.length} 个子任务`}
+				</text>
+				{done && entry.durationMs !== undefined && entry.durationMs > 0 && (
+					<text fg={C.toolName}>{` ${(entry.durationMs / 1000).toFixed(1)}s`}</text>
+				)}
+				<text fg={C.subtext}>{expanded ? " ▾" : " ▸"}</text>
+			</box>
+			<box
+				border={["left"]}
+				customBorderChars={textBlock}
+				borderColor={C.subtext}
+				paddingX={1}
+				flexDirection="column"
+			>
+				{batch.tasks.map((task) => (
+					<DelegationTaskRow
+						key={task.id}
+						task={task}
+						spin={spin}
+						expanded={expanded}
+						onOpen={onOpenTask
+							? () => onOpenTask(`${entry.callId}:${task.id}`)
+							: undefined}
+					/>
+				))}
+			</box>
+		</box>
+	);
+}
+
+/** 委派卡片内的单个任务行。 */
+function DelegationTaskRow({
+	task,
+	spin,
+	expanded,
+	onOpen,
+}: {
+	task: DelegationTaskState;
+	spin: string;
+	expanded: boolean;
+	onOpen?: () => void;
+}) {
+	const kindTag = task.kind === "exploring" ? "[Exploring]" : "[Writing]";
+	const kindColor = task.kind === "exploring" ? C.borderOuter : C.toolName;
+	const running = task.state === "running";
+	const ok = task.state === "completed" || task.state === "turn_limited";
+	const icon = running ? spin : ok ? "✓" : "✗";
+	const iconColor = running ? C.tool : ok ? C.done : C.abort;
+	const durStr = task.completedAt !== undefined
+		? ` ${(Math.max(0, task.completedAt - task.startedAt) / 1000).toFixed(1)}s`
+		: "";
+	const tail = running
+		? ` ${task.turns}轮${task.currentTool ? ` · 调用 ${task.currentTool}` : ""}`
+		: ` ${task.turns}轮${durStr}`;
+
+	return (
+		<box flexDirection="column">
+			<box
+				flexDirection="row"
+				onMouseDown={onOpen ? (e) => { e.stopPropagation(); onOpen(); } : undefined}
+			>
+				<text fg={iconColor}>{`${icon} `}</text>
+				<text fg={kindColor}>{kindTag}</text>
+				<text fg={running ? C.text : ok ? C.text : C.abort}>
+					{` ${task.title}`}
+				</text>
+				<text fg={C.subtext}>{tail}</text>
+			</box>
+			{expanded && task.result && (
+				<box paddingLeft={2} flexDirection="column">
+					{task.result.split("\n").map((line, i) => (
+						<text key={i} fg={C.subtext}>
+							{line}
+						</text>
+					))}
+				</box>
+			)}
+			{expanded && task.error && (
+				<box paddingLeft={2}>
+					<text fg={C.abort}>{task.error}</text>
+				</box>
+			)}
 		</box>
 	);
 }

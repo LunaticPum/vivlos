@@ -24,12 +24,15 @@ export interface ConversationViewProps {
 	detailExpanded: boolean;
 	/** 递增信号：变化时强制滚动到底部（发送消息时由 Workspace 触发） */
 	scrollBottomSignal?: number;
+	/** 点击委派任务行钻取子会话 */
+	onOpenTask?: (taskId: string) => void;
 }
 
 export function ConversationView({
 	conversationTurns,
 	detailExpanded,
 	scrollBottomSignal,
+	onOpenTask,
 }: ConversationViewProps) {
 	const scrollboxRef = useRef<ScrollBoxRenderable>(null);
 
@@ -72,10 +75,11 @@ export function ConversationView({
 								text={convTurn.userInput}
 								attachedImages={convTurn.attachedImages}
 							/>
-							<AgentMessageCard
-								conversationTurn={convTurn}
-								detailExpanded={detailExpanded}
-							/>
+						<AgentMessageCard
+							conversationTurn={convTurn}
+							detailExpanded={detailExpanded}
+							onOpenTask={onOpenTask}
+						/>
 						</box>
 					))}
 				</scrollbox>

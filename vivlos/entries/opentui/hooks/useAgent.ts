@@ -22,6 +22,12 @@ import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import type { LLMConfigRepository } from "@vivlos/infra/storage/index.ts";
 import type { ImageAttachment } from "@vivlos/shared/utils/image.ts";
 import type { VivlosAgent } from "@vivlos/agent/types.ts";
+import {
+	parseDelegationXml,
+	renderDelegationXml,
+} from "@vivlos/agent/delegation/xml.ts";
+import type { DelegationBatchState } from "@vivlos/agent/delegation/types.ts";
+import { buildBriefUserMessage } from "@vivlos/agent/delegation/prompts.ts";
 import { log } from "@vivlos/infra/logger/logger.ts";
 
 // #region 类型
@@ -51,6 +57,12 @@ export type LogEntry =
 			done: boolean;
 			success?: boolean;
 			runMarker?: boolean;
+			/**
+			 * 工具结构化细节（如 delegate 的批次状态）。
+			 * 运行时来自 onUpdate/toolResult 的 details；
+			 * 历史重建时由 messagesToTurns 从结果文本解析。
+			 */
+			details?: unknown;
 			turnIndex: number;
 			createdAt: number;
 			durationMs?: number;
@@ -101,6 +113,14 @@ export interface CurrentSessionState {
 	readonly messageCount: number;
 }
 
+/** 钻取视图用的子 agent 会话快照（内存态，随主会话生命周期）。 */
+export interface DelegationSessionView {
+	readonly kind: "exploring" | "writing";
+	readonly title: string;
+	readonly messages: readonly Message[];
+	readonly running: boolean;
+}
+
 /**
  * tui hook 结果：将 hook 到的数据封装出来传给组件使用
  */
@@ -114,6 +134,8 @@ export interface UseAgentResult {
 	l2Overview: L2Overview | null;
 	/** 当前 Session 的完整 Todo List。 */
 	todoList: TodoList | null;
+	/** 当前 Session 内各委派子任务的会话快照（钻取视图数据源）。 */
+	delegationSessions: Readonly<Record<string, DelegationSessionView>>;
 	submit: (text: string, attachments?: readonly ImageAttachment[]) => void;
 	abort: () => void;
 	clearConversation: () => void;
@@ -123,6 +145,8 @@ export interface UseAgentResult {
 	compact: VivlosAgent["compact"];
 	/** 创建新 session 并重置 TUI */
 	newSession: () => void;
+	/** /delegate-demo：模拟委派全流程（样式原型） */
+	delegateDemo: () => void;
 }
 
 // #endregion
@@ -157,6 +181,12 @@ function extractToolText(raw: unknown): string {
 	}
 
 	return String(raw);
+}
+
+/** 从 tool result/partialResult 中提取结构化 details（如 delegate 批次状态）。 */
+function extractToolDetails(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object") return undefined;
+	return (raw as Record<string, unknown>).details;
 }
 
 /** 从 messageSnapshot 中提取最后一个 thinking block 文本 */
@@ -264,6 +294,7 @@ function completeTool(
 	callId: string,
 	result: string,
 	success: boolean,
+	details?: unknown,
 	completedAt = Date.now(),
 ): LogEntry[] {
 	return log.map((entry) =>
@@ -273,6 +304,7 @@ function completeTool(
 				result,
 				success,
 				done: true,
+				...(details !== undefined ? { details } : {}),
 				durationMs: Math.max(0, completedAt - entry.createdAt),
 			}
 			: entry,
@@ -303,7 +335,7 @@ function completeConsolidateRun(
 }
 
 /** 从 Message 数组重建 ConversationTurn[]（用于 session 切换后恢复历史） */
-function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
+export function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 	const turns: ConversationTurn[] = [];
 	let cur: ConversationTurn | null = null;
 	// 整轮耗时重算：本轮 user 消息时间戳与最后一条消息时间戳
@@ -374,11 +406,20 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 			}
 		} else if (msg.role === "toolResult" && cur) {
 			turnLastTs = msg.timestamp;
+			const text = extractToolText(msg);
+			const entry = cur.log.find(
+				(e) => e.kind === "tool" && e.callId === msg.toolCallId,
+			);
+			// delegate 的历史重建：从结果 XML 解析批次终态
+			const details = entry?.kind === "tool" && entry.name === "delegate"
+				? parseDelegationXml(text) ?? undefined
+				: undefined;
 			cur.log = completeTool(
 				cur.log,
 				msg.toolCallId,
-				extractToolText(msg),
+				text,
 				!msg.isError,
+				details,
 				msg.timestamp,
 			);
 		}
@@ -449,6 +490,9 @@ export function useAgent(
 	const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
 	const [l2Overview, setL2Overview] = useState<L2Overview | null>(null);
 	const [todoList, setTodoList] = useState<TodoList | null>(null);
+	const [delegationSessions, setDelegationSessions] = useState<
+		Record<string, DelegationSessionView>
+	>({});
 
 	// #region useAgent hook
 
@@ -486,6 +530,7 @@ export function useAgent(
 					setLoading(false);
 					setMemoryOverview(null);
 					setTodoList(nextTodoList);
+					setDelegationSessions({});
 					currentIdxRef.current = -1;
 					latestUsageRef.current = undefined;
 				}
@@ -515,6 +560,22 @@ export function useAgent(
 			eventBus.on("todo:updated", (event) => {
 				if (!isCurrentSession(event.sessionId)) return;
 				setTodoList(event.todoList);
+			}),
+		);
+
+		// 委派子会话消息快照（钻取视图）
+		unsubs.push(
+			eventBus.on("delegation:task_messages", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
+				setDelegationSessions((prev) => ({
+					...prev,
+					[event.taskId]: {
+						kind: event.kind,
+						title: event.title,
+						messages: event.messages,
+						running: event.running,
+					},
+				}));
 			}),
 		);
 
@@ -581,12 +642,17 @@ export function useAgent(
 			eventBus.on("agent:toolCall_delta", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
 				const text = extractToolText(e.partialResult);
+				const details = extractToolDetails(e.partialResult);
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
 						log: t.log.map((entry) =>
 							entry.kind === "tool" && entry.callId === e.callId
-								? { ...entry, result: text }
+								? {
+									...entry,
+									result: text,
+									...(details !== undefined ? { details } : {}),
+								}
 								: entry,
 						),
 					})),
@@ -599,10 +665,11 @@ export function useAgent(
 			eventBus.on("agent:toolCall_end", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
 				const text = extractToolText(e.result);
+				const details = extractToolDetails(e.result);
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
-						log: completeTool(t.log, e.callId, text, e.success),
+						log: completeTool(t.log, e.callId, text, e.success, details),
 					})),
 				);
 			}),
@@ -968,6 +1035,7 @@ export function useAgent(
 		}
 		setTurns([]);
 		setLoading(false);
+		setDelegationSessions({});
 		currentIdxRef.current = -1;
 	}, [loading]);
 
@@ -1000,6 +1068,208 @@ export function useAgent(
 	}, [agent]);
 	const compact = useCallback(() => agent.compact(), [agent]);
 
+	// #endregion
+
+	// #region 委派样式原型（/delegate-demo）
+
+	/**
+	 * 模拟一次完整委派流程：走真实事件管道（toolCall_start/delta/end），
+	 * 驱动与真实 delegate tool 完全相同的渲染链路，仅用于样式打样。
+	 */
+	const delegateDemoRunning = useRef(false);
+	const delegateDemo = useCallback(() => {
+		const sessionId = currentSessionRef.current?.id;
+		if (!sessionId || loading || delegateDemoRunning.current) return;
+		delegateDemoRunning.current = true;
+
+		const idx = conversationTurns.length;
+		currentIdxRef.current = idx;
+		setTurns((prev) => [
+			...prev,
+			{
+				userInput: "▸ 委派演示（模拟数据，非真实执行）",
+				log: [],
+				status: "complete" as const,
+				turnCount: 0,
+				toolCount: 1,
+			},
+		]);
+
+		const callId = `demo-delegate-${Date.now()}`;
+		const batch: DelegationBatchState = {
+			phase: "running",
+			tasks: [
+				{
+					id: "t1",
+					kind: "exploring",
+					title: "定位会话存储实现",
+					state: "running",
+					startedAt: Date.now(),
+					turns: 0,
+				},
+				{
+					id: "t2",
+					kind: "writing",
+					title: "为 bash 工具增加超时保护",
+					state: "running",
+					startedAt: Date.now(),
+					turns: 0,
+				},
+			],
+		};
+		const [t1, t2] = batch.tasks as [
+			DelegationBatchState["tasks"][number],
+			DelegationBatchState["tasks"][number],
+		];
+
+		// 子会话消息快照（钻取视图演示）
+		const brief0: Message[] = [
+			buildBriefUserMessage({
+				kind: "exploring",
+				title: t1.title,
+				brief: "（演示：定位会话存储的实现位置并返回 file:line 证据）",
+			}),
+		];
+		const brief1: Message[] = [
+			buildBriefUserMessage({
+				kind: "writing",
+				title: t2.title,
+				brief: "（演示：为 bash 工具增加超时保护并验证）",
+			}),
+		];
+		const emitMsg = (
+			index: number,
+			msgs: Message[],
+			running: boolean,
+		) => {
+			const task = index === 0 ? t1 : t2;
+			eventBus.emit({
+				type: "delegation:task_messages",
+				sessionId,
+				taskId: `${callId}:${task.id}`,
+				kind: task.kind,
+				title: task.title,
+				messages: msgs,
+				running,
+			});
+		};
+		const demoAssistant = (text: string): Message =>
+			({
+				role: "assistant",
+				content: [{ type: "text", text }],
+				timestamp: Date.now(),
+				stopReason: "stop",
+			}) as Message;
+		brief0.forEach((_, i) => emitMsg(0, brief0, true));
+		emitMsg(1, brief1, true);
+
+		const snapshot = (): DelegationBatchState => ({
+			phase: batch.phase,
+			tasks: batch.tasks.map((task) => ({ ...task })),
+		});
+		const delta = () =>
+			eventBus.emit({
+				type: "agent:toolCall_delta",
+				sessionId,
+				callId,
+				partialResult: { content: [], details: snapshot() },
+			});
+
+		eventBus.emit({
+			type: "agent:toolCall_start",
+			sessionId,
+			toolName: "delegate",
+			callId,
+			args: {
+				tasks: [
+					{ kind: "exploring", title: t1.title, brief: "（演示）" },
+					{ kind: "writing", title: t2.title, brief: "（演示）" },
+				],
+			},
+		});
+
+		const timers: ReturnType<typeof setTimeout>[] = [];
+		const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+
+		at(600, delta);
+		at(1400, () => {
+			t1.turns = 2;
+			t1.currentTool = "grep";
+			t2.turns = 1;
+			t2.currentTool = "read";
+			delta();
+			const msgs0 = [...brief0, demoAssistant("用 grep 搜索 jsonl-repo 的引用...")];
+			const msgs1 = [...brief1, demoAssistant("先阅读 bash 工具的当前实现...")];
+			emitMsg(0, msgs0, true);
+			emitMsg(1, msgs1, true);
+		});
+		at(2200, () => {
+			t1.turns = 5;
+			t1.currentTool = "read";
+			t2.turns = 3;
+			t2.currentTool = "bash";
+			delta();
+			const msgs0 = [
+				...brief0,
+				demoAssistant("用 grep 搜索 jsonl-repo 的引用..."),
+				demoAssistant("找到目标文件，正在阅读实现细节..."),
+			];
+			emitMsg(0, msgs0, true);
+		});
+		at(3000, () => {
+			t1.state = "completed";
+			t1.completedAt = Date.now();
+			t1.currentTool = undefined;
+			t1.result =
+				"结论：会话持久化位于 vivlos/infra/storage/session/jsonl-repo.ts:41\n- appendMessage() L70：appendFileSync 写入 history.jsonl\n- ensureSession() L49：首次 activate 时延迟写入 header";
+			t2.turns = 6;
+			t2.currentTool = "write";
+			delta();
+			const msgs0 = [
+				...brief0,
+				demoAssistant("用 grep 搜索 jsonl-repo 的引用..."),
+				demoAssistant("找到目标文件，正在阅读实现细节..."),
+				demoAssistant(
+					"结论：会话持久化位于 vivlos/infra/storage/session/jsonl-repo.ts:41\n- appendMessage() L70：appendFileSync 写入 history.jsonl\n- ensureSession() L49：首次 activate 时延迟写入 header",
+				),
+			];
+			emitMsg(0, msgs0, false);
+		});
+		at(4000, () => {
+			t2.state = "completed";
+			t2.completedAt = Date.now();
+			t2.currentTool = undefined;
+			t2.result =
+				"改动清单：\n- vivlos/agent/tools/builtin/bash.ts：新增 120s 默认超时参数\n验证方式与结果：bun run test 全部通过";
+			delta();
+			const msgs1 = [
+				...brief1,
+				demoAssistant("先阅读 bash 工具的当前实现..."),
+				demoAssistant("新增超时参数，修改调用点..."),
+				demoAssistant(
+					"改动清单：\n- vivlos/agent/tools/builtin/bash.ts：新增 120s 默认超时参数\n验证方式与结果：bun run test 全部通过",
+				),
+			];
+			emitMsg(1, msgs1, false);
+		});
+		at(4300, () => {
+			batch.phase = "done";
+			eventBus.emit({
+				type: "agent:toolCall_end",
+				sessionId,
+				callId,
+				result: {
+					content: [{ type: "text", text: renderDelegationXml(snapshot()) }],
+					details: snapshot(),
+				},
+				success: true,
+			});
+			delegateDemoRunning.current = false;
+		});
+	}, [conversationTurns.length, loading, eventBus]);
+
+	// #endregion
+
 	return {
 		conversationTurns,
 		loading,
@@ -1008,6 +1278,7 @@ export function useAgent(
 		memoryOverview,
 		l2Overview,
 		todoList,
+		delegationSessions,
 		submit,
 		abort,
 		clearConversation,
@@ -1016,5 +1287,6 @@ export function useAgent(
 		renameSession,
 		compact,
 		newSession,
+		delegateDemo,
 	};
 }

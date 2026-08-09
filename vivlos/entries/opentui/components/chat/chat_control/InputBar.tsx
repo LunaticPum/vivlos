@@ -78,6 +78,10 @@ export interface InputBarProps {
 	onShowHelp: () => void;
 	/** 命令注册表（用于 slash 补全） */
 	registry: TUICommandRegistry;
+	/** 委派子会话钻取视图激活：↑ 返回主会话 */
+	delegationViewActive?: boolean;
+	/** 退出钻取视图（↑ 触发） */
+	onExitDelegationView?: () => void;
 }
 
 export function InputBar({
@@ -88,6 +92,8 @@ export function InputBar({
 	onOpenProviders,
 	onShowHelp,
 	registry,
+	delegationViewActive,
+	onExitDelegationView,
 }: InputBarProps) {
 	const renderer = useRenderer();
 	const [contentLines, setContentLines] = useState(1);
@@ -227,6 +233,13 @@ export function InputBar({
 		}
 		if (matchesKeybind(key, KEYBINDS.openHelp)) {
 			onShowHelp();
+			return;
+		}
+
+		// 钻取视图激活：↑ 返回主会话（优先于补全与历史导航）
+		if (delegationViewActive && key.name === "up") {
+			key.preventDefault();
+			onExitDelegationView?.();
 			return;
 		}
 
@@ -443,7 +456,9 @@ export function InputBar({
 						focused={!popupActive}
 						showCursor={!popupActive}
 						flexGrow={1}
-						placeholder="输入消息... (Ctrl+Enter 换行，拖入图片 / Ctrl+G 粘贴截图)"
+						placeholder={delegationViewActive
+						? "正在查看委派子任务，按 ↑ 返回主会话..."
+						: "输入消息... (Ctrl+Enter 换行，拖入图片 / Ctrl+G 粘贴截图)"}
 						placeholderColor={C.subtext}
 						textColor={C.text}
 						wrapMode="char"

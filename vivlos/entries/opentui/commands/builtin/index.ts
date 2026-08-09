@@ -15,6 +15,7 @@ import { newCommand } from "./new.ts";
 import { renameCommand } from "./rename.ts";
 import { compactCommand } from "./compact.ts";
 import { updateCommand } from "./update.ts";
+import { delegateDemoCommand } from "./delegate-demo.ts";
 
 export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(modelsCommand);
@@ -27,4 +28,5 @@ export function registerBuiltinCommands(registry: TUICommandRegistry): void {
 	registry.register(renameCommand);
 	registry.register(compactCommand);
 	registry.register(updateCommand);
+	registry.register(delegateDemoCommand);
 }

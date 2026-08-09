@@ -25,6 +25,7 @@ import { HelpPopup } from "../../components/popups/HelpPopup";
 import { CustomProviderPopup } from "../../components/popups/CustomProviderPopup";
 import { useAgent } from "../../hooks/useAgent";
 import { useOfferChoice } from "../../hooks/useOfferChoice";
+import { deriveDelegateTasks } from "../../components/sideBar/SideBar_Tasks";
 import {
 	createTUICommandRegistry,
 	type TUICommandRegistry,
@@ -65,7 +66,7 @@ type PopupState =
 	| "custom"
 	| "sessions";
 
-type SidebarSection = "none" | "memory" | "todo";
+type SidebarSection = "none" | "memory" | "todo" | "tasks";
 
 // #endregion
 
@@ -98,9 +99,15 @@ export function Workspace({
 		memoryOverview,
 		l2Overview,
 		todoList,
+		delegationSessions,
+		delegateDemo,
 	} = useAgent(agent, eventBus, { llm, llmConfigRepo });
 	const currentSessionId = currentSession?.id ?? "";
 	const offerChoice = useOfferChoice(eventBus, currentSessionId);
+	const delegateTasks = useMemo(
+		() => deriveDelegateTasks(conversationTurns),
+		[conversationTurns],
+	);
 
 	const [detailExpanded, setDetailExpanded] = useState(false);
 	const [popupState, setPopupState] = useState<PopupState>("none");
@@ -204,6 +211,10 @@ export function Workspace({
 				setPopupState("sessions");
 			},
 			toggleDetail: () => setDetailExpanded((v) => !v),
+			runDelegateDemo: () => {
+				setSidebarSection("none");
+				delegateDemo();
+			},
 			showHelp: () => {
 				setSidebarSection("none");
 				setShowHelp(true);
@@ -267,6 +278,24 @@ export function Workspace({
 	);
 
 	const [scrollBottomSignal, setScrollBottomSignal] = useState(0);
+
+	// ── 委派子会话钻取视图 ──
+	const [viewingTaskId, setViewingTaskId] = useState<string | null>(null);
+	// session 切换后旧子会话缓存已清空，钻取视图随之退出
+	useEffect(() => {
+		setViewingTaskId(null);
+	}, [currentSessionId]);
+	const delegationView = viewingTaskId
+		? delegationSessions[viewingTaskId] ?? null
+		: null;
+	const openDelegationTask = useCallback(
+		(taskId: string) => {
+			if (delegationSessions[taskId]) setViewingTaskId(taskId);
+		},
+		[delegationSessions],
+	);
+	const exitDelegationView = useCallback(() => setViewingTaskId(null), []);
+
 	const handleSubmit = useCallback(
 		(text: string, attachments?: readonly ImageAttachment[]) => {
 			// 带附件时不走 slash 命令，直接提交
@@ -280,6 +309,7 @@ export function Workspace({
 					return;
 				}
 			}
+			setViewingTaskId(null);
 			submit(text, attachments);
 			// 发送后把会话视图拉回底部
 			setScrollBottomSignal((n) => n + 1);
@@ -341,6 +371,8 @@ export function Workspace({
 						conversationTurns={conversationTurns}
 						detailExpanded={detailExpanded}
 						scrollBottomSignal={scrollBottomSignal}
+						delegationView={delegationView}
+						onOpenTask={openDelegationTask}
 					/>
 				)}
 				<ChatControls
@@ -370,6 +402,8 @@ export function Workspace({
 						onSubmit: handleSubmit,
 						onCtrlC: handleCtrlC,
 						popupActive: popupState !== "none" || showHelp || memoryActive,
+						delegationViewActive: delegationView !== null,
+						onExitDelegationView: exitDelegationView,
 						onOpenModels: () => {
 							setSidebarSection("none");
 							setShowHelp(false);
@@ -401,13 +435,18 @@ export function Workspace({
 			{!welcomeVisible && (
 				<Sidebar
 					todoList={todoList}
+					delegateTasks={delegateTasks}
 					memoryActive={memoryActive}
 					todoActive={sidebarSection === "todo"}
+					tasksActive={sidebarSection === "tasks"}
 					onMemoryActiveChange={(active) =>
 						setSidebarSection(active ? "memory" : "none")
 					}
 					onTodoActiveChange={(active) =>
 						setSidebarSection(active ? "todo" : "none")
+					}
+					onTasksActiveChange={(active) =>
+						setSidebarSection(active ? "tasks" : "none")
 					}
 				preview={{
 						sessionName,

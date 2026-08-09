@@ -13,6 +13,10 @@ import {
 } from "../../components/sideBar/SideBar_Memory";
 import { SidebarSession } from "../../components/sideBar/SideBar_Session";
 import { SidebarTodo } from "../../components/sideBar/SideBar_Todo";
+import {
+	SidebarTasks,
+	type SidebarTaskEntry,
+} from "../../components/sideBar/SideBar_Tasks";
 
 const C = {
 	secondary: "#a5adcb", // Macchiato/Subtext 0
@@ -39,10 +43,13 @@ export interface SidebarPreview {
 export interface SidebarProps {
 	readonly preview: SidebarPreview;
 	readonly todoList: TodoList | null;
+	readonly delegateTasks: readonly SidebarTaskEntry[];
 	readonly memoryActive: boolean;
 	readonly todoActive: boolean;
+	readonly tasksActive: boolean;
 	readonly onMemoryActiveChange: (active: boolean) => void;
 	readonly onTodoActiveChange: (active: boolean) => void;
+	readonly onTasksActiveChange: (active: boolean) => void;
 }
 
 // #endregion
@@ -68,10 +75,13 @@ function trimPath(value: string, width: number): string {
 export function Sidebar({
 	preview,
 	todoList,
+	delegateTasks,
 	memoryActive,
 	todoActive,
+	tasksActive,
 	onMemoryActiveChange,
 	onTodoActiveChange,
+	onTasksActiveChange,
 }: SidebarProps) {
 	return (
 		<box
@@ -110,6 +120,12 @@ export function Sidebar({
 				todoList={todoList}
 				active={todoActive}
 				onActiveChange={onTodoActiveChange}
+			/>
+			<SidebarTasks
+				sessionId={preview.sessionId}
+				tasks={delegateTasks}
+				active={tasksActive}
+				onActiveChange={onTasksActiveChange}
 			/>
 			{/* #endregion */}
 
