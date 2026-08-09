@@ -1,4 +1,4 @@
-/** Workspace 中 Todo、Task 与交互选择的事件。 */
+/** Workspace 中 Todo 与交互选择的事件。 */
 
 // #region Todo
 
@@ -36,16 +36,7 @@ export interface TodoList {
 
 // #endregion
 
-// #region Task 与 Offer Choice
-
-export interface TaskItem {
-	readonly id: string;
-	readonly title: string;
-	readonly description?: string;
-	readonly status: "pending" | "in_progress" | "completed";
-	readonly createdAt: number;
-	readonly completedAt?: number;
-}
+// #region Offer Choice
 
 /** Offer Choice 中由 Agent 提供的一个单选项。 */
 export interface OfferChoiceOption {
@@ -74,21 +65,6 @@ export type WorkspaceEvent =
 			readonly type: "todo:updated";
 			readonly sessionId: string;
 			readonly todoList: TodoList | null;
-	  }
-	| {
-			readonly type: "task:created";
-			readonly listName: string;
-			readonly task: TaskItem;
-	  }
-	| {
-			readonly type: "task:updated";
-			readonly listName: string;
-			readonly task: TaskItem;
-	  }
-	| {
-			readonly type: "task:completed";
-			readonly listName: string;
-			readonly taskId: string;
 	  }
 	| {
 			readonly type: "offer_choice:pending";

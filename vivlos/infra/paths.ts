@@ -79,16 +79,6 @@ export function ensureSessionsDir(): string {
 	return ensureDir(getSessionsDir());
 }
 
-/** 获取 tasks 目录路径（跨 session 长期目标） */
-export function getTasksDir(): string {
-	return resolve(getVivlosDir(), "tasks");
-}
-
-/** 确保 tasks 目录存在 */
-export function ensureTasksDir(): string {
-	return ensureDir(getTasksDir());
-}
-
 /** 获取临时文件目录路径 */
 export function getTempDir(): string {
 	return resolve(getVivlosDir(), "temp");

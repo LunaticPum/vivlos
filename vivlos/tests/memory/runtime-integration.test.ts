@@ -398,7 +398,6 @@ describe("Memory runtime integration", () => {
 			eventBus,
 			getSessionId: () => manager.id,
 			getSessionDir: () => sessionDir,
-			tasksDir: join(tempRoot, "tasks"),
 		}).find((tool) => tool.name === "todo_replace");
 		if (!todoReplace) throw new Error("Missing todo_replace");
 		const agent = createAgent({
@@ -457,7 +456,6 @@ describe("Memory runtime integration", () => {
 			eventBus,
 			getSessionId: () => manager.id,
 			getSessionDir: () => sessionDir,
-			tasksDir: join(tempRoot, "tasks"),
 		}).find((tool) => tool.name === "todo_replace");
 		if (!todoReplace) throw new Error("Missing todo_replace");
 		const agent = createAgent({

@@ -26,8 +26,6 @@ import {
 	cleanTempDir,
 	ensureConfigDir,
 	ensureSessionsDir,
-	ensureTasksDir,
-	getTasksDir,
 } from "@vivlos/infra/paths.ts";
 import { ensureConfig, loadConfig } from "@vivlos/infra/config/index.ts";
 import { checkPiAiVersion } from "@vivlos/infra/version.ts";
@@ -70,7 +68,6 @@ async function main(): Promise<void> {
 	ensureConfig();
 	const config = loadConfig();
 	ensureSessionsDir();
-	ensureTasksDir();
 	const dbPath = process.env.VIVLOS_DB_PATH ?? getDbPath();
 
 	// ── SQLite 持久化层 ──
@@ -169,18 +166,21 @@ async function main(): Promise<void> {
 		if (event.sessionId === sessionManager.id) promptBuilder.invalidate();
 	});
 
-	// ── 装配 advanced tools（todo / task / offer_choice / memory）──
+	// ── 装配 advanced tools（todo / delegate / offer_choice / memory）──
 	const advancedTools = createAdvancedTools({
 		eventBus,
 		getSessionId: () => sessionManager.id,
 		getSessionDir: () => sessionManager.dirPath,
-		tasksDir: getTasksDir(),
 		getMemoryService: () => memoryRuntime.getService(),
 		getMemoryOperationContext: (command, reasonCode, reason) =>
 			memoryRuntime.getOperationContext(command, reasonCode, reason),
 		onMemoryResult: (command, result) =>
 			memoryRuntime.recordMainResult(command, result),
 		getL2SearchService: l2SearchService ? () => l2SearchService : undefined,
+		llm,
+		getModel: () => model,
+		thinkingLevel: "medium",
+		getDelegationTools: () => builtinTools,
 	});
 	const tools = [...builtinTools, ...advancedTools];
 

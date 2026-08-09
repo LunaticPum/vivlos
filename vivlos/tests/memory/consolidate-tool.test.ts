@@ -146,7 +146,6 @@ describe("Consolidate Tool schema", () => {
 			eventBus: createEventBus(),
 			getSessionId: () => "main-session",
 			getSessionDir: () => "unused-session-dir",
-			tasksDir: "unused-tasks-dir",
 			memoryService: {} as never,
 		});
 		expect(advancedTools.map((advancedTool) => advancedTool.name)).not.toContain(

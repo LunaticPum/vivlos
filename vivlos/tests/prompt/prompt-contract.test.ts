@@ -10,7 +10,7 @@ import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import { createPromptBuilder } from "@vivlos/agent/prompt/index.ts";
 import { summarize } from "@vivlos/agent/compression/summarizer.ts";
 import { memoryDescription } from "@vivlos/agent/tools/advanced/memory/description.ts";
-import { description as taskDescription } from "@vivlos/agent/tools/advanced/task/description.ts";
+import { DELEGATE_DESCRIPTION } from "@vivlos/agent/tools/advanced/delegate/description.ts";
 import { descriptions as todoDescriptions } from "@vivlos/agent/tools/advanced/todo/description.ts";
 import {
 	createBashTool,
@@ -63,14 +63,15 @@ describe("Main agent prompt contract", () => {
 		}
 		const prompt = createPromptBuilder().build();
 		expect(prompt).toContain("不得使用 read、write 或 bash 访问或创建 Vivlos Memory");
-		expect(taskDescription).toContain("稳定事实、环境或用户偏好（用 memory 代替）");
-		expect(taskDescription).not.toContain("记住这个目标");
+		expect(DELEGATE_DESCRIPTION).toContain("每批最多 2 个子任务，且最多 1 个 writing");
+		expect(DELEGATE_DESCRIPTION).toContain("子代理看不到当前对话");
 		expect(todoDescriptions.write).toContain("当前 Session");
 		expect(todoDescriptions.write).toContain("创建");
 		expect(todoDescriptions.write).toContain("不要传字符串");
 		expect(todoDescriptions.replace).toContain("不要传字符串");
 		expect(todoDescriptions.modify).toContain("Item");
 		expect(prompt).toContain("Todo 只跟踪当前 Session 的执行进度，不写入 memory");
+		expect(prompt).toContain("子代理看不到当前对话：brief 必须自包含");
 	});
 });
 

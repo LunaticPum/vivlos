@@ -18,7 +18,6 @@ beforeEach(() => {
 		eventBus: createEventBus(),
 		getSessionId: () => "session-a",
 		getSessionDir: () => sessionDir,
-		tasksDir: join(sessionDir, "tasks"),
 	});
 });
 

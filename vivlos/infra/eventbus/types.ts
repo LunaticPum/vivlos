@@ -6,6 +6,7 @@ import type { MemoryEvent } from "./events/memory-event.ts";
 import type { SessionEvent } from "./events/session-event.ts";
 import type { AppEvent } from "./events/app-event.ts";
 import type { WorkspaceEvent } from "./events/workspace-event.ts";
+import type { DelegationEvent } from "./events/delegation-event.ts";
 
 export type VivlosEvent =
 	| MainAgentEvent
@@ -13,7 +14,8 @@ export type VivlosEvent =
 	| MemoryEvent
 	| SessionEvent
 	| AppEvent
-	| WorkspaceEvent;
+	| WorkspaceEvent
+	| DelegationEvent;
 
 export type { MainAgentEvent } from "./events/main-agent-event.ts";
 export type {
@@ -35,13 +37,16 @@ export type {
 } from "./events/session-event.ts";
 export type { AppEvent } from "./events/app-event.ts";
 export type {
+	DelegationEvent,
+	DelegationTaskMessagesEvent,
+} from "./events/delegation-event.ts";
+export type {
 	WorkspaceEvent,
 	TodoPriority,
 	TodoItemStatus,
 	TodoListStatus,
 	TodoItem,
 	TodoList,
-	TaskItem,
 	OfferChoiceOption,
 	OfferChoiceQuestion,
 	OfferChoiceAnswer,

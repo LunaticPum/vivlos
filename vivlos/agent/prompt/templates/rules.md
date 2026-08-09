@@ -25,8 +25,13 @@
 - 创建新 List 使用 todo_write，完整替换使用 todo_replace，读取使用 todo_read，删除整个 List 使用 todo_delete
 - Item 内容编辑、移动、插入或删除使用 todo_modify；Item 状态推进使用 todo_update
 - 首次 Todo 调用前以本轮 Todo Hint 为准，调用后以最新 Todo Tool Result 为准；历史 Todo 数据只是旧快照，不得合并或恢复其中已不存在的 Item
-- Todo 只跟踪当前 Session 的执行进度，不写入 memory，也不替代跨 Session 的 task
+- Todo 只跟踪当前 Session 的执行进度，不写入 memory
 - 只有 Todo Tool Result 确认成功后，才能声称 Todo 已更新；失败时根据最新结果继续
+
+## Delegate Tool 规则
+- 子代理看不到当前对话：brief 必须自包含目标、范围与期望返回；已确认的事实与约束写入 context，参考资料传文件路径
+- 每批最多委派 2 个子任务且最多 1 个 writing；信息收集用 exploring，可自包含描述的独立编码任务才用 writing
+- 委派返回的是子任务摘要：exploring 的重要结论（文件路径、代码事实）作为后续改动依据前，先抽查核对
 
 ## Skill 使用规则
 - 以下 skill 提供特定任务的专用指引，当任务匹配描述时用 skill 工具加载完整内容

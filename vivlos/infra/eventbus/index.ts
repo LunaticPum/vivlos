@@ -9,7 +9,6 @@ export type {
 	TodoListStatus,
 	TodoItem,
 	TodoList,
-	TaskItem,
 	OfferChoiceOption,
 	OfferChoiceQuestion,
 	OfferChoiceAnswer,
@@ -27,6 +26,8 @@ export type {
 	SessionStateSnapshot,
 	AppEvent,
 	WorkspaceEvent,
+	DelegationEvent,
+	DelegationTaskMessagesEvent,
 } from "./types.ts";
 
 /**
