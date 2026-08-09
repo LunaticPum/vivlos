@@ -27,7 +27,9 @@ import { log } from "@vivlos/infra/logger/logger.ts";
 // #region 类型
 
 /**
- * 推理过程日志条目（thinking / tool），按事件顺序追加
+ * 推理过程日志条目（thinking / tool / text），按事件顺序追加。
+ * text 条目保存 thinking 之后、工具调用之间的模型文本输出，
+ * 与 thinking/tool 交替构成时间序部件流。
  */
 export type LogEntry =
 	| {
@@ -51,6 +53,14 @@ export type LogEntry =
 			runMarker?: boolean;
 			turnIndex: number;
 			createdAt: number;
+			durationMs?: number;
+	  }
+	| {
+			kind: "text";
+			text: string;
+			done: boolean;
+			turnIndex: number;
+			createdAt: number;
 	  };
 
 /**
@@ -61,7 +71,6 @@ export interface ConversationTurn {
 	/** 本轮附带的图片文件名（用于渲染占位） */
 	attachedImages?: readonly string[];
 	log: LogEntry[];
-	finalText: string;
 	status: "running" | "complete" | "error" | "aborted";
 	turnCount: number;
 	toolCount: number;
@@ -77,6 +86,12 @@ export interface ConversationTurn {
 	};
 	/** 最近一次 assistant 消息的 token 用量 */
 	usage?: Usage;
+	/**
+	 * 整轮墙钟耗时（毫秒）。
+	 * 恢复的历史轮次由 messagesToTurns 用消息时间戳重算；
+	 * 运行中的轮次由界面实时计时，不依赖此字段。
+	 */
+	durationMs?: number;
 }
 
 export interface CurrentSessionState {
@@ -204,6 +219,9 @@ function finishPendingLog(
 				durationMs: Math.max(0, endedAt - entry.createdAt),
 			};
 		}
+		if (entry.kind === "text" && !entry.done) {
+			return { ...entry, done: true };
+		}
 		if (outcome !== "complete" && entry.kind === "tool" && !entry.done) {
 			return { ...entry, done: true, success: false, result: reason };
 		}
@@ -211,15 +229,52 @@ function finishPendingLog(
 	});
 }
 
+/** 文本增量追加：末尾是未完成 text 条目则追加，否则新建条目。 */
+function appendTextDelta(
+	log: LogEntry[],
+	delta: string,
+	turnIndex: number,
+): LogEntry[] {
+	const last = log[log.length - 1];
+	if (last && last.kind === "text" && !last.done) {
+		return [...log.slice(0, -1), { ...last, text: last.text + delta }];
+	}
+	return [
+		...log,
+		{ kind: "text", text: delta, done: false, turnIndex, createdAt: Date.now() },
+	];
+}
+
+/** 封闭所有未完成的 text 条目（新 turn / 工具调用开始时调用）。 */
+function sealTextEntries(log: LogEntry[]): LogEntry[] {
+	return log.map((entry) =>
+		entry.kind === "text" && !entry.done ? { ...entry, done: true } : entry,
+	);
+}
+
+/** 丢弃末尾连续的 text 条目（重试时丢弃失败尝试的半截文本）。 */
+function dropTrailingText(log: LogEntry[]): LogEntry[] {
+	let end = log.length;
+	while (end > 0 && log[end - 1]!.kind === "text") end--;
+	return end === log.length ? log : log.slice(0, end);
+}
+
 function completeTool(
 	log: LogEntry[],
 	callId: string,
 	result: string,
 	success: boolean,
+	completedAt = Date.now(),
 ): LogEntry[] {
 	return log.map((entry) =>
 		entry.kind === "tool" && entry.callId === callId
-			? { ...entry, result, success, done: true }
+			? {
+				...entry,
+				result,
+				success,
+				done: true,
+				durationMs: Math.max(0, completedAt - entry.createdAt),
+			}
 			: entry,
 	);
 }
@@ -251,18 +306,26 @@ function completeConsolidateRun(
 function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 	const turns: ConversationTurn[] = [];
 	let cur: ConversationTurn | null = null;
+	// 整轮耗时重算：本轮 user 消息时间戳与最后一条消息时间戳
+	let turnStartTs = 0;
+	let turnLastTs = 0;
 
 	for (const msg of messages) {
 		if (msg.role === "user") {
 			const text = typeof msg.content === "string"
 				? msg.content
 				: msg.content.filter((c): c is TextContent => c.type === "text").map((c) => c.text).join("");
-			if (cur) turns.push(cur);
-			cur = { userInput: text, log: [], finalText: "", status: "complete", turnCount: 0, toolCount: 0 };
+		if (cur) {
+			cur.durationMs = Math.max(0, turnLastTs - turnStartTs);
+			turns.push(cur);
+		}
+			cur = { userInput: text, log: [], status: "complete", turnCount: 0, toolCount: 0 };
+			turnStartTs = msg.timestamp;
+			turnLastTs = msg.timestamp;
 		} else if (msg.role === "assistant" && cur) {
+			turnLastTs = msg.timestamp;
 			const turnIndex = cur.turnCount;
 			cur.turnCount++;
-			cur.finalText = msg.content.filter((c): c is TextContent => c.type === "text").map((c) => c.text).join("");
 			cur.usage = msg.usage;
 			for (const c of msg.content) {
 				if (c.type === "thinking") {
@@ -275,6 +338,18 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 						turnIndex,
 						createdAt: msg.timestamp,
 					});
+				}
+				if (c.type === "text") {
+					const text = (c as TextContent).text;
+					if (text) {
+						cur.log.push({
+							kind: "text",
+							text,
+							done: true,
+							turnIndex,
+							createdAt: msg.timestamp,
+						});
+					}
 				}
 				if (c.type === "toolCall") {
 					cur.toolCount++;
@@ -298,15 +373,20 @@ function messagesToTurns(messages: readonly Message[]): ConversationTurn[] {
 				cur.log = finishPendingLog(cur.log, msg.stopReason, message, msg.timestamp);
 			}
 		} else if (msg.role === "toolResult" && cur) {
+			turnLastTs = msg.timestamp;
 			cur.log = completeTool(
 				cur.log,
 				msg.toolCallId,
 				extractToolText(msg),
 				!msg.isError,
+				msg.timestamp,
 			);
 		}
 	}
-	if (cur) turns.push(cur);
+	if (cur) {
+		cur.durationMs = Math.max(0, turnLastTs - turnStartTs);
+		turns.push(cur);
+	}
 	return turns;
 }
 
@@ -455,7 +535,7 @@ export function useAgent(
 						...t,
 						turnCount: t.turnCount + 1,
 						log: [
-							...t.log,
+							...sealTextEntries(t.log),
 							{
 								kind: "thinking",
 								text: "",
@@ -478,7 +558,7 @@ export function useAgent(
 						...t,
 						toolCount: t.toolCount + 1,
 						log: [
-							...t.log,
+							...sealTextEntries(t.log),
 							{
 								kind: "tool",
 								callId: e.callId,
@@ -642,20 +722,23 @@ export function useAgent(
 			}),
 		);
 
-		// 文本流式更新 -> 实时写入 finalText（打字机效果） + 确保 Thinking 被正确关闭
+		// 文本流式更新 -> 按时间序追加 text 条目 + 确保 Thinking 被正确关闭
 		unsubs.push(
 			eventBus.on("agent:message_delta", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
 				setTurns((prev) =>
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
-						finalText: t.finalText + e.delta,
-						log: updateLastThinking(t.log, (entry) => ({
-							...entry,
-							done: true,
-							outcome: "complete",
-							durationMs: Date.now() - entry.createdAt,
-						})),
+						log: appendTextDelta(
+							updateLastThinking(t.log, (entry) => ({
+								...entry,
+								done: true,
+								outcome: "complete",
+								durationMs: Date.now() - entry.createdAt,
+							})),
+							e.delta,
+							Math.max(0, t.turnCount - 1),
+						),
 					})),
 				);
 			}),
@@ -682,24 +765,24 @@ export function useAgent(
 	);
 
 	unsubs.push(
-		eventBus.on("agent:retry_start", (e) => {
-			if (!isCurrentSession(e.sessionId)) return;
-			setTurns((prev) =>
-				updateCurrent(prev, currentIdxRef.current, (t) => t.status === "running"
-					? {
-						...t,
-						finalText: "",
-						retry: {
-							attempt: e.attempt,
-							maxAttempts: e.maxAttempts,
-							delayMs: e.delayMs,
-							errorMessage: e.error.message,
-						},
-					}
-					: t),
-			);
-		}),
-	);
+			eventBus.on("agent:retry_start", (e) => {
+				if (!isCurrentSession(e.sessionId)) return;
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => t.status === "running"
+						? {
+							...t,
+							log: dropTrailingText(t.log),
+							retry: {
+								attempt: e.attempt,
+								maxAttempts: e.maxAttempts,
+								delayMs: e.delayMs,
+								errorMessage: e.error.message,
+							},
+						}
+						: t),
+				);
+			}),
+		);
 
 	unsubs.push(
 		eventBus.on("agent:retry_end", (e) => {
@@ -713,7 +796,7 @@ export function useAgent(
 		}),
 	);
 
-	// conversationTurn 结束 -> 提交最终 usage + 写入最终回复
+	// conversationTurn 结束 -> 提交最终 usage + 封闭日志
 		unsubs.push(
 			eventBus.on("agent:complete", (e) => {
 				if (!isCurrentSession(e.sessionId)) return;
@@ -722,16 +805,30 @@ export function useAgent(
 				const idx = currentIdxRef.current;
 				const finalUsage = latestUsageRef.current;
 				setTurns((prev) =>
-					updateCurrent(prev, idx, (t) => t.status === "running"
-						? {
+					updateCurrent(prev, idx, (t) => {
+						if (t.status !== "running") return t;
+						let log = finishPendingLog(t.log, "complete");
+						// 兜底：流式 delta 缺失时用 finalMessage 补一条 text 条目
+						if (e.finalMessage && !log.some((entry) => entry.kind === "text")) {
+							log = [
+								...log,
+								{
+									kind: "text",
+									text: e.finalMessage,
+									done: true,
+									turnIndex: Math.max(0, t.turnCount - 1),
+									createdAt: Date.now(),
+								},
+							];
+						}
+						return {
 							...t,
 							status: "complete" as const,
-							finalText: e.finalMessage || t.finalText,
 							usage: finalUsage,
-							log: finishPendingLog(t.log, "complete"),
+							log,
 							retry: undefined,
-						}
-						: t),
+						};
+					}),
 				);
 				latestUsageRef.current = undefined;
 			}),
@@ -808,7 +905,6 @@ export function useAgent(
 						? { attachedImages: attachments!.map((a) => a.name) }
 						: {}),
 					log: [],
-					finalText: "",
 					status: "running",
 					turnCount: 0,
 					toolCount: 0,

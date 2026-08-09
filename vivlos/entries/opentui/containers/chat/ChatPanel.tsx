@@ -13,6 +13,7 @@ import type { ConversationTurn } from "../../hooks/useAgent";
 export interface ChatPanelProps {
 	conversationTurns: ConversationTurn[];
 	detailExpanded: boolean;
+	scrollBottomSignal?: number;
 }
 
 // #endregion
@@ -22,11 +23,13 @@ export interface ChatPanelProps {
 export function ChatPanel({
 	conversationTurns,
 	detailExpanded,
+	scrollBottomSignal,
 }: ChatPanelProps) {
 	return (
 		<ConversationView
 			conversationTurns={conversationTurns}
 			detailExpanded={detailExpanded}
+			scrollBottomSignal={scrollBottomSignal}
 		/>
 	);
 }

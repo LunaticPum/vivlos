@@ -266,6 +266,7 @@ export function Workspace({
 		],
 	);
 
+	const [scrollBottomSignal, setScrollBottomSignal] = useState(0);
 	const handleSubmit = useCallback(
 		(text: string, attachments?: readonly ImageAttachment[]) => {
 			// 带附件时不走 slash 命令，直接提交
@@ -280,6 +281,8 @@ export function Workspace({
 				}
 			}
 			submit(text, attachments);
+			// 发送后把会话视图拉回底部
+			setScrollBottomSignal((n) => n + 1);
 		},
 		[registry, cmdCtx, submit],
 	);
@@ -337,6 +340,7 @@ export function Workspace({
 					<ChatPanel
 						conversationTurns={conversationTurns}
 						detailExpanded={detailExpanded}
+						scrollBottomSignal={scrollBottomSignal}
 					/>
 				)}
 				<ChatControls

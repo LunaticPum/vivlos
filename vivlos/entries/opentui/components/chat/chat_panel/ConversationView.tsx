@@ -22,11 +22,14 @@ const FAST_SCROLL: ScrollAcceleration = {
 export interface ConversationViewProps {
 	conversationTurns: ConversationTurn[];
 	detailExpanded: boolean;
+	/** 递增信号：变化时强制滚动到底部（发送消息时由 Workspace 触发） */
+	scrollBottomSignal?: number;
 }
 
 export function ConversationView({
 	conversationTurns,
 	detailExpanded,
+	scrollBottomSignal,
 }: ConversationViewProps) {
 	const scrollboxRef = useRef<ScrollBoxRenderable>(null);
 
@@ -36,6 +39,14 @@ export function ConversationView({
 	useEffect(() => {
 		if (scrollboxRef.current) scrollboxRef.current.focusable = false;
 	}, []);
+
+	// 发送消息信号：强制滚到底部（stickyScroll 只在已处于底部时跟随，
+	// 用户上翻过历史后发送，需要显式拉回底部）
+	useEffect(() => {
+		if (!scrollBottomSignal) return;
+		const sb = scrollboxRef.current;
+		if (sb) sb.scrollTop = sb.scrollHeight;
+	}, [scrollBottomSignal]);
 
 	return (
 		<box flexGrow={1} overflow="hidden">
