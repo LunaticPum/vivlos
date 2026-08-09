@@ -4,7 +4,7 @@
 
 ## 项目概况
 
-Vivlos 是基于 Bun + TypeScript + OpenTUI 的本地通用终端 Agent。核心能力：多模型接入（pi-ai）、工具系统、会话管理、上下文压缩、四层 Memory、Todo/Task、图片识别（多模态）。
+Vivlos 是基于 Bun + TypeScript + OpenTUI 的本地通用终端 Agent。核心能力：多模型接入（pi-ai）、工具系统、会话管理、上下文压缩、四层 Memory、Todo/委派（Subagent）、图片识别（多模态）。
 
 - 仓库：`https://github.com/LunaticPum/vivlos.git`，主分支 `master`
 - 运行时：Bun 1.3+；测试：`bun run test`（vitest，`bun --bun` 运行时）；类型检查：`bun x tsc --noEmit`
@@ -12,20 +12,15 @@ Vivlos 是基于 Bun + TypeScript + OpenTUI 的本地通用终端 Agent。核心
 
 ## Git 状态（截至本文档写入时）
 
-**已推送的最近提交**（master 与 origin/master 同步）：
+**最近提交**（master 与 origin/master 同步，tsc + 251 tests 全过）：
 
 ```text
+[feat(tui): 委派卡片渲染与子会话钻取]     ← 上层 TUI（本阶段）
+[feat(delegation): 子任务委派底层机制]     ← 底层 runner + delegate 工具（本阶段）
+3272faa feat(tui): 时间序部件流渲染与耗时显示
+2d68a36 docs: 新增开发上下文总结 spec.md 并修正 gitignore 规则
 e9d23bb feat: 图片识别与模型选择增强
-596d157 docs: 完善记忆机制设计与文档表述
-0c591a7 feat: L2 会话检索与 Memory 生命周期协调
-ea0f7ef chore: 修复 vitest pi SDK alias 与测试脚本，L1 记忆目录归位
 ```
-
-**待提交改动**（5 个文件，TUI 渲染重构 + 交互细节，本文档写入后随提交一起推送）：
-
-- `useAgent.ts`：LogEntry 新增 `text` 类型（删除 finalText）、`durationMs`（tool 条目 + ConversationTurn）、messagesToTurns 时间戳重算耗时
-- `AgentMessageCard.tsx`：时间序部件流渲染、Turn 全宽分割线、工具单行折叠 + 点击展开、FixedScrollBox、/detail 只展开 thinking、流式 sticky 跟随、工具耗时显示
-- `ConversationView.tsx` / `ChatPanel.tsx` / `Workspace.tsx`：scrollBottomSignal 发送滚底链路
 
 ## 本次会话完成的工作
 
@@ -45,7 +40,7 @@ ea0f7ef chore: 修复 vitest pi SDK alias 与测试脚本，L1 记忆目录归�
 - 图片轮次整轮用视觉模型（`agent.prompt` 支持 modelOverride）；解析链：指定视觉模型 → 主模型支持图片 → 通知栏拒绝
 - rules.md：无附言图片先 offer_choice 询问解析方式
 
-### 3. TUI 时间序部件流重构（待提交）
+### 3. TUI 时间序部件流重构（已提交 3272faa）
 
 **数据模型**：`ConversationTurn.log: LogEntry[]` 新增 `text` 类型，删除 `finalText`。thinking/text/tool 按发生顺序交替入 log（文本增量追加到末尾未闭合 text 条目，新 turn/toolCall 会闭合）。会话恢复（messagesToTurns）同步重建有序条目。
 
@@ -57,11 +52,29 @@ ea0f7ef chore: 修复 vitest pi SDK alias 与测试脚本，L1 记忆目录归�
 - 流式 thinking 超 8 行变 scrollBox 后 sticky 跟随底部（`stickyScroll + stickyStart="bottom"`）
 - 发送消息强制滚底：Workspace `scrollBottomSignal` 递增 → ChatPanel → ConversationView `scrollTop = scrollHeight`
 
-### 4. 耗时显示与持久化（待提交）
+### 4. 耗时显示与持久化（已提交 3272faa）
 
 - 工具耗时：tool 条目 `durationMs`，主行显示 `✓ Calling bash 0.5s`；运行时 `toolCall_end` 计算，恢复轮次用 toolResult 时间戳减 assistant 消息时间戳
 - 整轮耗时：`ConversationTurn.durationMs` 由 messagesToTurns 用消息时间戳重算（本轮 user 消息 → 最后一条消息），重启后 /detail 底部总耗时不再显示 0s
 - **thinking 单条耗时不可恢复**：thinking 与正文共享同一条 assistant 消息的单一时间戳，无法切分；仅运行时实时显示（这是已确认的取舍）
+
+### 5. 子任务委派（Subagent）底层（本阶段）
+
+- `agent/delegation/`：types（TaskKind/DelegationTaskSpec/SubagentState/批次状态）、tool-policy（exploring 只读白名单 / writing 可写白名单，硬编码不做权限派生系统）、prompts（类别 SP 模板 + `<task_brief>` 移交包 + `buildBriefUserMessage`）、xml（renderDelegationXml / parseDelegationXml 往返）、runner（泛化 Consolidator 的独立上下文 agentLoop——maxTurns 硬限 + 超时 + 父 signal 级联中止 + 事件回调）
+- `tool-policy.ts`：exploring=read/ls/grep/find/skill，writing=+write/bash；子代理不获 delegate/todo/memory/offer_choice/session_search（禁递归、无计划层、隔离 Memory）
+- `runner.ts`：独立 AgentContext（专属 SP + brief 首条消息 + 过滤工具集），不触碰 sessionManager/history.jsonl；超时用 AbortSignal.timeout 与父 signal 合并（Consolidator 先例）；turn_limited 状态保留部分结果
+- `delegate` 工具（`agent/tools/advanced/delegate/`）：替换旧 task（goal CRUD 退役）——1-2 个任务/批、≤1 个 writing（硬校验抛 ToolError）、`Promise.all` 真并行 + 同步屏障；onUpdate 节流（200ms）推送批次快照；返回渲染为 `<delegation tasks="n" completed="c" failed="f">` XML；子会话消息经 onEvent（message_end/turn_end）增量捕获，以 `toolCallId:taskId` 为键通过 `delegation:task_messages` 事件推送快照
+- 旧 task 工具、TaskItem、`task:*` 事件、tasksDir 全部移除；AdvancedToolDeps 扩展 llm/model/thinkingLevel/getDelegationTools + eventBus/getSessionId
+- 计算依据：管理者模式（主模型 = Manager，参考 opencode 的 session 子代理 + pi-subagents-lite 的 stealth tool + 参考资料的移交包/新信息判据/并发避坑）
+
+### 6. TUI 委派卡片与子会话钻取（本阶段）
+
+- **管道**：useAgent 的 tool LogEntry 新增 `details?: unknown`——live 来自 onUpdate/toolResult，历史重建由 `messagesToTurns` 解析委派 XML；`delegationSessions` 订阅 `delegation:task_messages` 缓存子会话快照（session 切换/清除时重置）
+- **DelegationCard**（AgentMessageCard 内）：四阶段渲染——`⠙ 正在规划任务...` → `已委派 n 个子任务` → 任务行实时轮数/当前工具 → `✓/✗` 终态；点击展开结果（复用已有文本块/scrollBox 模式）；任务行点击可钻取子会话
+- **钻取视图**（DelegationSessionView）：复用 `messagesToTurns` + `AgentMessageCard` 渲染子会话对话（brief 首条 + assistant 多轮 + 工具调用）；`↑` 返回主会话（InputBar 截获，placeholder 同步切换）
+- **侧边栏** TASKS 区块（SideBar_Tasks）：`deriveDelegateTasks(conversationTurns)` 从轮次展平委派任务（demo/真实/历史重建三源通用），单行条目 `◉/✓/✗ [E|W] 标题`
+- `/delegate-demo` 命令：走真实事件管道（toolCall_start/delta/end + delegation:task_messages）驱动全流程渲染，用于样式验收
+- 设计参考：opencode 的子会话钻取（task_id→child session→navigation）
 
 ## 关键技术决策与原因
 
@@ -75,6 +88,10 @@ ea0f7ef chore: 修复 vitest pi SDK alias 与测试脚本，L1 记忆目录归�
 | 分割线用 border 拼法而非 markdown hr | 效果一致且可控（标签居中、颜色分开） |
 | 边框文本化（┆ 前缀）尝试后回退 | 丢失 thinking 的 markdown 渲染，观感降级；滚动时 ┆ 偶发延伸的伪影是 OpenTUI 脏区问题，暂挂起 |
 | 视觉模型不做指定时校验 | token-plan 类 provider 的 403 是偶发，用户确认不修 |
+| 委派类别二元硬编码（2 类）不做 agent 类型注册系统 | v1 只有 2 类，不做 pi 的 md 文件即类型或 opencode 的权限派生——需求规模不匹配 |
+| 子会话消息走 EventBus 快照而非独立 session | v1 子会话纯内存不落盘，无需完整 session 管理；EventBus 快照天然驱动 TUI 钻取视图 |
+| 一批最多 1 个 writing（硬校验） | 并发写同一代码库会互相覆盖（参考资料的"失败模式一"），规则越简单越可靠 |
+| 不做 grace turn steer（硬限止） | v1 保持简单：maxTurns 硬止 + turn_limited 状态保留部分结果；steer 需 pi-agent-core 消息队列支持，P2 再议 |
 
 ## 项目编写经验与认识
 
@@ -108,11 +125,32 @@ ea0f7ef chore: 修复 vitest pi SDK alias 与测试脚本，L1 记忆目录归�
 | 图片 base64 内联使 history.jsonl 膨胀 | 记录在案，后续可改独立存图 + 引用 |
 | L2 Retention / Prune | 未实现 |
 | L3 Provider（mem0 等）/ L4 知识库 | 设计完成（见 docs/memory/S3、S4），未实现 |
+| 子会话落盘 / resume / L2 索引 | 当前纯内存态；摘要随 toolResult 进主 history 不丢信息；持久化 = P2 |
+| 委派后台模式（open_issue） | 当前同步屏障；pi 的 BackgroundJob + steer 模式留作 P2 |
 | 桌面宠物 | 方向已提，细节未讨论 |
+
+## 关键文件索引
+
+| 文件 | 作用 |
+| --- | --- |
+| `vivlos/agent/memory/` | L1 记忆 + coordinator + L2 layers |
+| `vivlos/agent/memory/layers/l2/` | L2 schema/indexer/search/tokenize |
+| `vivlos/agent/delegation/` | 委派核心：types / tool-policy / prompts / xml / runner |
+| `vivlos/agent/tools/advanced/delegate/` | delegate 工具（批次校验 + 并行执行 + 消息捕获） |
+| `vivlos/agent/prompt/templates/subagent-*.md` | 子代理 SP 模板（exploring/writing） |
+| `vivlos/entries/opentui/hooks/useAgent.ts` | EventBus→React state，ConversationTurn/LogEntry 模型 + delegationSessions |
+| `vivlos/entries/opentui/components/chat/chat_panel/AgentMessageCard.tsx` | 时间序部件流渲染 + 委派卡片 |
+| `vivlos/entries/opentui/components/chat/chat_panel/DelegationSessionView.tsx` | 子会话钻取视图 |
+| `vivlos/entries/opentui/components/sideBar/SideBar_Tasks.tsx` | 侧边栏委派任务条目 |
+| `vivlos/infra/clipboard/image.ts` | 剪贴板截图 PowerShell 桥接 |
+| `vivlos/shared/utils/image.ts` | 图片附件校验/base64 |
+| `docs/记忆机制.md` | 四层记忆设计总览 |
+| `docs/memory/` | S0-S4 规范 + 架构管线 |
 
 ## 恢复上下文的快速路径
 
 1. 读本文档 + `docs/记忆机制.md` + `docs/memory/README.md`
 2. `git log --oneline -8` 与 `git status` 对照本文档的 Git 状态段
-3. TUI 渲染看 `AgentMessageCard.tsx`，数据流看 `useAgent.ts`
-4. 验证基线：`bun x tsc --noEmit` + `bun run test`（220 tests）
+3. TUI 渲染看 `AgentMessageCard.tsx` + `DelegationSessionView.tsx`，数据流看 `useAgent.ts`
+4. 委派机制看 `agent/delegation/` + `agent/tools/advanced/delegate/`
+5. 验证基线：`bun x tsc --noEmit` + `bun run test`（251 tests）
