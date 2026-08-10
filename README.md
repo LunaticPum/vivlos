@@ -20,24 +20,15 @@ Vivlos 面向希望在终端中使用大模型（LLM）完成信息检索、文�
 
 ## 效果演示
 
-<!--
-演示素材占位：生成后放入 assets/ 并将对应"待补充"替换为 <img src="./assets/文件名" width="520" />
-- 流式输出对话   → assets/streaming.gif
-- 子任务委派     → assets/delegation.gif
-- Todo List 生成 → assets/todo.gif
-- 多模型支持     → assets/multi-model.gif
-- 主界面         → assets/ui-main.png
-- 会话界面       → assets/ui-session.png
--->
-
 | 功能 | 演示 |
 | --- | --- |
-| 流式输出对话 | 待补充 |
-| 子任务委派（Subagent） | 待补充 |
-| Todo List 生成 | 待补充 |
-| 多模型支持 | 待补充 |
-| 主界面 | 待补充 |
-| 会话界面 | 待补充 |
+| 流式输出对话 | <img src="./assets/streaming.gif" width="520" alt="流式输出对话" /> |
+| 子任务委派（Subagent） | <img src="./assets/delegation.gif" width="520" alt="子任务委派" /> |
+| Todo List 生成 | <img src="./assets/todo.gif" width="520" alt="Todo List 生成" /> |
+| 多模型支持 | <img src="./assets/multi-model.gif" width="520" alt="多模型支持" /> |
+| 跨会话记忆 | <img src="./assets/memory.gif" width="520" alt="跨会话记忆" /> |
+| 主界面 | <img src="./assets/ui-main.png" width="520" alt="主界面" /> |
+| 会话界面 | <img src="./assets/ui-session.png" width="520" alt="会话界面" /> |
 
 ## 目录
 
