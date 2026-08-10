@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 570" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#57606a"/></marker>
+    <marker id="arP" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#8250df"/></marker>
+    <marker id="arG" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#059669"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="940" height="570" rx="12" fill="#f7f8fa"/>
+
+  <!-- 主模型 -->
+  <g filter="url(#sh)">
+    <rect x="330" y="24" width="240" height="52" rx="12" fill="#f6f1fb" stroke="#8250df" stroke-width="1.8"/>
+    <text x="450" y="56" text-anchor="middle" fill="#6f42c1" font-size="15" font-weight="bold">主模型（Manager）</text>
+  </g>
+  <line x1="450" y1="76" x2="450" y2="108" stroke="#8250df" stroke-width="1.8" marker-end="url(#arP)"/>
+  <text x="462" y="98" fill="#6f42c1" font-size="11.5" font-weight="bold">delegate({ tasks: [...] })</text>
+
+  <!-- delegate tool -->
+  <g filter="url(#sh)">
+    <rect x="310" y="112" width="280" height="56" rx="12" fill="#ffffff" stroke="#8250df" stroke-width="1.6"/>
+    <text x="450" y="135" text-anchor="middle" fill="#6f42c1" font-size="14" font-weight="bold">delegate tool</text>
+    <text x="450" y="155" text-anchor="middle" fill="#8b949e" font-size="11">校验批次：≤2 任务 · ≤1 writing</text>
+  </g>
+
+  <!-- 派生两条箭头 -->
+  <line x1="400" y1="168" x2="255" y2="226" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <line x1="500" y1="168" x2="645" y2="226" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <text x="450" y="205" text-anchor="middle" fill="#57606a" font-size="11.5" font-weight="bold">并行派生</text>
+
+  <!-- exploring 子代理 -->
+  <g filter="url(#sh)">
+    <rect x="90" y="230" width="310" height="120" rx="12" fill="#eafaf7" stroke="#0e7490" stroke-width="1.6"/>
+    <text x="245" y="258" text-anchor="middle" fill="#0e7490" font-size="14" font-weight="bold">exploring 子代理（只读探索）</text>
+    <text x="245" y="284" text-anchor="middle" fill="#57606a" font-size="11.5">独立上下文 · task_brief 首条消息</text>
+    <text x="245" y="306" text-anchor="middle" fill="#57606a" font-size="11.5">白名单：read ls grep find skill</text>
+    <text x="245" y="328" text-anchor="middle" fill="#8b949e" font-size="10.5">不含 delegate / todo / memory（禁递归·隔离）</text>
+  </g>
+
+  <!-- writing 子代理 -->
+  <g filter="url(#sh)">
+    <rect x="540" y="230" width="310" height="120" rx="12" fill="#fff4ec" stroke="#c2410c" stroke-width="1.6"/>
+    <text x="695" y="258" text-anchor="middle" fill="#c2410c" font-size="14" font-weight="bold">writing 子代理（可写实现）</text>
+    <text x="695" y="284" text-anchor="middle" fill="#57606a" font-size="11.5">独立上下文 · task_brief 首条消息</text>
+    <text x="695" y="306" text-anchor="middle" fill="#57606a" font-size="11.5">白名单：read write bash ls grep find skill</text>
+    <text x="695" y="328" text-anchor="middle" fill="#8b949e" font-size="10.5">不含 delegate / todo / memory（禁递归·隔离）</text>
+  </g>
+
+  <!-- 汇聚到同步屏障 -->
+  <line x1="245" y1="350" x2="390" y2="404" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <line x1="695" y1="350" x2="550" y2="404" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 同步屏障 -->
+  <g filter="url(#sh)">
+    <rect x="280" y="408" width="340" height="48" rx="12" fill="#fef9e7" stroke="#b45309" stroke-width="1.6"/>
+    <text x="450" y="438" text-anchor="middle" fill="#9a6700" font-size="13" font-weight="bold">Promise.all 同步等待全部完成</text>
+  </g>
+  <line x1="450" y1="456" x2="450" y2="486" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- XML 摘要 -->
+  <g filter="url(#sh)">
+    <rect x="310" y="490" width="280" height="56" rx="12" fill="#edf7f0" stroke="#059669" stroke-width="1.6"/>
+    <text x="450" y="513" text-anchor="middle" fill="#059669" font-size="13" font-weight="bold">&lt;delegation&gt; 结构化 XML 摘要</text>
+    <text x="450" y="533" text-anchor="middle" fill="#8b949e" font-size="11">各子任务 state / turns / result</text>
+  </g>
+
+  <!-- 返回主模型（右侧回流） -->
+  <path d="M 590 518 L 890 518 L 890 50 L 574 50" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arG)"/>
+  <text x="900" y="290" fill="#059669" font-size="11.5" font-weight="bold" transform="rotate(90 900 290)">作为 Tool Result 返回主模型上下文</text>
+</svg>

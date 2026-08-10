@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#57606a"/></marker>
+    <marker id="arB" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#0969da"/></marker>
+    <marker id="arR" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#cf222e"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="300" rx="12" fill="#f7f8fa"/>
+
+  <!-- 起点 -->
+  <g filter="url(#sh)">
+    <rect x="20" y="100" width="105" height="56" rx="12" fill="#ffffff" stroke="#8b949e" stroke-width="1.4"/>
+    <text x="72" y="124" text-anchor="middle" fill="#1f2328" font-size="12.5" font-weight="bold">User Turn</text>
+    <text x="72" y="141" text-anchor="middle" fill="#57606a" font-size="11">开始前</text>
+  </g>
+  <line x1="125" y1="128" x2="150" y2="128" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 判断 -->
+  <g filter="url(#sh)">
+    <polygon points="215,86 285,128 215,170 145,128" fill="#eef4fc" stroke="#0969da" stroke-width="1.5"/>
+    <text x="215" y="122" text-anchor="middle" fill="#0969da" font-size="11.5" font-weight="bold">最近用量</text>
+    <text x="215" y="138" text-anchor="middle" fill="#0969da" font-size="11.5" font-weight="bold">达阈值?</text>
+  </g>
+  <line x1="285" y1="128" x2="318" y2="128" stroke="#0969da" stroke-width="1.8" marker-end="url(#arB)"/>
+  <text x="301" y="120" text-anchor="middle" fill="#0969da" font-size="11" font-weight="bold">是</text>
+
+  <!-- 4 个步骤 -->
+  <g filter="url(#sh)">
+    <rect x="322" y="100" width="135" height="56" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="389" y="122" text-anchor="middle" fill="#0969da" font-size="12" font-weight="bold">1 · Cheap Prune</text>
+    <text x="389" y="140" text-anchor="middle" fill="#8b949e" font-size="10">截断过长结果/参数·去重</text>
+  </g>
+  <line x1="457" y1="128" x2="480" y2="128" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <g filter="url(#sh)">
+    <rect x="484" y="100" width="100" height="56" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="534" y="122" text-anchor="middle" fill="#0969da" font-size="12" font-weight="bold">2 · 分段</text>
+    <text x="534" y="140" text-anchor="middle" fill="#8b949e" font-size="10">留开头+最近尾部</text>
+  </g>
+  <line x1="584" y1="128" x2="607" y2="128" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <g filter="url(#sh)">
+    <rect x="611" y="100" width="100" height="56" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="661" y="122" text-anchor="middle" fill="#0969da" font-size="12" font-weight="bold">3 · 摘要</text>
+    <text x="661" y="140" text-anchor="middle" fill="#8b949e" font-size="10">中段→结构化摘要</text>
+  </g>
+  <line x1="711" y1="128" x2="734" y2="128" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <g filter="url(#sh)">
+    <rect x="738" y="100" width="150" height="56" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="813" y="122" text-anchor="middle" fill="#0969da" font-size="12" font-weight="bold">4 · 更新 Prompt</text>
+    <text x="813" y="140" text-anchor="middle" fill="#8b949e" font-size="10">compacted_history 段落</text>
+  </g>
+  <line x1="888" y1="128" x2="908" y2="128" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 终点 -->
+  <g filter="url(#sh)">
+    <rect x="912" y="100" width="72" height="56" rx="12" fill="#edf7f0" stroke="#059669" stroke-width="1.5"/>
+    <text x="948" y="124" text-anchor="middle" fill="#059669" font-size="11.5" font-weight="bold">继续</text>
+    <text x="948" y="141" text-anchor="middle" fill="#059669" font-size="11.5" font-weight="bold">本轮</text>
+  </g>
+
+  <!-- 否 · 跳过压缩（底部旁路，汇入"继续"） -->
+  <path d="M 215 170 L 215 256 L 948 256 L 948 160" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="240" y="250" fill="#57606a" font-size="11.5" font-weight="bold">否 · 跳过压缩</text>
+
+  <!-- 摘要失败 → 退化为消息预览 → 汇入旁路 -->
+  <line x1="661" y1="156" x2="661" y2="186" stroke="#cf222e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arR)"/>
+  <text x="673" y="178" fill="#cf222e" font-size="11">失败</text>
+  <g filter="url(#sh)">
+    <rect x="586" y="190" width="150" height="44" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="1.4"/>
+    <text x="661" y="209" text-anchor="middle" fill="#cf222e" font-size="11.5" font-weight="bold">退化为消息预览</text>
+    <text x="661" y="225" text-anchor="middle" fill="#cf222e" font-size="10">避免丢失上下文</text>
+  </g>
+  <line x1="661" y1="234" x2="661" y2="252" stroke="#cf222e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arR)"/>
+</svg>

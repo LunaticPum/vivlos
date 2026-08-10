@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="aP" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#8250df"/></marker>
+    <marker id="aPk" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#bf3989"/></marker>
+    <marker id="aB" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#0969da"/></marker>
+    <marker id="aAm" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#b45309"/></marker>
+    <marker id="aG" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#059669"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1f2328" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="680" rx="12" fill="#f7f8fa"/>
+  <text x="480" y="34" text-anchor="middle" fill="#1f2328" font-size="21" font-weight="bold">图 1 · 外部来源 → 注入 → 最终上下文</text>
+
+  <text x="122" y="64" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">外部来源（文件 / 注册表）</text>
+  <text x="380" y="64" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">注入 / 变换</text>
+  <text x="760" y="64" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">最终上下文 AgentContext</text>
+
+  <!-- ============ Lane 1: System Prompt ============ -->
+  <rect x="18" y="78" width="924" height="214" rx="10" fill="#f6f1fb"/>
+
+  <!-- 来源 -->
+  <g filter="url(#sh)">
+    <rect x="32" y="92"  width="180" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/><text x="122" y="109" text-anchor="middle" fill="#1f2328" font-size="12">identity.md</text>
+    <rect x="32" y="122" width="180" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/><text x="122" y="139" text-anchor="middle" fill="#1f2328" font-size="12">environment.md</text>
+    <rect x="32" y="152" width="180" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/><text x="122" y="169" text-anchor="middle" fill="#1f2328" font-size="12">rules.md</text>
+    <rect x="32" y="182" width="180" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/><text x="122" y="199" text-anchor="middle" fill="#1f2328" font-size="12">skill 注册表</text>
+    <rect x="32" y="222" width="180" height="26" rx="6" fill="#ffffff" stroke="#e8b4cf"/><text x="122" y="239" text-anchor="middle" fill="#bf3989" font-size="12">memory.md</text>
+    <rect x="32" y="252" width="180" height="26" rx="6" fill="#ffffff" stroke="#e8b4cf"/><text x="122" y="269" text-anchor="middle" fill="#bf3989" font-size="12">user.md</text>
+  </g>
+
+  <!-- 变换 -->
+  <g filter="url(#sh)">
+    <rect x="280" y="98" width="200" height="104" rx="8" fill="#ede4f7" stroke="#8250df" stroke-width="1.3"/>
+    <text x="380" y="126" text-anchor="middle" fill="#6f42c1" font-size="13" font-weight="bold">PromptBuilder.build()</text>
+    <text x="380" y="148" text-anchor="middle" fill="#57606a" font-size="11">拼装 6 段 · 替换占位符</text>
+    <text x="380" y="170" text-anchor="middle" fill="#9a6700" font-size="11">freeze() → session 级冻结</text>
+
+    <rect x="280" y="232" width="200" height="44" rx="8" fill="#fbe7f0" stroke="#bf3989" stroke-width="1.2"/>
+    <text x="380" y="251" text-anchor="middle" fill="#bf3989" font-size="12" font-weight="bold">buildL1Prompt()</text>
+    <text x="380" y="268" text-anchor="middle" fill="#8b949e" font-size="10">渲染 &lt;memory&gt; 块</text>
+  </g>
+
+  <!-- 结果 -->
+  <g filter="url(#sh)">
+    <rect x="600" y="108" width="320" height="130" rx="8" fill="#ede4f7" stroke="#8250df" stroke-width="1.4"/>
+    <text x="760" y="134" text-anchor="middle" fill="#6f42c1" font-size="15" font-weight="bold">systemPrompt</text>
+    <text x="760" y="158" text-anchor="middle" fill="#57606a" font-size="11">&lt;identity&gt; &lt;environment&gt; &lt;skills&gt;</text>
+    <text x="760" y="176" text-anchor="middle" fill="#57606a" font-size="11">&lt;memory&gt; &lt;compacted_history&gt; &lt;rules&gt;</text>
+    <text x="760" y="200" text-anchor="middle" fill="#9a6700" font-size="10">冻结快照 · 提高 KV cache 前缀命中</text>
+    <text x="760" y="218" text-anchor="middle" fill="#8b949e" font-size="10">memory 变更后 invalidate 重建</text>
+  </g>
+
+  <!-- Lane1 箭头 -->
+  <line x1="212" y1="105" x2="278" y2="114" stroke="#8250df" stroke-width="1.5" marker-end="url(#aP)"/>
+  <line x1="212" y1="135" x2="278" y2="140" stroke="#8250df" stroke-width="1.5" marker-end="url(#aP)"/>
+  <line x1="212" y1="165" x2="278" y2="166" stroke="#8250df" stroke-width="1.5" marker-end="url(#aP)"/>
+  <line x1="212" y1="195" x2="278" y2="190" stroke="#8250df" stroke-width="1.5" marker-end="url(#aP)"/>
+  <line x1="212" y1="235" x2="278" y2="244" stroke="#bf3989" stroke-width="1.4" marker-end="url(#aPk)"/>
+  <line x1="212" y1="265" x2="278" y2="262" stroke="#bf3989" stroke-width="1.4" marker-end="url(#aPk)"/>
+  <line x1="380" y1="230" x2="380" y2="204" stroke="#bf3989" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#aPk)"/>
+  <text x="392" y="222" fill="#bf3989" font-size="10">setMemory()</text>
+  <line x1="480" y1="150" x2="598" y2="166" stroke="#8250df" stroke-width="1.8" marker-end="url(#aP)"/>
+
+  <!-- ============ Lane 2: History ============ -->
+  <rect x="18" y="306" width="924" height="164" rx="10" fill="#eef4fc"/>
+
+  <g filter="url(#sh)">
+    <rect x="32" y="326" width="180" height="30" rx="6" fill="#ffffff" stroke="#b6d4f5"/><text x="122" y="345" text-anchor="middle" fill="#0969da" font-size="12">history.jsonl</text>
+    <rect x="32" y="410" width="180" height="30" rx="6" fill="#ffffff" stroke="#e6c98a"/><text x="122" y="429" text-anchor="middle" fill="#9a6700" font-size="12">todos.json</text>
+
+    <rect x="280" y="322" width="200" height="40" rx="8" fill="#dbeafe" stroke="#0969da" stroke-width="1.3"/>
+    <text x="380" y="339" text-anchor="middle" fill="#0969da" font-size="12" font-weight="bold">sessionManager</text>
+    <text x="380" y="355" text-anchor="middle" fill="#57606a" font-size="10">.getMessages()</text>
+
+    <rect x="280" y="406" width="200" height="40" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="1.2"/>
+    <text x="380" y="423" text-anchor="middle" fill="#9a6700" font-size="12" font-weight="bold">buildTodoHint()</text>
+    <text x="380" y="439" text-anchor="middle" fill="#8b949e" font-size="10">transient user 消息</text>
+
+    <rect x="600" y="318" width="320" height="62" rx="8" fill="#dbeafe" stroke="#0969da" stroke-width="1.4"/>
+    <text x="760" y="341" text-anchor="middle" fill="#0969da" font-size="15" font-weight="bold">messages[]</text>
+    <text x="760" y="360" text-anchor="middle" fill="#57606a" font-size="11">user → assistant(thinking·text·toolCall) → toolResult</text>
+    <text x="760" y="374" text-anchor="middle" fill="#8b949e" font-size="10">运行时增量追加 · 压缩时替换为摘要</text>
+
+    <rect x="600" y="404" width="320" height="44" rx="8" fill="#fef9e7" stroke="#b45309" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <text x="760" y="422" text-anchor="middle" fill="#9a6700" font-size="11">Todo Hint 前置到本轮请求</text>
+    <text x="760" y="438" text-anchor="middle" fill="#8b949e" font-size="10">transient · 不写入 history.jsonl</text>
+  </g>
+
+  <line x1="212" y1="341" x2="278" y2="342" stroke="#0969da" stroke-width="1.6" marker-end="url(#aB)"/>
+  <line x1="480" y1="342" x2="598" y2="346" stroke="#0969da" stroke-width="1.8" marker-end="url(#aB)"/>
+  <line x1="212" y1="425" x2="278" y2="426" stroke="#b45309" stroke-width="1.4" marker-end="url(#aAm)"/>
+  <line x1="480" y1="426" x2="598" y2="426" stroke="#b45309" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#aAm)"/>
+
+  <!-- ============ Lane 3: Tools ============ -->
+  <rect x="18" y="486" width="924" height="124" rx="10" fill="#edf7f0"/>
+
+  <g filter="url(#sh)">
+    <rect x="32" y="524" width="180" height="30" rx="6" fill="#ffffff" stroke="#b8e0c2"/><text x="122" y="543" text-anchor="middle" fill="#059669" font-size="12">工具注册表</text>
+
+    <rect x="280" y="516" width="200" height="48" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.3"/>
+    <text x="380" y="536" text-anchor="middle" fill="#059669" font-size="12" font-weight="bold">createBuiltinTools()</text>
+    <text x="380" y="553" text-anchor="middle" fill="#059669" font-size="11">createAdvancedTools()</text>
+
+    <rect x="600" y="514" width="320" height="56" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.4"/>
+    <text x="760" y="537" text-anchor="middle" fill="#059669" font-size="15" font-weight="bold">tools[]</text>
+    <text x="760" y="556" text-anchor="middle" fill="#57606a" font-size="11">builtin + advanced（todo×6 / delegate / memory…）</text>
+    <text x="760" y="568" text-anchor="middle" fill="#8b949e" font-size="10">子代理按类别过滤白名单</text>
+  </g>
+
+  <line x1="212" y1="539" x2="278" y2="540" stroke="#059669" stroke-width="1.6" marker-end="url(#aG)"/>
+  <line x1="480" y1="540" x2="598" y2="542" stroke="#059669" stroke-width="1.8" marker-end="url(#aG)"/>
+
+  <text x="480" y="650" text-anchor="middle" fill="#8b949e" font-size="12">AgentContext = { systemPrompt（冻结）, messages（增量）, tools（注册） }　—　三者共同构成一次 LLM 请求的完整上下文</text>
+</svg>

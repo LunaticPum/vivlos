@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#8250df"/></marker>
+    <marker id="mg" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#059669"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="470" rx="12" fill="#f7f8fa"/>
+
+  <!-- 参与者头 -->
+  <g filter="url(#sh)">
+    <rect x="40" y="28" width="120" height="42" rx="10" fill="#f6f1fb" stroke="#8250df" stroke-width="1.5"/>
+    <text x="100" y="54" text-anchor="middle" fill="#6f42c1" font-size="13" font-weight="bold">Agent 主模型</text>
+    <rect x="220" y="28" width="120" height="42" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
+    <text x="280" y="48" text-anchor="middle" fill="#0969da" font-size="12.5" font-weight="bold">offer_choice</text>
+    <text x="280" y="63" text-anchor="middle" fill="#8b949e" font-size="10">tool</text>
+    <rect x="390" y="28" width="120" height="42" rx="10" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+    <text x="450" y="54" text-anchor="middle" fill="#1f2328" font-size="13" font-weight="bold">EventBus</text>
+    <rect x="550" y="28" width="120" height="42" rx="10" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+    <text x="610" y="54" text-anchor="middle" fill="#1f2328" font-size="13" font-weight="bold">TUI</text>
+    <rect x="720" y="28" width="120" height="42" rx="10" fill="#edf7f0" stroke="#059669" stroke-width="1.5"/>
+    <text x="780" y="54" text-anchor="middle" fill="#059669" font-size="13" font-weight="bold">用户</text>
+  </g>
+
+  <!-- 生命线 -->
+  <g stroke="#c9d1d9" stroke-width="1.4" stroke-dasharray="4,4">
+    <line x1="100" y1="70" x2="100" y2="430"/>
+    <line x1="280" y1="70" x2="280" y2="430"/>
+    <line x1="450" y1="70" x2="450" y2="430"/>
+    <line x1="610" y1="70" x2="610" y2="430"/>
+    <line x1="780" y1="70" x2="780" y2="430"/>
+  </g>
+
+  <!-- 消息 -->
+  <line x1="100" y1="110" x2="276" y2="110" stroke="#8250df" stroke-width="1.8" marker-end="url(#m)"/>
+  <text x="188" y="102" text-anchor="middle" fill="#1f2328" font-size="11.5">调用 offer_choice(questions)</text>
+
+  <line x1="280" y1="152" x2="446" y2="152" stroke="#8250df" stroke-width="1.8" marker-end="url(#m)"/>
+  <text x="363" y="144" text-anchor="middle" fill="#1f2328" font-size="11.5">发布 offer_choice:pending（阻塞等待）</text>
+
+  <line x1="450" y1="194" x2="606" y2="194" stroke="#8250df" stroke-width="1.8" marker-end="url(#m)"/>
+  <text x="528" y="186" text-anchor="middle" fill="#1f2328" font-size="11.5">按 sessionId + toolCallId 派发</text>
+
+  <line x1="610" y1="236" x2="776" y2="236" stroke="#8250df" stroke-width="1.8" marker-end="url(#m)"/>
+  <text x="693" y="228" text-anchor="middle" fill="#1f2328" font-size="11.5">渲染选择控件</text>
+
+  <line x1="780" y1="282" x2="614" y2="282" stroke="#059669" stroke-width="1.8" marker-end="url(#mg)"/>
+  <text x="697" y="274" text-anchor="middle" fill="#1f2328" font-size="11.5">选择 / 自定义回答 / Esc 取消</text>
+
+  <line x1="610" y1="324" x2="454" y2="324" stroke="#059669" stroke-width="1.8" marker-end="url(#mg)"/>
+  <text x="532" y="316" text-anchor="middle" fill="#1f2328" font-size="11.5">回传答案</text>
+
+  <line x1="450" y1="366" x2="284" y2="366" stroke="#059669" stroke-width="1.8" marker-end="url(#mg)"/>
+  <text x="367" y="358" text-anchor="middle" fill="#1f2328" font-size="11.5">resolve 等待</text>
+
+  <line x1="280" y1="408" x2="104" y2="408" stroke="#059669" stroke-width="1.8" marker-end="url(#mg)"/>
+  <text x="192" y="400" text-anchor="middle" fill="#1f2328" font-size="11.5">Tool Result → 进入下一推理步骤</text>
+
+  <text x="450" y="452" text-anchor="middle" fill="#8b949e" font-size="11.5">等待用户选择期间，offer_choice 是当前回复中唯一的工具调用</text>
+</svg>

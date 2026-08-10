@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#57606a"/></marker>
+    <marker id="arG" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#059669"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="860" height="300" rx="12" fill="#f7f8fa"/>
+
+  <!-- pending -->
+  <g filter="url(#sh)">
+    <rect x="60" y="110" width="180" height="70" rx="14" fill="#fef9e7" stroke="#b45309" stroke-width="1.6"/>
+    <text x="150" y="140" text-anchor="middle" fill="#9a6700" font-size="16" font-weight="bold">pending</text>
+    <text x="150" y="161" text-anchor="middle" fill="#8b949e" font-size="11">待处理</text>
+  </g>
+
+  <!-- in_progress -->
+  <g filter="url(#sh)">
+    <rect x="340" y="110" width="180" height="70" rx="14" fill="#eef4fc" stroke="#0969da" stroke-width="1.6"/>
+    <text x="430" y="140" text-anchor="middle" fill="#0969da" font-size="16" font-weight="bold">in_progress</text>
+    <text x="430" y="161" text-anchor="middle" fill="#8b949e" font-size="11">进行中（同时最多 1 个）</text>
+  </g>
+
+  <!-- completed -->
+  <g filter="url(#sh)">
+    <rect x="620" y="110" width="180" height="70" rx="14" fill="#edf7f0" stroke="#059669" stroke-width="1.6"/>
+    <text x="710" y="140" text-anchor="middle" fill="#059669" font-size="16" font-weight="bold">completed</text>
+    <text x="710" y="161" text-anchor="middle" fill="#8b949e" font-size="11">已完成（终态，不可逆）</text>
+  </g>
+
+  <!-- pending -> in_progress -->
+  <line x1="240" y1="145" x2="336" y2="145" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <text x="288" y="136" text-anchor="middle" fill="#57606a" font-size="11">仅第一条 pending</text>
+
+  <!-- in_progress -> completed -->
+  <line x1="520" y1="145" x2="616" y2="145" stroke="#059669" stroke-width="1.8" marker-end="url(#arG)"/>
+
+  <!-- pending -> completed（直接完成，弧线） -->
+  <path d="M 150 110 C 150 40, 710 40, 710 106" fill="none" stroke="#059669" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#arG)"/>
+  <text x="430" y="46" text-anchor="middle" fill="#059669" font-size="11.5" font-weight="bold">pending 可直接完成</text>
+
+  <!-- 规则说明 -->
+  <text x="60" y="230" fill="#57606a" font-size="11.5">· completed 不可恢复为其他状态，内容不可编辑，但可移动或删除。</text>
+  <text x="60" y="252" fill="#57606a" font-size="11.5">· todo_write / todo_replace 会把所有 Item 重新初始化为 pending。</text>
+  <text x="60" y="274" fill="#57606a" font-size="11.5">· 状态推进由 todo_update 完成，单向不可逆。</text>
+</svg>

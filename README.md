@@ -18,8 +18,30 @@ Vivlos 面向希望在终端中使用大模型（LLM）完成信息检索、文�
 > [!IMPORTANT]
 > Vivlos 当前处于早期开发阶段，暂未发布稳定安装包。本仓库现阶段仅提供源码运行方式，接口、配置和交互仍可能调整。
 
+## 效果演示
+
+<!--
+演示素材占位：生成后放入 assets/ 并将对应"待补充"替换为 <img src="./assets/文件名" width="520" />
+- 流式输出对话   → assets/streaming.gif
+- 子任务委派     → assets/delegation.gif
+- Todo List 生成 → assets/todo.gif
+- 多模型支持     → assets/multi-model.gif
+- 主界面         → assets/ui-main.png
+- 会话界面       → assets/ui-session.png
+-->
+
+| 功能 | 演示 |
+| --- | --- |
+| 流式输出对话 | 待补充 |
+| 子任务委派（Subagent） | 待补充 |
+| Todo List 生成 | 待补充 |
+| 多模型支持 | 待补充 |
+| 主界面 | 待补充 |
+| 会话界面 | 待补充 |
+
 ## 目录
 
+- [效果演示](#效果演示)
 - [主要能力](#主要能力)
 - [快速开始](#快速开始)
 - [模型与配置](#模型与配置)
@@ -160,7 +182,6 @@ Vivlos 的运行数据默认位于当前 Workspace（工作目录）的 `.vivlos
 │       ├── memory.md      # 项目和环境记忆
 │       ├── user.md        # 用户偏好
 │       └── todos.json     # 当前 Todo List
-├── tasks/                 # 跨 Session Task
 └── temp/                  # 临时文件
 ```
 
@@ -190,7 +211,7 @@ bun run test
 | [智能体运行机制](./docs/智能体运行机制.md) | Prompt、Agent Turn、Tool Call、重试与终止语义 |
 | [上下文与会话](./docs/上下文与会话.md) | Session、History、上下文组装和压缩机制 |
 | [记忆机制](./docs/记忆机制.md) | L1-L4 四层 Memory 目标设计与当前实现 |
-| [任务规划](./docs/任务规划.md) | Todo、Task 和 Offer Choice |
+| [任务规划](./docs/任务规划.md) | Todo、子任务委派和 Offer Choice |
 | [工具与技能](./docs/工具与技能.md) | Tool 协议、权限、Builtin/Advanced Tools 和 Skill |
 
 早期研究与旧版方案已集中到 [历史归档](./docs/归档/)，不代表当前行为。
@@ -203,9 +224,8 @@ bun run test
 
 - QQ 与其他消息入口
 - Sandbox 与隔离执行环境
-- Delegation 与多 Agent 协作
 - Scheduler 与后台任务
-- Task 的完整侧栏工作流
+- 委派子会话落盘 / resume / 后台模式
 - L3/L4 Memory 的 Provider 与知识库实现
 - 跨平台安装包与容器部署
 

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 250" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#57606a"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="250" rx="12" fill="#f7f8fa"/>
+
+  <!-- 1 扫描 -->
+  <g filter="url(#sh)">
+    <rect x="20" y="80" width="150" height="64" rx="12" fill="#ffffff" stroke="#8b949e" stroke-width="1.4"/>
+    <text x="95" y="106" text-anchor="middle" fill="#1f2328" font-size="12.5" font-weight="bold">启动扫描</text>
+    <text x="95" y="126" text-anchor="middle" fill="#8b949e" font-size="10.5">SKILL.md（内置+扩展）</text>
+  </g>
+  <line x1="170" y1="112" x2="196" y2="112" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 2 注入元数据 -->
+  <g filter="url(#sh)">
+    <rect x="200" y="80" width="170" height="64" rx="12" fill="#fef9e7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="285" y="104" text-anchor="middle" fill="#9a6700" font-size="12.5" font-weight="bold">SP 仅注入元数据</text>
+    <text x="285" y="124" text-anchor="middle" fill="#8b949e" font-size="10.5">name / description / location</text>
+  </g>
+  <line x1="370" y1="112" x2="396" y2="112" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 3 判断匹配 -->
+  <g filter="url(#sh)">
+    <rect x="400" y="80" width="160" height="64" rx="12" fill="#f6f1fb" stroke="#8250df" stroke-width="1.5"/>
+    <text x="480" y="104" text-anchor="middle" fill="#6f42c1" font-size="12.5" font-weight="bold">模型判断</text>
+    <text x="480" y="124" text-anchor="middle" fill="#8b949e" font-size="10.5">任务是否匹配描述</text>
+  </g>
+  <line x1="560" y1="112" x2="586" y2="112" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <text x="573" y="104" text-anchor="middle" fill="#059669" font-size="10.5" font-weight="bold">匹配</text>
+
+  <!-- 4 加载正文 -->
+  <g filter="url(#sh)">
+    <rect x="590" y="80" width="160" height="64" rx="12" fill="#eafaf7" stroke="#0e7490" stroke-width="1.5"/>
+    <text x="670" y="104" text-anchor="middle" fill="#0e7490" font-size="12.5" font-weight="bold">skill(name)</text>
+    <text x="670" y="124" text-anchor="middle" fill="#8b949e" font-size="10.5">加载 SKILL.md 正文</text>
+  </g>
+  <line x1="750" y1="112" x2="776" y2="112" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <text x="763" y="104" text-anchor="middle" fill="#059669" font-size="10.5" font-weight="bold">按需</text>
+
+  <!-- 5 加载 reference -->
+  <g filter="url(#sh)">
+    <rect x="780" y="80" width="160" height="64" rx="12" fill="#eafaf7" stroke="#0e7490" stroke-width="1.5"/>
+    <text x="860" y="100" text-anchor="middle" fill="#0e7490" font-size="12" font-weight="bold">skill(name,</text>
+    <text x="860" y="116" text-anchor="middle" fill="#0e7490" font-size="12" font-weight="bold">reference)</text>
+    <text x="860" y="134" text-anchor="middle" fill="#8b949e" font-size="10">路径校验·禁止逃逸</text>
+  </g>
+
+  <text x="480" y="196" text-anchor="middle" fill="#57606a" font-size="12" font-weight="bold">渐进式披露：不注入完整正文，按需在上下文中逐层加载</text>
+  <text x="480" y="220" text-anchor="middle" fill="#8b949e" font-size="11">Skill 本身不执行任务，最终操作仍由 Tool 完成；Session 切换/新建时加载状态重置</text>
+</svg>

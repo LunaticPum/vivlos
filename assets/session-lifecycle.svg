@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 330" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#57606a"/></marker>
+    <marker id="arR" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#cf222e"/></marker>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="880" height="330" rx="12" fill="#f7f8fa"/>
+
+  <!-- 起点 -->
+  <circle cx="52" cy="120" r="8" fill="#57606a"/>
+  <line x1="62" y1="120" x2="108" y2="120" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- pending 状态 -->
+  <g filter="url(#sh)">
+    <rect x="118" y="86" width="200" height="68" rx="12" fill="#fef9e7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="218" y="112" text-anchor="middle" fill="#9a6700" font-size="16" font-weight="bold">pending</text>
+    <text x="218" y="132" text-anchor="middle" fill="#57606a" font-size="11.5">新建 Session · 仅内存 ID</text>
+    <text x="218" y="147" text-anchor="middle" fill="#8b949e" font-size="11">与预计算路径，未落盘</text>
+  </g>
+
+  <!-- pending -> active -->
+  <line x1="318" y1="120" x2="452" y2="120" stroke="#57606a" stroke-width="1.8" marker-end="url(#ar)"/>
+  <text x="385" y="108" text-anchor="middle" fill="#1f2328" font-size="12" font-weight="bold">首次发送消息（激活）</text>
+
+  <!-- active 状态 -->
+  <g filter="url(#sh)">
+    <rect x="462" y="86" width="230" height="68" rx="12" fill="#edf7f0" stroke="#059669" stroke-width="1.8"/>
+    <text x="577" y="112" text-anchor="middle" fill="#059669" font-size="16" font-weight="bold">active</text>
+    <text x="577" y="132" text-anchor="middle" fill="#57606a" font-size="11.5">可对话 · 已创建目录</text>
+    <text x="577" y="147" text-anchor="middle" fill="#8b949e" font-size="11">与 history.jsonl</text>
+  </g>
+
+  <!-- active 自环 -->
+  <path d="M 640 86 C 640 40, 514 40, 514 82" fill="none" stroke="#059669" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="577" y="34" text-anchor="middle" fill="#059669" font-size="11.5" font-weight="bold">追加对话 / 重命名 / 异步生成标题</text>
+
+  <!-- pending -> 删除 -->
+  <line x1="218" y1="154" x2="218" y2="238" stroke="#cf222e" stroke-width="1.6" stroke-dasharray="5,3" marker-end="url(#arR)"/>
+  <text x="230" y="200" fill="#cf222e" font-size="11.5">删除（未激活，无文件）</text>
+
+  <!-- active -> 删除 -->
+  <line x1="577" y1="154" x2="577" y2="238" stroke="#cf222e" stroke-width="1.6" stroke-dasharray="5,3" marker-end="url(#arR)"/>
+  <text x="589" y="200" fill="#cf222e" font-size="11.5">删除（连同 Session 目录）</text>
+
+  <!-- 删除终态 -->
+  <g filter="url(#sh)">
+    <rect x="168" y="246" width="100" height="40" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="1.4"/>
+    <text x="218" y="271" text-anchor="middle" fill="#cf222e" font-size="13" font-weight="bold">已删除</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="527" y="246" width="100" height="40" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="1.4"/>
+    <text x="577" y="271" text-anchor="middle" fill="#cf222e" font-size="13" font-weight="bold">已删除</text>
+  </g>
+</svg>
