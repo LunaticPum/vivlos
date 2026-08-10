@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1130 720" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#1f2328" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1130" height="720" rx="12" fill="#f7f8fa"/>
+  <text x="565" y="34" text-anchor="middle" fill="#1f2328" font-size="20" font-weight="bold">四层记忆在 Agent 生命周期上的启用视图</text>
+  <text x="565" y="54" text-anchor="middle" fill="#8b949e" font-size="12">横轴 = 一个 User Turn 的生命周期钩子；纵轴 = 四层记忆。实线 = 默认常开，虚线 = 启用后才激活</text>
+
+  <!-- ===== 表头：生命周期钩子 ===== -->
+  <g filter="url(#sh)">
+    <rect x="164" y="66" width="184" height="42" rx="8" fill="#1f2328"/>
+    <text x="256" y="92" text-anchor="middle" fill="#ffffff" font-size="12.5" font-weight="bold">beforeTurn · Turn 前</text>
+    <rect x="348" y="66" width="184" height="42" rx="8" fill="#1f2328"/>
+    <text x="440" y="92" text-anchor="middle" fill="#ffffff" font-size="12.5" font-weight="bold">beforeStep · 每步前</text>
+    <rect x="532" y="66" width="184" height="42" rx="8" fill="#1f2328"/>
+    <text x="624" y="86" text-anchor="middle" fill="#ffffff" font-size="12.5" font-weight="bold">Agent Loop 中</text>
+    <text x="624" y="101" text-anchor="middle" fill="#c9d1d9" font-size="10">模型按需调用工具</text>
+    <rect x="716" y="66" width="184" height="42" rx="8" fill="#1f2328"/>
+    <text x="808" y="92" text-anchor="middle" fill="#ffffff" font-size="12.5" font-weight="bold">afterTurn · Turn 后</text>
+    <rect x="900" y="66" width="184" height="42" rx="8" fill="#1f2328"/>
+    <text x="992" y="92" text-anchor="middle" fill="#ffffff" font-size="12.5" font-weight="bold">sessionEnd · 结束</text>
+  </g>
+
+  <!-- ===== L1 行（常开） ===== -->
+  <g filter="url(#sh)">
+    <rect x="16" y="116" width="140" height="104" rx="10" fill="#fdf2f7" stroke="#bf3989" stroke-width="1.8"/>
+    <text x="86" y="142" text-anchor="middle" fill="#bf3989" font-size="15" font-weight="bold">L1</text>
+    <text x="86" y="161" text-anchor="middle" fill="#57606a" font-size="10.5">Session Markdown</text>
+    <rect x="46" y="176" width="80" height="22" rx="11" fill="#bf3989"/>
+    <text x="86" y="192" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="bold">默认常开</text>
+  </g>
+  <!-- L1 beforeStep -->
+  <g filter="url(#sh)">
+    <rect x="348" y="116" width="184" height="104" rx="8" fill="#ffffff" stroke="#bf3989" stroke-width="1.4"/>
+    <text x="440" y="140" text-anchor="middle" fill="#bf3989" font-size="11.5" font-weight="bold">prepare + buildPrompt</text>
+    <text x="440" y="158" text-anchor="middle" fill="#57606a" font-size="10">注入 &lt;memory&gt; 到 SP</text>
+    <text x="440" y="176" text-anchor="middle" fill="#8b949e" font-size="9.5">Consolidator 达阈值</text>
+    <text x="440" y="190" text-anchor="middle" fill="#8b949e" font-size="9.5">自动 refine / merge</text>
+  </g>
+  <!-- L1 Agent Loop -->
+  <g filter="url(#sh)">
+    <rect x="532" y="116" width="184" height="104" rx="8" fill="#ffffff" stroke="#bf3989" stroke-width="1.4"/>
+    <text x="624" y="142" text-anchor="middle" fill="#bf3989" font-size="11.5" font-weight="bold">memory tool</text>
+    <text x="624" y="160" text-anchor="middle" fill="#57606a" font-size="10">add / replace / remove</text>
+    <text x="624" y="178" text-anchor="middle" fill="#8b949e" font-size="9.5">安全扫描 + 容量检查</text>
+    <text x="624" y="192" text-anchor="middle" fill="#8b949e" font-size="9.5">写入 memory.md / user.md</text>
+  </g>
+
+  <!-- ===== L2 行（常开） ===== -->
+  <g filter="url(#sh)">
+    <rect x="16" y="228" width="140" height="104" rx="10" fill="#eef4fc" stroke="#0969da" stroke-width="1.8"/>
+    <text x="86" y="254" text-anchor="middle" fill="#0969da" font-size="15" font-weight="bold">L2</text>
+    <text x="86" y="273" text-anchor="middle" fill="#57606a" font-size="10.5">Session Search</text>
+    <rect x="46" y="288" width="80" height="22" rx="11" fill="#0969da"/>
+    <text x="86" y="304" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="bold">默认常开</text>
+  </g>
+  <!-- L2 Agent Loop -->
+  <g filter="url(#sh)">
+    <rect x="532" y="228" width="184" height="104" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="624" y="252" text-anchor="middle" fill="#0969da" font-size="11.5" font-weight="bold">session_search</text>
+    <text x="624" y="270" text-anchor="middle" fill="#57606a" font-size="10">FTS5 全文检索历史</text>
+    <text x="624" y="288" text-anchor="middle" fill="#8b949e" font-size="9.5">带来源锚点片段</text>
+    <text x="624" y="302" text-anchor="middle" fill="#8b949e" font-size="9.5">不进 SP，仅当前 Turn</text>
+  </g>
+  <!-- L2 afterTurn -->
+  <g filter="url(#sh)">
+    <rect x="716" y="228" width="184" height="104" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+    <text x="808" y="252" text-anchor="middle" fill="#0969da" font-size="11.5" font-weight="bold">增量索引</text>
+    <text x="808" y="270" text-anchor="middle" fill="#57606a" font-size="10">history.jsonl → memory.db</text>
+    <text x="808" y="288" text-anchor="middle" fill="#8b949e" font-size="9.5">幂等 + 水位增量</text>
+    <text x="808" y="302" text-anchor="middle" fill="#8b949e" font-size="9.5">sessionDelete 级联清理</text>
+  </g>
+
+  <!-- ===== L3 行（启用后激活，Mem0 例） ===== -->
+  <g filter="url(#sh)">
+    <rect x="16" y="340" width="140" height="104" rx="10" fill="#f6f1fb" stroke="#8250df" stroke-width="1.8" stroke-dasharray="6,4"/>
+    <text x="86" y="364" text-anchor="middle" fill="#8250df" font-size="15" font-weight="bold">L3</text>
+    <text x="86" y="382" text-anchor="middle" fill="#57606a" font-size="10">External Provider</text>
+    <text x="86" y="396" text-anchor="middle" fill="#8b949e" font-size="9.5">以 Mem0 为例</text>
+    <rect x="36" y="406" width="100" height="22" rx="11" fill="#8250df"/>
+    <text x="86" y="422" text-anchor="middle" fill="#ffffff" font-size="10.5" font-weight="bold">启用后激活</text>
+  </g>
+  <!-- L3 beforeTurn: prefetch -->
+  <g filter="url(#sh)">
+    <rect x="164" y="340" width="184" height="104" rx="8" fill="#f6f1fb" stroke="#8250df" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="256" y="364" text-anchor="middle" fill="#8250df" font-size="11.5" font-weight="bold">prefetch 语义召回</text>
+    <text x="256" y="382" text-anchor="middle" fill="#57606a" font-size="10">按当前输入向量检索</text>
+    <text x="256" y="400" text-anchor="middle" fill="#8b949e" font-size="9.5">注入瞬时上下文（≤5 条）</text>
+    <text x="256" y="414" text-anchor="middle" fill="#8b949e" font-size="9.5">"记忆回忆"机制</text>
+  </g>
+  <!-- L3 Agent Loop: provider tool -->
+  <g filter="url(#sh)">
+    <rect x="532" y="340" width="184" height="104" rx="8" fill="#f6f1fb" stroke="#8250df" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="624" y="364" text-anchor="middle" fill="#8250df" font-size="11.5" font-weight="bold">provider tool</text>
+    <text x="624" y="382" text-anchor="middle" fill="#57606a" font-size="10">显式 search / remove</text>
+    <text x="624" y="400" text-anchor="middle" fill="#8b949e" font-size="9.5">模型主动调用</text>
+  </g>
+  <!-- L3 afterTurn: sync -->
+  <g filter="url(#sh)">
+    <rect x="716" y="340" width="184" height="104" rx="8" fill="#f6f1fb" stroke="#8250df" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="808" y="364" text-anchor="middle" fill="#8250df" font-size="11.5" font-weight="bold">sync 同步本轮</text>
+    <text x="808" y="382" text-anchor="middle" fill="#57606a" font-size="10">canonical 消息 → 远端</text>
+    <text x="808" y="400" text-anchor="middle" fill="#8b949e" font-size="9.5">Mem0 服务端抽事实</text>
+    <text x="808" y="414" text-anchor="middle" fill="#8b949e" font-size="9.5">异步 + 超时降级</text>
+  </g>
+  <!-- L3 sessionEnd: extract -->
+  <g filter="url(#sh)">
+    <rect x="900" y="340" width="184" height="104" rx="8" fill="#f6f1fb" stroke="#8250df" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="992" y="364" text-anchor="middle" fill="#8250df" font-size="11.5" font-weight="bold">extract 提取</text>
+    <text x="992" y="382" text-anchor="middle" fill="#57606a" font-size="10">会话结束抽长期事实</text>
+    <text x="992" y="400" text-anchor="middle" fill="#8b949e" font-size="9.5">远端自行去重/更新</text>
+  </g>
+
+  <!-- ===== L4 行（按需） ===== -->
+  <g filter="url(#sh)">
+    <rect x="16" y="452" width="140" height="104" rx="10" fill="#fff4ec" stroke="#c2410c" stroke-width="1.8" stroke-dasharray="6,4"/>
+    <text x="86" y="478" text-anchor="middle" fill="#c2410c" font-size="15" font-weight="bold">L4</text>
+    <text x="86" y="497" text-anchor="middle" fill="#57606a" font-size="10.5">Knowledge Vault</text>
+    <rect x="46" y="512" width="80" height="22" rx="11" fill="#c2410c"/>
+    <text x="86" y="528" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="bold">按需</text>
+  </g>
+  <!-- L4 Agent Loop: knowledge skill -->
+  <g filter="url(#sh)">
+    <rect x="532" y="452" width="184" height="104" rx="8" fill="#fff4ec" stroke="#c2410c" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="624" y="476" text-anchor="middle" fill="#c2410c" font-size="11.5" font-weight="bold">knowledge skill</text>
+    <text x="624" y="494" text-anchor="middle" fill="#57606a" font-size="10">读取 vault 知识库</text>
+    <text x="624" y="512" text-anchor="middle" fill="#8b949e" font-size="9.5">法律/领域大文档</text>
+    <text x="624" y="526" text-anchor="middle" fill="#8b949e" font-size="9.5">无自动钩子，纯按需</text>
+  </g>
+
+  <!-- ===== 底部：何时用哪层 ===== -->
+  <g filter="url(#sh)">
+    <rect x="16" y="580" width="1068" height="116" rx="10" fill="#ffffff" stroke="#d0d7de" stroke-width="1.2"/>
+    <text x="36" y="606" fill="#1f2328" font-size="13" font-weight="bold">何时需要哪层</text>
+    <text x="36" y="630" fill="#57606a" font-size="11.5">· 大部分场景：L1（常驻关键事实）+ L2（历史细节检索）已足够，无需额外配置。</text>
+    <text x="36" y="652" fill="#8250df" font-size="11.5">· 需跨会话语义召回 / 用户画像建模（搜"部署"能命中只写过"上线流程"的）→ setup 启用 L3，同时只开一个 Provider。</text>
+    <text x="36" y="674" fill="#c2410c" font-size="11.5">· 需对接大量结构化知识（法律条文、项目 wiki、领域文档）→ 配置 vault 路径启用 L4，模型在明确知识任务时才读取。</text>
+  </g>
+</svg>
