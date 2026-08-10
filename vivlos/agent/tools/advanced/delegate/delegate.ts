@@ -143,20 +143,20 @@ export function createDelegateTool(
 							} else if (event.type === "tool_execution_end") {
 								task.currentTool = undefined;
 								push.later();
-							} else if (
-								event.type === "message_end" &&
-								event.message.role === "assistant"
-							) {
-								sessionMessages[index]!.push(event.message as Message);
-								emitMessages(index, true);
-							} else if (event.type === "turn_end") {
-								task.turns += 1;
-								for (const toolResult of event.toolResults) {
-									sessionMessages[index]!.push(toolResult);
-								}
-								emitMessages(index, true);
-								push.later();
+						} else if (
+							event.type === "message_end" &&
+							event.message.role === "assistant"
+						) {
+							sessionMessages[index]!.push(cloneMessage(event.message as Message));
+							emitMessages(index, true);
+						} else if (event.type === "turn_end") {
+							task.turns += 1;
+							for (const toolResult of event.toolResults) {
+								sessionMessages[index]!.push(cloneMessage(toolResult));
 							}
+							emitMessages(index, true);
+							push.later();
+						}
 						},
 					}).then((result) => {
 						const task = batch.tasks[index];
@@ -187,6 +187,22 @@ export function createDelegateTool(
 // #endregion
 
 // #region 辅助
+
+/**
+ * 深拷贝子会话消息。
+ *
+ * event.message / event.toolResults 是 pi agentLoop 内部 context 正在使用的
+ * 活对象，子任务运行中会被 pi 持续改写。钻取视图若直接读这些活引用，会在
+ * 渲染时撞上不一致状态而崩溃。捕获时即深拷贝，TUI 拿到的是不可变快照。
+ */
+function cloneMessage(message: Message): Message {
+	try {
+		return structuredClone(message);
+	} catch {
+		// 极端情况下（非可克隆内容）退回原引用，宁可保留旧风险也不中断委派
+		return message;
+	}
+}
 
 function validateBatch(
 	specs: readonly DelegationTaskSpec[],

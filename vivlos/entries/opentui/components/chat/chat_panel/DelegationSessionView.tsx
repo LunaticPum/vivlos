@@ -44,7 +44,14 @@ export function DelegationSessionView({
 	detailExpanded,
 }: DelegationSessionViewProps) {
 	const turns = useMemo(
-		() => messagesToTurns(view.messages),
+		() => {
+			// 防御：子会话消息来自运行时快照，任何异常形状都不应导致整棵树崩溃
+			try {
+				return messagesToTurns(view.messages);
+			} catch {
+				return [];
+			}
+		},
 		[view.messages],
 	);
 	const scrollboxRef = useRef<ScrollBoxRenderable>(null);

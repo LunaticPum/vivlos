@@ -7,7 +7,7 @@
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Model, Message } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -18,7 +18,10 @@ import {
 	createDelegateTool,
 	type DelegateToolDeps,
 } from "@vivlos/agent/tools/advanced/delegate/delegate.ts";
-import { createEventBus } from "@vivlos/infra/eventbus/index.ts";
+import {
+	createEventBus,
+	type DelegationTaskMessagesEvent,
+} from "@vivlos/infra/eventbus/index.ts";
 import type { LLMClient } from "@vivlos/infra/llm/index.ts";
 import { ToolError } from "@vivlos/shared";
 
@@ -54,13 +57,14 @@ function createDeps(
 	options: {
 		run?: DelegateToolDeps["run"];
 		tools?: AgentTool<any, any>[];
+		eventBus?: ReturnType<typeof createEventBus>;
 	} = {},
 ): DelegateToolDeps {
 	return {
 		llm: {} as LLMClient,
 		getModel: () => ({}) as Model<Api>,
 		getAvailableTools: () => options.tools ?? POOL,
-		eventBus: createEventBus(),
+		eventBus: options.eventBus ?? createEventBus(),
 		getSessionId: () => "test-session",
 		...(options.run ? { run: options.run } : {}),
 	};
@@ -276,5 +280,58 @@ describe("delegate tool execution", () => {
 
 		expect(updates[0].tasks[0].state).toBe("running");
 		expect(updates[0].tasks[0].result).toBeUndefined();
+	});
+
+	it("DEL-TOOL-010 子会话消息深拷贝：emit 的不是 pi 活引用", async () => {
+		// pi agentLoop 的消息对象在运行中会被持续改写；若直接透传活引用，
+		// 钻取视图渲染时会读到不一致状态。这里验证捕获时已深拷贝。
+		const assistantMsg = {
+			role: "assistant",
+			content: [{ type: "text", text: "answer" }],
+			timestamp: 1000,
+			stopReason: "stop",
+		} as unknown as Message;
+		const toolResultMsg = {
+			role: "toolResult",
+			toolCallId: "tc-1",
+			content: [{ type: "text", text: "tool output" }],
+			timestamp: 1001,
+		} as unknown as Message;
+
+		const run = vi.fn(
+			async ({ onEvent }: { onEvent?: (event: never) => void }) => {
+				onEvent?.({ type: "message_end", message: assistantMsg } as never);
+				onEvent?.({
+					type: "turn_end",
+					message: assistantMsg,
+					toolResults: [toolResultMsg],
+				} as never);
+				return completed("answer");
+			},
+		);
+
+		const eventBus = createEventBus();
+		const captured: DelegationTaskMessagesEvent[] = [];
+		eventBus.on("delegation:task_messages", (e) => {
+			captured.push(e);
+		});
+
+		const tool = createDelegateTool(createDeps({ run: run as never, eventBus }));
+		await execute(tool, {
+			tasks: [{ kind: "exploring", title: "查", brief: "x" }],
+		});
+
+		const last = captured[captured.length - 1];
+		expect(last).toBeDefined();
+		// [brief, assistant, toolResult]
+		expect(last.messages).toHaveLength(3);
+		// 深拷贝：引用不同、内容相等、嵌套 content 也非同一引用
+		expect(last.messages[1]).not.toBe(assistantMsg);
+		expect(last.messages[1]).toEqual(assistantMsg);
+		expect((last.messages[1] as { content: unknown }).content).not.toBe(
+			(assistantMsg as { content: unknown }).content,
+		);
+		expect(last.messages[2]).not.toBe(toolResultMsg);
+		expect(last.messages[2]).toEqual(toolResultMsg);
 	});
 });
