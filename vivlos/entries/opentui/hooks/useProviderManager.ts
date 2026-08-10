@@ -81,16 +81,13 @@ export function useProviderManager(
 			const model = llm.listModels(providerId)[0];
 			if (!model) throw new Error("no models available");
 
-			const stream = llm.stream(
-				model,
-				{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
-				{ signal: AbortSignal.timeout(15000) },
-			);
-			for await (const event of stream) {
-				if (event.type === "error")
-					throw new Error(event.error.errorMessage ?? "connect failed");
-				if (event.type === "text_delta") break;
-			}
+			// 方案 A（对齐 pi-ai 的 checkAuth）：连接验证只确认"凭证已配置 + provider
+			// 可解析出模型"，不再发送真实推理探测。token-plan 等 provider 的裸推理会撞上
+			// 模型授权/配额/thinking 参数校验，导致有效 key 被误判为连接失败；key 的真实
+			// 有效性交由第一条真实消息暴露。
+			const envVar = `${providerId.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+			const hasKey = (await llm.hasCredential(providerId)) || !!process.env[envVar];
+			if (!hasKey) throw new Error("no api key configured");
 
 			llm.setDefault(providerId, model.id);
 			setCurrentLabel(`${truncate(providerId, 15)}/${model.id}`);
