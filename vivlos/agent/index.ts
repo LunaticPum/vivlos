@@ -21,6 +21,7 @@ import type { LoopHooks } from "./loop/hooks/index.ts";
 import { createAgentLoop, type LoopResult } from "./loop/index.ts";
 import { log } from "@vivlos/infra/logger/index.ts";
 import { buildTodoHint } from "./tools/advanced/todo/hint.ts";
+import { createSteeringQueue } from "./steering/queue.ts";
 
 import type { VivlosAgent } from "./types.ts";
 
@@ -76,6 +77,17 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 	const promptBuilder = params.promptBuilder ?? createPromptBuilder();
 	const tools = params.tools;
 	const titleTasks = new Set<string>();
+
+	// Steering 队列：运行中插话；steering + followUp 双钩子共用排空
+	const steeringQueue = createSteeringQueue({
+		eventBus: params.eventBus,
+		getSessionId: () => sessionManager.id,
+	});
+	const steeringHooks: LoopHooks = {
+		...params.hooks,
+		getSteeringMessages: async () => steeringQueue.drain(),
+		getFollowUpMessages: async () => steeringQueue.drain(),
+	};
 	/** 安全读取当前 Session Todo；undefined 表示未配置或读取失败。 */
 	const readCurrentTodoList = (): TodoList | null | undefined => {
 		if (!params.readTodoList) return undefined;
@@ -95,7 +107,7 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		memoryRuntime: params.memoryRuntime,
 		sessionManager,
 		promptBuilder,
-		hooks: params.hooks,
+		hooks: steeringHooks,
 		tools,
 	});
 	const publishSessionState = () => {
@@ -182,13 +194,20 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 					userText: readTitleInput(input),
 				});
 			}
-			const result = await loop.run(input, {
-				model: currentModel,
-				maxTurns,
-				reasoning: params.thinkingLevel,
-				signal,
-				transientMessages,
-			});
+			let result: LoopResult;
+			try {
+				result = await loop.run(input, {
+					model: currentModel,
+					maxTurns,
+					reasoning: params.thinkingLevel,
+					signal,
+					transientMessages,
+				});
+			} finally {
+				// run 结束兜底：丢弃未消费的排队消息（正常流程队列已被排空，
+				// 此步 no-op；中止/报错时清掉残留，防止被下一轮静默注入）。
+				steeringQueue.clear();
+			}
 
 			if (params.memoryCoordinator) {
 				await params.memoryCoordinator.afterTurn({ sessionId });
@@ -213,6 +232,9 @@ export function createAgent(params: CreateAgentParams): VivlosAgent {
 		},
 		getTodoList() {
 			return readCurrentTodoList() ?? null;
+		},
+		queueMessage(text) {
+			return steeringQueue.push(text);
 		},
 		getSessionId() {
 			return sessionManager.id;

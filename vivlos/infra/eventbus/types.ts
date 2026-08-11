@@ -7,6 +7,7 @@ import type { SessionEvent } from "./events/session-event.ts";
 import type { AppEvent } from "./events/app-event.ts";
 import type { WorkspaceEvent } from "./events/workspace-event.ts";
 import type { DelegationEvent } from "./events/delegation-event.ts";
+import type { SteeringEvent } from "./events/steering-event.ts";
 
 export type VivlosEvent =
 	| MainAgentEvent
@@ -15,7 +16,8 @@ export type VivlosEvent =
 	| SessionEvent
 	| AppEvent
 	| WorkspaceEvent
-	| DelegationEvent;
+	| DelegationEvent
+	| SteeringEvent;
 
 export type { MainAgentEvent } from "./events/main-agent-event.ts";
 export type {
@@ -40,6 +42,11 @@ export type {
 	DelegationEvent,
 	DelegationTaskMessagesEvent,
 } from "./events/delegation-event.ts";
+export type {
+	SteeringEvent,
+	SteeringConsumedEvent,
+	SteeringDroppedEvent,
+} from "./events/steering-event.ts";
 export type {
 	WorkspaceEvent,
 	TodoPriority,

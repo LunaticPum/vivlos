@@ -28,6 +28,9 @@ export type {
 	WorkspaceEvent,
 	DelegationEvent,
 	DelegationTaskMessagesEvent,
+	SteeringEvent,
+	SteeringConsumedEvent,
+	SteeringDroppedEvent,
 } from "./types.ts";
 
 /**

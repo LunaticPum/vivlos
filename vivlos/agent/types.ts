@@ -24,6 +24,13 @@ export interface VivlosAgent {
 	/** 读取当前 Session 的完整 Todo List；不存在或读取失败时返回 null。 */
 	getTodoList(): TodoList | null;
 
+	/**
+	 * 运行中插话：把消息压入 steering 队列，待 loop 在 turn 边界（steering）
+	 * 或即将退出前（followUp）注入。相同文本未消费时去重。
+	 * 返回排队消息 id 与是否命中去重。
+	 */
+	queueMessage(text: string): { id: string; deduplicated: boolean };
+
 	/** 当前 session ID */
 	getSessionId(): string;
 	/** 当前 session 名称（可能为 null） */

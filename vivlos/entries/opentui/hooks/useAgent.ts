@@ -73,6 +73,17 @@ export type LogEntry =
 			done: boolean;
 			turnIndex: number;
 			createdAt: number;
+	  }
+	| {
+			/** 运行中插话（steering）的瞬态用户消息卡片 */
+			kind: "user";
+			/** 对应 SteeringQueue 的消息 id */
+			queuedId: string;
+			text: string;
+			/** queued→(注入)normal / (run 结束丢弃)unsent */
+			state: "queued" | "unsent" | "normal";
+			turnIndex: number;
+			createdAt: number;
 	  };
 
 /**
@@ -259,20 +270,52 @@ function finishPendingLog(
 	});
 }
 
-/** 文本增量追加：末尾是未完成 text 条目则追加，否则新建条目。 */
+/**
+ * 文本增量追加：找到末尾未完成的 text 条目则追加，否则新建条目。
+ * 向后查找时跳过 user 卡片（运行中插话），保证流式文本续写到卡片之前的
+ * 未完成 text 条目，而不是在卡片之后另起一条。
+ */
 function appendTextDelta(
 	log: LogEntry[],
 	delta: string,
 	turnIndex: number,
 ): LogEntry[] {
-	const last = log[log.length - 1];
-	if (last && last.kind === "text" && !last.done) {
-		return [...log.slice(0, -1), { ...last, text: last.text + delta }];
+	for (let i = log.length - 1; i >= 0; i--) {
+		const entry = log[i]!;
+		if (entry.kind === "user") continue;
+		if (entry.kind === "text" && !entry.done) {
+			return [
+				...log.slice(0, i),
+				{ ...entry, text: entry.text + delta },
+				...log.slice(i + 1),
+			];
+		}
+		break;
 	}
-	return [
-		...log,
-		{ kind: "text", text: delta, done: false, turnIndex, createdAt: Date.now() },
-	];
+	return insertBeforePendingUserCards(log, {
+		kind: "text",
+		text: delta,
+		done: false,
+		turnIndex,
+		createdAt: Date.now(),
+	});
+}
+
+/**
+ * 在末尾"未消费"的 user 卡片（state != normal）之前插入新条目，
+ * 让排队卡片始终停留在当前 turn 的末尾；已消费（normal）的卡片不参与拦截。
+ */
+function insertBeforePendingUserCards(
+	log: LogEntry[],
+	newEntry: LogEntry,
+): LogEntry[] {
+	let insertIdx = log.length;
+	while (insertIdx > 0) {
+		const prev = log[insertIdx - 1]!;
+		if (prev.kind !== "user" || prev.state === "normal") break;
+		insertIdx--;
+	}
+	return [...log.slice(0, insertIdx), newEntry, ...log.slice(insertIdx)];
 }
 
 /** 封闭所有未完成的 text 条目（新 turn / 工具调用开始时调用）。 */
@@ -579,6 +622,42 @@ export function useAgent(
 			}),
 		);
 
+		// 运行中插话（steering）：排队消息被注入 → QUEUED 转正常态
+		unsubs.push(
+			eventBus.on("steering:consumed", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
+				const ids = new Set(event.ids);
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: t.log.map((entry) =>
+							entry.kind === "user" && ids.has(entry.queuedId)
+								? { ...entry, state: "normal" as const }
+								: entry,
+						),
+					})),
+				);
+			}),
+		);
+
+		// 运行中插话（steering）：run 结束未注入被丢弃 → QUEUED 转未发送
+		unsubs.push(
+			eventBus.on("steering:dropped", (event) => {
+				if (!isCurrentSession(event.sessionId)) return;
+				const ids = new Set(event.ids);
+				setTurns((prev) =>
+					updateCurrent(prev, currentIdxRef.current, (t) => ({
+						...t,
+						log: t.log.map((entry) =>
+							entry.kind === "user" && ids.has(entry.queuedId)
+								? { ...entry, state: "unsent" as const }
+								: entry,
+						),
+					})),
+				);
+			}),
+		);
+
 		// agent 开始运行
 		unsubs.push(
 			eventBus.on("agent:start", (event) => {
@@ -618,8 +697,8 @@ export function useAgent(
 					updateCurrent(prev, currentIdxRef.current, (t) => ({
 						...t,
 						toolCount: t.toolCount + 1,
-						log: [
-							...sealTextEntries(t.log),
+						log: insertBeforePendingUserCards(
+							sealTextEntries(t.log),
 							{
 								kind: "tool",
 								callId: e.callId,
@@ -628,10 +707,12 @@ export function useAgent(
 								args: e.args,
 								result: "",
 								done: false,
-								turnIndex: t.turnCount,
+								// 与同 turn 的 thinking/text 对齐（turnCount-1），
+								// 避免同一 turn 内多出分隔线
+								turnIndex: Math.max(0, t.turnCount - 1),
 								createdAt: Date.now(),
 							},
-						],
+						),
 					})),
 				);
 			}),
@@ -933,7 +1014,45 @@ export function useAgent(
 	const submit = useCallback(
 		(text: string, attachments?: readonly ImageAttachment[]) => {
 			const hasAttachments = (attachments?.length ?? 0) > 0;
-			if ((!text.trim() && !hasAttachments) || loading || abortRef.current) return;
+			if (!text.trim() && !hasAttachments) return;
+
+			// ── agent 运行中：文本走 steering 队列（图片附件不支持） ──
+			if (loading || abortRef.current) {
+				if (!text.trim()) return;
+				if (hasAttachments) {
+					log("warn", "运行中暂不支持图片附件，仅文本已排队", undefined, true);
+				}
+				const { id, deduplicated } = agent.queueMessage(text.trim());
+				if (!deduplicated) {
+					setTurns((prev) =>
+						updateCurrent(prev, currentIdxRef.current, (t) => {
+							// turnIndex 对齐当前 turn（取末条目的 turnIndex），
+							// 让卡片停在当前 turn 末尾且前面不多出分隔线。
+							// 不 seal 未完成 text：当前 turn 仍在流式，文本要继续
+							// 追加到卡片之前的条目上。
+							const lastEntry = t.log[t.log.length - 1];
+							const turnIndex = lastEntry
+								? lastEntry.turnIndex
+								: Math.max(0, t.turnCount - 1);
+							return {
+								...t,
+								log: [
+									...t.log,
+									{
+										kind: "user" as const,
+										queuedId: id,
+										text: text.trim(),
+										state: "queued" as const,
+										turnIndex,
+										createdAt: Date.now(),
+									},
+								],
+							};
+						}),
+					);
+				}
+				return;
+			}
 
 			// ── 图片轮次：解析视觉模型 ──
 			let input: string | AgentMessage[] = text;

@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import spinners from "cli-spinners";
 import { SyntaxStyle, type BorderCharacters, type ScrollBoxRenderable } from "@opentui/core";
 import type { ConversationTurn, LogEntry } from "../../../hooks/useAgent";
+import { UserMessageCard } from "./UserMessageCard";
 import type {
 	DelegationBatchState,
 	DelegationTaskState,
@@ -185,10 +186,12 @@ interface RenderLine {
 type ThinkingEntry = Extract<LogEntry, { kind: "thinking" }>;
 type ToolEntry = Extract<LogEntry, { kind: "tool" }>;
 type TextEntry = Extract<LogEntry, { kind: "text" }>;
+type UserEntry = Extract<LogEntry, { kind: "user" }>;
 type RenderItem =
 	| { kind: "thinking"; entry: ThinkingEntry; index: number }
 	| { kind: "tool"; entries: ToolEntry[]; index: number }
-	| { kind: "text"; entry: TextEntry; index: number };
+	| { kind: "text"; entry: TextEntry; index: number }
+	| { kind: "user"; entry: UserEntry; index: number };
 
 function groupLogEntries(log: LogEntry[]): RenderItem[] {
 	const items: RenderItem[] = [];
@@ -200,6 +203,10 @@ function groupLogEntries(log: LogEntry[]): RenderItem[] {
 		}
 		if (entry.kind === "text") {
 			items.push({ kind: "text", entry, index });
+			continue;
+		}
+		if (entry.kind === "user") {
+			items.push({ kind: "user", entry, index });
 			continue;
 		}
 		const previous = items.at(-1);
@@ -265,6 +272,19 @@ function renderItem({
 	onToggleTool,
 	onOpenTask,
 }: RenderCtx & { item: RenderItem }) {
+	if (item.kind === "user") {
+		const entry = item.entry;
+		return (
+			// marginX={-3} 抵消 AgentMessageCard 的 paddingX={3}，
+			// 使排队卡片宽度与 ConversationView 直接渲染的正常用户卡片对齐
+			<box marginX={-3}>
+				<UserMessageCard
+					text={entry.text}
+					variant={entry.state === "normal" ? undefined : entry.state}
+				/>
+			</box>
+		);
+	}
 	if (item.kind === "text") {
 		return (
 			<markdown
