@@ -56,9 +56,10 @@ Vivlos 面向希望在终端中使用大模型（LLM）完成信息检索、文�
 7. **分层 Memory（记忆）**：L1 使用 `memory.md` 和 `user.md` 保存当前会话的稳定事实；L2 通过 `session_search` 跨会话检索历史对话；L3 外部记忆服务与 L4 文件知识库已有设计、尚未实现。
 8. **图片识别（多模态）**：拖入图片、粘贴图片路径或 Ctrl+G 读取剪贴板截图（Windows）作为附件发送；支持指定专用视觉模型，解析前通过交互式选项确认解析方式。
 9. **子任务委派（Subagent）**：主模型可经 `delegate` 工具将 1-2 个子任务派发给独立上下文的子代理并行执行。子代理分 `exploring`（只读探索，仅 read/ls/grep/find/skill）与 `writing`（可写实现）两类，用过滤后的专属工具集独立运行，完成后返回结构化摘要。委派卡片实时展示进度（轮次/当前工具），点击任务行钻取子会话对话，按 ↑ 返回主会话；侧边栏 TASKS 区块展示全部委派任务状态。
-10. **任务规划**：提供结构化 Todo List（待办清单）、状态推进和侧栏查看，并支持交互式选项确认。
-11. **本地持久化**：Provider、Model、凭证和自定义服务配置保存在本地 SQLite（嵌入式数据库）；Session（会话）、Memory 与 Todo 保存在当前工作目录。
-12. **运行时控制**：提供重试、最大轮次、Bash 权限和压缩策略等配置边界。
+10. **运行中插话（Steering）**：Agent 运行中继续发送的消息会进入 steering 队列并以 QUEUED 卡片展示，在回合边界自动注入供模型据此纠偏；因中止/报错未注入时标记为"未发送"。
+11. **任务规划**：提供结构化 Todo List（待办清单）、状态推进和侧栏查看，并支持交互式选项确认。
+12. **本地持久化**：Provider、Model、凭证和自定义服务配置保存在本地 SQLite（嵌入式数据库）；Session（会话）、Memory 与 Todo 保存在当前工作目录。
+13. **运行时控制**：提供重试、最大轮次、Bash 权限和压缩策略等配置边界。
 
 ## 快速开始
 
@@ -147,13 +148,19 @@ vivlos/
 │   ├── memory/            # Session Memory 与 Consolidator
 │   ├── compression/       # 上下文剪枝、摘要与压缩
 │   ├── tools/             # Builtin 与 Advanced Tools
-│   └── skills/            # Skill 注册与扩展
+│   ├── skills/            # Skill 注册与扩展
+│   ├── delegation/        # 子任务委派（Subagent）运行器与工具策略
+│   └── steering/          # 运行中插话（消息队列/纠偏）队列
 ├── infra/
 │   ├── llm/               # Provider、Model 与 Credential
 │   ├── storage/           # SQLite、Session 与 Memory 存储
 │   ├── eventbus/          # 应用事件总线
 │   ├── config/            # 运行时配置
-│   └── logger/            # 本地日志
+│   ├── logger/            # 本地日志
+│   ├── clipboard/         # 剪贴板截图读取
+│   ├── credentials/       # 凭证存储
+│   ├── sandbox/           # 隔离执行环境（占位）
+│   └── scheduler/         # 后台任务调度（占位）
 ├── shared/                # Result、错误与通用能力
 └── tests/                 # 逻辑与集成测试
 ```

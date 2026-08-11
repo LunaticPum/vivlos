@@ -12,14 +12,14 @@ Vivlos 是基于 Bun + TypeScript + OpenTUI 的本地通用终端 Agent。核心
 
 ## Git 状态（截至本文档写入时）
 
-**最近提交**（master 与 origin/master 同步，tsc + 251 tests 全过）：
+**最近提交**（master 与 origin/master 同步，tsc + 261 tests 全过）：
 
 ```text
-[feat(tui): 委派卡片渲染与子会话钻取]     ← 上层 TUI（本阶段）
-[feat(delegation): 子任务委派底层机制]     ← 底层 runner + delegate 工具（本阶段）
+[feat(steering): 运行中插话/消息队列纠偏]     ← 本阶段
+93f6f46 docs: 记忆机制按完整设计重写，新增四层启用视图
+84fc88f fix(delegation): 钻取视图深拷贝子会话消息，避免读 pi 活引用崩溃
+2a3c58b docs: README 效果演示接入 gif/截图与录制用例
 3272faa feat(tui): 时间序部件流渲染与耗时显示
-2d68a36 docs: 新增开发上下文总结 spec.md 并修正 gitignore 规则
-e9d23bb feat: 图片识别与模型选择增强
 ```
 
 ## 本次会话完成的工作
@@ -76,6 +76,24 @@ e9d23bb feat: 图片识别与模型选择增强
 - `/delegate-demo` 命令：走真实事件管道（toolCall_start/delta/end + delegation:task_messages）驱动全流程渲染，用于样式验收
 - 设计参考：opencode 的子会话钻取（task_id→child session→navigation）
 
+### 7. 运行中插话 / 消息队列纠偏（Steering，本阶段）
+
+**目标**：agent 运行中用户继续发送的消息不丢失，进入 steering 队列、以 QUEUED 卡片展示，回合边界自动注入供模型纠偏；未注入则标记"未发送"。
+
+- `agent/steering/queue.ts`：`createSteeringQueue(eventBus, getSessionId)`——`push`（相同文本未消费时去重复用 id）/ `drain`（排空并发 `steering:consumed`）/ `clear`（丢弃并发 `steering:dropped`）/ `size`。
+- `infra/eventbus/events/steering-event.ts`：`steering:consumed` / `steering:dropped`（携带被消费/丢弃的排队消息 id 列表）。
+- `agent/index.ts`：createAgent 内建队列；`getSteeringMessages` 与 `getFollowUpMessages` **双钩子都接 `queue.drain()`**——steering 在 turn 边界注入（运行中纠偏），followUp 在 agent 即将退出前排空（兜住"极晚窗口"）；`prompt()` 用 `try/finally` 在 `loop.run()` 后 `queue.clear()` 兜底（中止/报错时清残留，防下一轮 run-start 静默注入）；对外暴露 `queueMessage(text)`。
+- `useAgent.ts`：
+  - LogEntry 新增 `user` 类型（queuedId/text/state: queued|unsent|normal/turnIndex）。
+  - `submit` 在 `loading || abortRef.current` 时改调 `agent.queueMessage` 并追加 user 条目（去重命中不新建）。
+  - 订阅 `steering:consumed`（→normal）/ `steering:dropped`（→unsent）翻转卡片状态。
+  - **turnIndex off-by-one 修复**：原 toolCall_start 用 `turnCount`、thinking/text 用 `turnCount-1`，导致同 turn 内多画分隔线；统一为 `turnCount-1`。
+  - `appendTextDelta` 向后查找未完成 text（跳过 user 卡片），流式文本续写到卡片之前的条目；`insertBeforePendingUserCards` 让卡片入队后当前 turn 新增的 tool/text 条目插到未消费卡片之前，保证卡片停在当前 turn 末尾。
+- `UserMessageCard.tsx`：`variant?: "queued"|"unsent"`——QUEUED 橙 `#fab387`、未发送黄 `#f9e2af`（左上角字样 + 同色左边框）。
+- `AgentMessageCard.tsx`：渲染 user 条目为 UserMessageCard，套 `marginX={-3}` 抵消 AgentMessageCard 的 `paddingX={3}`，使 QUEUED 卡片宽度与 ConversationView 直接渲染的正常用户卡片对齐。
+- **呈现**：`--- Turn N ---`（thinking/calling/text 流式）→ QUEUED 卡片停在 Turn N 末尾 → `--- Turn N+1 ---`（agent 对该消息的回应）。
+- 测试：`tests/steering/queue.test.ts`（push/drain/clear/去重/事件）。
+
 ## 关键技术决策与原因
 
 | 决策 | 原因 |
@@ -92,6 +110,10 @@ e9d23bb feat: 图片识别与模型选择增强
 | 子会话消息走 EventBus 快照而非独立 session | v1 子会话纯内存不落盘，无需完整 session 管理；EventBus 快照天然驱动 TUI 钻取视图 |
 | 一批最多 1 个 writing（硬校验） | 并发写同一代码库会互相覆盖（参考资料的"失败模式一"），规则越简单越可靠 |
 | 不做 grace turn steer（硬限止） | v1 保持简单：maxTurns 硬止 + turn_limited 状态保留部分结果；steer 需 pi-agent-core 消息队列支持，P2 再议 |
+| steering 用 pi 的 getSteeringMessages/getFollowUpMessages 双钩子 | steering 在 turn 边界注入（纠偏），followUp 兜住"极晚窗口"（消息恰好卡在最后一次 steering 排空后入队）；两者共用同一队列 drain |
+| prompt() finally 里 clear() 队列 | 中止/报错时清残留，防止残留消息被下一轮 run-start 的 steering 静默注入/重复消费 |
+| 排队卡片 turnIndex=末条目 turnIndex + 新条目插未消费卡片前 | 卡片停在当前 turn 末尾、前不多出分隔线、下一 turn 分隔线在卡片后 |
+| QUEUED 卡片套 marginX={-3} | AgentMessageCard 外层 paddingX={3}，正常用户卡片在 turn 容器 paddingX={1}；负边距抵消缩进对齐宽度 |
 
 ## 项目编写经验与认识
 
@@ -127,6 +149,7 @@ e9d23bb feat: 图片识别与模型选择增强
 | L3 Provider（mem0 等）/ L4 知识库 | 设计完成（见 docs/memory/S3、S4），未实现 |
 | 子会话落盘 / resume / L2 索引 | 当前纯内存态；摘要随 toolResult 进主 history 不丢信息；持久化 = P2 |
 | 委派后台模式（open_issue） | 当前同步屏障；pi 的 BackgroundJob + steer 模式留作 P2 |
+| steering 注入后消息在 reload 下以普通 user 消息重建 | QUEUED 卡片是瞬态，reload 后注入的消息按正常 user 消息重建为新 turn；属预期最终态 |
 | 桌面宠物 | 方向已提，细节未讨论 |
 
 ## 关键文件索引
@@ -138,8 +161,11 @@ e9d23bb feat: 图片识别与模型选择增强
 | `vivlos/agent/delegation/` | 委派核心：types / tool-policy / prompts / xml / runner |
 | `vivlos/agent/tools/advanced/delegate/` | delegate 工具（批次校验 + 并行执行 + 消息捕获） |
 | `vivlos/agent/prompt/templates/subagent-*.md` | 子代理 SP 模板（exploring/writing） |
-| `vivlos/entries/opentui/hooks/useAgent.ts` | EventBus→React state，ConversationTurn/LogEntry 模型 + delegationSessions |
-| `vivlos/entries/opentui/components/chat/chat_panel/AgentMessageCard.tsx` | 时间序部件流渲染 + 委派卡片 |
+| `vivlos/agent/steering/queue.ts` | steering 队列（push/drain/clear + 去重 + consumed/dropped 事件） |
+| `vivlos/infra/eventbus/events/steering-event.ts` | steering:consumed / steering:dropped 事件 |
+| `vivlos/entries/opentui/hooks/useAgent.ts` | EventBus→React state，ConversationTurn/LogEntry 模型 + delegationSessions + steering 分流 |
+| `vivlos/entries/opentui/components/chat/chat_panel/AgentMessageCard.tsx` | 时间序部件流渲染 + 委派卡片 + user 条目 |
+| `vivlos/entries/opentui/components/chat/chat_panel/UserMessageCard.tsx` | 用户消息卡片（variant: queued/unsent 样式） |
 | `vivlos/entries/opentui/components/chat/chat_panel/DelegationSessionView.tsx` | 子会话钻取视图 |
 | `vivlos/entries/opentui/components/sideBar/SideBar_Tasks.tsx` | 侧边栏委派任务条目 |
 | `vivlos/infra/clipboard/image.ts` | 剪贴板截图 PowerShell 桥接 |
@@ -152,5 +178,5 @@ e9d23bb feat: 图片识别与模型选择增强
 1. 读本文档 + `docs/记忆机制.md` + `docs/memory/README.md`
 2. `git log --oneline -8` 与 `git status` 对照本文档的 Git 状态段
 3. TUI 渲染看 `AgentMessageCard.tsx` + `DelegationSessionView.tsx`，数据流看 `useAgent.ts`
-4. 委派机制看 `agent/delegation/` + `agent/tools/advanced/delegate/`
-5. 验证基线：`bun x tsc --noEmit` + `bun run test`（251 tests）
+4. 委派机制看 `agent/delegation/` + `agent/tools/advanced/delegate/`；运行中插话看 `agent/steering/queue.ts` + `useAgent.ts` 的 submit 分流
+5. 验证基线：`bun x tsc --noEmit` + `bun run test`（261 tests）
